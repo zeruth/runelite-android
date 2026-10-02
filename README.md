@@ -33,6 +33,15 @@ The **RuneLite plugin hub is mostly untested** on this client. The loader is wir
 
 ## Install
 
+### Building RuneLite 1.13.1
+
+Before running `:android:assembleDebug`, download the official
+[injected-client 1.13.1 JAR](https://repo.runelite.net/net/runelite/injected-client/1.13.1/injected-client-1.13.1.jar)
+to `data/injected-client-1.13.1.jar`. This local build input is ignored by Git.
+Its SHA-256 is `981eba4888f4cf0ec8fd74f09b9ed85728d7b2bc8c1f57194883aed64dec768a`.
+
+### Installing an APK
+
 1. Grab the latest APK from [Releases](../../releases).
 2. Enable "Install unknown apps" for your browser / file manager on Android.
 3. Install.

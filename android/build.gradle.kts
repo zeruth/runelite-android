@@ -96,7 +96,7 @@ configurations.configureEach {
     exclude(group = "org.lwjgl")
 }
 
-val target = "runelite-1.13.0-injected-36433848015.271"
+val target = "injected-client-1.13.1"
 
 // --------------------------------------------------------------------------------------
 // rewriteLauncherEnv: makes the injected client read its JX_* launcher credentials from
