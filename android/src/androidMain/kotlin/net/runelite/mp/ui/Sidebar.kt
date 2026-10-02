@@ -47,6 +47,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import net.runelite.client.RuneLiteProperties
 import net.runelite.mp.ui.bridge.ExternalPluginBridge
 import net.runelite.mp.ui.bridge.ExternalPluginEntry
 import net.runelite.mp.ui.bridge.FavoritesBridge
@@ -517,6 +518,8 @@ private fun ExternalTab()
 {
     var query by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(true) }
+    var loadError by remember { mutableStateOf<String?>(null) }
+    var refresh by remember { mutableStateOf(0) }
     var entries by remember { mutableStateOf<List<ExternalPluginEntry>>(emptyList()) }
     val installed = remember { mutableStateOf(setOf<String>()) }
     // PNG bytes -> decoded ImageBitmap, keyed by internalName. Compose drops the cache
@@ -525,16 +528,19 @@ private fun ExternalTab()
     val icons = remember { mutableStateMapOf<String, ImageBitmap>() }
     val scope = rememberCoroutineScope()
 
-    // One-shot manifest fetch on first composition; reuse the cached list afterwards.
-    // The installed set is refreshed cheaply on a slower cadence so install/remove taps
-    // reflect back without re-hitting the network.
-    LaunchedEffect(Unit)
+    LaunchedEffect(refresh)
     {
         loading = true
+        loadError = null
         val fetched = withContext(Dispatchers.IO) { ExternalPluginBridge.available() }
-        entries = fetched
+        entries = fetched.getOrDefault(emptyList())
+        loadError = fetched.exceptionOrNull()?.let { it.message ?: it.javaClass.simpleName }
         installed.value = ExternalPluginBridge.installed()
         loading = false
+    }
+    // Poll local install state without repeatedly downloading the catalog.
+    LaunchedEffect(Unit)
+    {
         while (true)
         {
             delay(1500)
@@ -546,10 +552,28 @@ private fun ExternalTab()
     Column(modifier = Modifier.fillMaxSize())
     {
         SearchField(query, "Search external plugins…") { query = it }
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "Android catalog ${RuneLiteProperties.getPluginHubVersion()}",
+                color = RlPalette.TextSecondary,
+                fontSize = 10.sp,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                if (loadError != null) "Retry" else "Refresh",
+                color = if (loading) RlPalette.TextDisabled else RlPalette.Accent,
+                fontSize = 12.sp,
+                modifier = Modifier.clickable(enabled = !loading) { refresh++ }.padding(8.dp),
+            )
+        }
         when
         {
             loading -> EmptyState("Loading manifest…")
-            entries.isEmpty() -> EmptyState("Hub returned no plugins (or offline).")
+            loadError != null -> EmptyState("Couldn't load Plugin Hub.\n\n$loadError\n\nTap Retry to try again.")
+            entries.isEmpty() -> EmptyState("This catalog contains no plugins.")
             else ->
             {
                 val live = installed.value

@@ -86,6 +86,8 @@ class RuneLiteLauncher(private val context: android.content.Context? = null) {
                 // contents are produced by `pluginhub-lib :publishHub` (manifest/, jar/, icon/).
                 System.setProperty("runelite.pluginhub.url", ANDROID_PLUGIN_HUB_URL)
                 logLine("pluginhub.url → $ANDROID_PLUGIN_HUB_URL")
+                System.setProperty("runelite.pluginhub.version", BuildConfig.PLUGIN_HUB_VERSION)
+                logLine("pluginhub.version → ${BuildConfig.PLUGIN_HUB_VERSION}")
                 // ClientUI checks this static-init time — must be set *before* RuneLite.main
                 // touches that class. With this on, ClientUI never adds its JTabbedPane
                 // sidebar or ClientToolbarPanel to the visible component tree and

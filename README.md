@@ -13,6 +13,11 @@ The **RuneLite plugin hub is mostly untested** on this client. The loader is wir
 
 ---
 
+The Android Plugin Hub catalog version is selected separately with
+`androidPluginHubVersion` in `gradle.properties` (or `-PandroidPluginHubVersion=...`).
+Update it when a matching signed Android DEX catalog is published. Catalog load
+errors are shown in the External tab with a Retry action.
+
 ## Toolchain
 
 | Tool | Version |

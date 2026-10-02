@@ -1,14 +1,13 @@
 package net.runelite.mp.ui.bridge
 
+import android.util.Log
 import net.runelite.client.externalplugins.ExternalPluginClient
 import net.runelite.client.externalplugins.ExternalPluginManager
 import net.runelite.client.externalplugins.PluginHubManifest
 
 /**
- * Exposes RuneLite's external plugin hub state to the Compose UI. The mp install talks
- * to the same hub the desktop client does (URL is set in {@link
- * net.runelite.mp.RuneLiteLauncher} via `runelite.pluginhub.url`), so the available list
- * matches whatever's published there.
+ * Exposes the Android DEX plugin hub to the Compose UI. Its URL, catalog version and
+ * signing certificate are configured by RuneLiteLauncher independently of the desktop hub.
  *
  * Three surfaces matter:
  *  - {@link #installed()} — which externals the user has opted into. Cheap; reads the
@@ -50,18 +49,19 @@ internal object ExternalPluginBridge
 
     /** Downloads the FULL manifest (display metadata for every published plugin) + install
      *  counts from api.runelite.net. Blocks — caller should run on a background coroutine.
-     *  Returns an empty list on any failure so the UI can show "no plugins available"
-     *  rather than crash. Install counts that don't resolve (eg. plugin internal name not
+     *  Preserves failures so the UI can explain them and offer a retry.
+     *  Install counts that don't resolve (eg. plugin internal name not
      *  known to the upstream API) default to -1, which sorts below all real counts. */
-    fun available(): List<ExternalPluginEntry>
+    fun available(): Result<List<ExternalPluginEntry>>
     {
-        val client = RuneLiteAccess.instance(ExternalPluginClient::class.java) ?: return emptyList()
+        val client = RuneLiteAccess.instance(ExternalPluginClient::class.java)
+            ?: return Result.failure(IllegalStateException("Client is still starting. Try again in a moment."))
         val installed = installed()
         return try
         {
             val full: PluginHubManifest.ManifestFull = client.downloadManifestFull()
             val counts: Map<String, Int> = try { client.pluginCounts } catch (t: Throwable) { emptyMap() }
-            full.display.orEmpty().map { d ->
+            val entries = full.display.orEmpty().map { d ->
                 ExternalPluginEntry(
                     internalName = d.internalName,
                     displayName = d.displayName ?: d.internalName,
@@ -75,8 +75,14 @@ internal object ExternalPluginBridge
                     userCount = counts[d.internalName] ?: -1,
                 )
             }
+            Log.i("ExternalPluginBridge", "Loaded ${entries.size} plugins from the signed Android catalog")
+            Result.success(entries)
         }
-        catch (t: Throwable) { emptyList() }
+        catch (e: Exception)
+        {
+            Log.w("ExternalPluginBridge", "Unable to load Android plugin catalog", e)
+            Result.failure(e)
+        }
     }
 
     fun install(internalName: String)

@@ -334,6 +334,7 @@ if (androidSdkAvailable) {
 
         defaultConfig {
             applicationId = "net.runelite.mp"
+            buildConfigField("String", "PLUGIN_HUB_VERSION", "\"${providers.gradleProperty("androidPluginHubVersion").get()}\"")
             // minSdk = 26 is the floor flatlaf/jsvg require. Lambda invokedynamics from
             // older bytecode levels still hit "LambdaMetafactory.metafactory" hidden-API
             // failures at runtime — TODO: pre-process the injected + runelite-client jars
