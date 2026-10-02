@@ -54,6 +54,8 @@ public class JComboBox<E> extends JComponent {
         if (java.util.Objects.equals(this.selectedItem, anObject)) return;
         Object old = this.selectedItem;
         this.selectedItem = anObject;
+        dataModel.setSelectedItem(anObject);
+        invalidate();
         if (old != null) {
             java.awt.event.ItemEvent dev = new java.awt.event.ItemEvent(
                 this, java.awt.event.ItemEvent.ITEM_STATE_CHANGED, old,
@@ -115,4 +117,23 @@ public class JComboBox<E> extends JComponent {
     public ItemListener[] getItemListeners() { return itemListeners.toArray(new ItemListener[0]); }
     public void addPopupMenuListener(PopupMenuListener l) {}
     public void removePopupMenuListener(PopupMenuListener l) {}
+
+    @Override public java.awt.Dimension getPreferredSize() {
+        if (isPreferredSizeSet()) return super.getPreferredSize();
+        java.awt.FontMetrics fm = getFontMetrics(getFont());
+        int width = 60;
+        for (int i = 0; i < getItemCount(); i++) width = Math.max(width, fm.stringWidth(String.valueOf(getItemAt(i))));
+        return new java.awt.Dimension(width + 24, fm.getHeight() + 10);
+    }
+
+    @Override protected void paintComponent(java.awt.Graphics g) {
+        g.setColor(getBackground());
+        g.fillRect(0, 0, getWidth(), getHeight());
+        g.setColor(isEnabled() ? getForeground() : java.awt.Color.GRAY);
+        g.drawRect(0, 0, getWidth() - 1, getHeight() - 1);
+        g.setFont(getFont());
+        java.awt.FontMetrics fm = g.getFontMetrics();
+        if (selectedItem != null) g.drawString(selectedItem.toString(), 4, (getHeight() - fm.getHeight()) / 2 + fm.getAscent());
+        g.drawString("v", Math.max(0, getWidth() - 13), (getHeight() - fm.getHeight()) / 2 + fm.getAscent());
+    }
 }

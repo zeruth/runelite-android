@@ -36,4 +36,20 @@ public class JSpinner extends JComponent {
     public void commitEdit() throws java.text.ParseException {}
     public void addChangeListener(ChangeListener l) { if (model != null) model.addChangeListener(l); }
     public void removeChangeListener(ChangeListener l) { if (model != null) model.removeChangeListener(l); }
+    @Override public java.awt.Dimension getPreferredSize() {
+        if (isPreferredSizeSet()) return super.getPreferredSize();
+        java.awt.FontMetrics fm = getFontMetrics(getFont());
+        return new java.awt.Dimension(Math.max(70, fm.stringWidth(String.valueOf(getValue())) + 30), fm.getHeight() + 10);
+    }
+
+    @Override protected void paintComponent(java.awt.Graphics g) {
+        g.setColor(getBackground());
+        g.fillRect(0, 0, getWidth(), getHeight());
+        g.setColor(isEnabled() ? getForeground() : java.awt.Color.GRAY);
+        g.drawRect(0, 0, getWidth() - 1, getHeight() - 1);
+        g.setFont(getFont());
+        java.awt.FontMetrics fm = g.getFontMetrics();
+        g.drawString(String.valueOf(getValue()), 4, (getHeight() - fm.getHeight()) / 2 + fm.getAscent());
+        g.drawString("+/-", Math.max(0, getWidth() - 24), (getHeight() - fm.getHeight()) / 2 + fm.getAscent());
+    }
 }

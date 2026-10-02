@@ -30,6 +30,14 @@ internal data class NavEntry(
 
 internal object NavBarBridge
 {
+    fun panel(key: String): net.runelite.client.ui.PluginPanel?
+    {
+        val ui = RuneLiteAccess.instance(Class.forName("net.runelite.client.ui.ClientUI")) ?: return null
+        val field = ui.javaClass.getDeclaredField("sidebarEntries").apply { isAccessible = true }
+        @Suppress("UNCHECKED_CAST")
+        val entries = field.get(ui) as Collection<NavigationButton>
+        return entries.firstOrNull { identityKey(it) == key }?.panel
+    }
     /** Currently-selected button's key, or null if the user hasn't picked one yet
      *  (we surface the Compose plugin list as the default). Lives outside Compose
      *  so it survives composition tear-down. */

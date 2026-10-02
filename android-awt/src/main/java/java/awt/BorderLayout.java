@@ -64,15 +64,16 @@ public class BorderLayout implements LayoutManager2, Serializable {
     @Override
     public Dimension preferredLayoutSize(Container parent) {
         int w = 0, h = 0;
-        if (north != null) { Dimension d = north.getPreferredSize(); w = Math.max(w, d.width); h += d.height + vgap; }
-        if (south != null) { Dimension d = south.getPreferredSize(); w = Math.max(w, d.width); h += d.height + vgap; }
+        if (north != null && north.isVisible()) { Dimension d = north.getPreferredSize(); w = Math.max(w, d.width); h += d.height + vgap; }
+        if (south != null && south.isVisible()) { Dimension d = south.getPreferredSize(); w = Math.max(w, d.width); h += d.height + vgap; }
         int mid = 0, midH = 0;
-        if (west != null)   { Dimension d = west.getPreferredSize();   mid += d.width + hgap; midH = Math.max(midH, d.height); }
-        if (east != null)   { Dimension d = east.getPreferredSize();   mid += d.width + hgap; midH = Math.max(midH, d.height); }
-        if (center != null) { Dimension d = center.getPreferredSize(); mid += d.width;        midH = Math.max(midH, d.height); }
+        if (west != null && west.isVisible())   { Dimension d = west.getPreferredSize();   mid += d.width + hgap; midH = Math.max(midH, d.height); }
+        if (east != null && east.isVisible())   { Dimension d = east.getPreferredSize();   mid += d.width + hgap; midH = Math.max(midH, d.height); }
+        if (center != null && center.isVisible()) { Dimension d = center.getPreferredSize(); mid += d.width;        midH = Math.max(midH, d.height); }
         w = Math.max(w, mid);
         h += midH;
-        return new Dimension(w, h);
+        Insets in = parent.getInsets();
+        return new Dimension(w + in.left + in.right, h + in.top + in.bottom);
     }
 
     @Override public Dimension minimumLayoutSize(Container parent) { return preferredLayoutSize(parent); }
@@ -89,27 +90,27 @@ public class BorderLayout implements LayoutManager2, Serializable {
         int left = ins.left;
         int right = target.getWidth() - ins.right;
 
-        if (north != null) {
+        if (north != null && north.isVisible()) {
             int h = north.getPreferredSize().height;
             north.setBounds(left, top, right - left, h);
             top += h + vgap;
         }
-        if (south != null) {
+        if (south != null && south.isVisible()) {
             int h = south.getPreferredSize().height;
             south.setBounds(left, bottom - h, right - left, h);
             bottom -= h + vgap;
         }
-        if (east != null) {
+        if (east != null && east.isVisible()) {
             int w = east.getPreferredSize().width;
             east.setBounds(right - w, top, w, bottom - top);
             right -= w + hgap;
         }
-        if (west != null) {
+        if (west != null && west.isVisible()) {
             int w = west.getPreferredSize().width;
             west.setBounds(left, top, w, bottom - top);
             left += w + hgap;
         }
-        if (center != null) {
+        if (center != null && center.isVisible()) {
             center.setBounds(left, top, Math.max(0, right - left), Math.max(0, bottom - top));
         }
     }

@@ -37,8 +37,9 @@ public abstract class JTextComponent extends JComponent {
     public Document getDocument() { return doc; }
     public void setDocument(Document d) { this.doc = d; }
 
-    public boolean isEditable() { return true; }
-    public void setEditable(boolean b) {}
+    private boolean editable = true;
+    public boolean isEditable() { return editable; }
+    public void setEditable(boolean b) { editable = b; }
 
     public void selectAll() {}
     public String getSelectedText() { return null; }

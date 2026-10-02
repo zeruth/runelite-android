@@ -219,13 +219,13 @@ private fun PluginRowItem(
     onConfigure: (PluginRow) -> Unit,
 )
 {
-    var enabled by remember(row.rowKey) { mutableStateOf(row.enabled) }
+    var enabled by remember(row.rowKey, row.enabled) { mutableStateOf(row.enabled) }
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
             .clickable { if (row.hasConfig) onConfigure(row) }
-            .padding(horizontal = 8.dp, vertical = 8.dp),
+            .padding(horizontal = 6.dp, vertical = 5.dp),
     ) {
         FavoriteStar(favorite = favorite, onToggle = onToggleFavorite)
         Spacer(Modifier.size(8.dp))
@@ -233,21 +233,12 @@ private fun PluginRowItem(
             Text(
                 row.displayName,
                 color = if (enabled || !row.toggleable) RlPalette.TextPrimary else RlPalette.TextSecondary,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Normal,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            if (row.description.isNotEmpty())
-            {
-                Text(
-                    row.description,
-                    color = RlPalette.TextSecondary,
-                    fontSize = 11.sp,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
+
         }
         // Gear sits to the LEFT of the toggle so the toggle column is always the
         // rightmost affordance. Rows without a config still reserve the gear's

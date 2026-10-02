@@ -248,7 +248,8 @@ public class Window extends Container {
     }
     private static final ThreadLocal<PaintScratch> SCRATCH = ThreadLocal.withInitial(PaintScratch::new);
 
-    private static void hostPaint(java.awt.Graphics2D g, Component c) {
+    /** Render a component subtree for Android hosts. Call on the Swing event thread. */
+    public static void hostPaint(java.awt.Graphics2D g, Component c) {
         if (!c.isVisible() || c.getWidth() <= 0 || c.getHeight() <= 0) return;
         // Fast-path the common BufferedImageGraphics2D case with the zero-alloc
         // snapshot helpers. Fall back to the JDK-style save/restore when something

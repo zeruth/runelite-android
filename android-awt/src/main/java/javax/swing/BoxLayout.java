@@ -38,6 +38,7 @@ public class BoxLayout implements LayoutManager2, Serializable {
     public Dimension preferredLayoutSize(Container t) {
         int w = 0, h = 0;
         for (Component c : t.getComponents()) {
+            if (!c.isVisible()) continue;
             Dimension d = c.getPreferredSize();
             if (isXAxis()) { w += d.width; h = Math.max(h, d.height); }
             else           { h += d.height; w = Math.max(w, d.width); }
@@ -60,6 +61,7 @@ public class BoxLayout implements LayoutManager2, Serializable {
         int innerW = t.getWidth() - ins.left - ins.right;
         if (isXAxis()) {
             for (Component c : t.getComponents()) {
+                if (!c.isVisible()) continue;
                 Dimension d = c.getPreferredSize();
                 int w = d.width;
                 c.setBounds(x, y, w, innerH);
@@ -67,6 +69,7 @@ public class BoxLayout implements LayoutManager2, Serializable {
             }
         } else {
             for (Component c : t.getComponents()) {
+                if (!c.isVisible()) continue;
                 Dimension d = c.getPreferredSize();
                 int h = d.height;
                 c.setBounds(x, y, innerW, h);

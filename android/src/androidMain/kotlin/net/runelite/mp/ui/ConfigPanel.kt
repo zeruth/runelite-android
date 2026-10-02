@@ -44,7 +44,7 @@ import net.runelite.mp.ui.widgets.ToggleRow
 /**
  * Renders a single plugin's config interface as a Compose form. Each `@ConfigItem`-annotated
  * method on the interface produces one row; type drives the widget choice (boolean → toggle,
- * int with [Range] → slider, enum → segmented strip, String → text field, etc.).
+ * int with [Range] → slider, enum → dropdown, String → text field, etc.).
  *
  * Form state lives in a `mutableStateMapOf<key, value>` cache so the slider thumb feels
  * responsive (the underlying [ConfigBridge] write happens on every change but Compose
@@ -106,28 +106,32 @@ internal fun PluginConfigPanel(
         // Edits write through the bridge AND update the map in the same gesture, so a
         // slider drag doesn't fight a delayed read on every frame.
         val cache = remember(bridge) { mutableStateMapOf<String, Any?>() }
+        val collapsed = remember(bridge) { mutableStateMapOf<String, Boolean>() }
+        val visibleItems = remember(bridge) { bridge.descriptor.items.filter { !it.item.hidden && it.name().isNotBlank() } }
         LaunchedEffect(bridge)
         {
-            for (item in bridge.descriptor.items) cache[item.key()] = bridge.getValue(item)
+            for (item in visibleItems) cache[item.key()] = bridge.getValue(item)
         }
 
-        // No horizontal padding on the LazyColumn itself — rows own their own internal
-        // padding, and we want the row-aura gradient + selection backgrounds to reach
-        // all the way to the panel's left/right edges. Insetting the LazyColumn left
-        // the gradient looking like a floating strip with a dead band on either side.
+        // Rows own their padding so section backgrounds span the panel width.
         LazyColumn(modifier = Modifier.fillMaxSize())
         {
             // Section-less items first (RuneLite renders them above any sections too).
-            val orphans = bridge.descriptor.items.filter { it.item.section.isEmpty() }
+            val orphans = visibleItems.filter { it.item.section.isEmpty() }
             if (orphans.isNotEmpty()) items(orphans, key = { it.key() }) { ConfigRow(bridge, it, cache) }
             // Then one section header per section, with its items beneath.
             for (section in bridge.descriptor.sections)
             {
-                val secItems = bridge.descriptor.items.filter { it.item.section == section.key() }
+                val secItems = visibleItems.filter { it.item.section == section.key() }
                 if (secItems.isEmpty()) continue
-                item(key = "sec:${section.key()}") { SectionHeader(section.name()) }
-                items(secItems, key = { "${section.key()}/${it.key()}" }) {
-                    ConfigRow(bridge, it, cache)
+                val isClosed = collapsed[section.key()] ?: section.section.closedByDefault
+                item(key = "sec:${section.key()}") {
+                    SectionHeader(section.name(), !isClosed) { collapsed[section.key()] = !isClosed }
+                }
+                if (!isClosed) {
+                    items(secItems, key = { "${section.key()}/${it.key()}" }) {
+                        ConfigRow(bridge, it, cache)
+                    }
                 }
             }
             item { Spacer(Modifier.height(24.dp)) }
@@ -203,7 +207,7 @@ private fun ConfigRow(
             @Suppress("UNCHECKED_CAST")
             val enumClass = clazz as Class<out Enum<*>>
             val constants = enumClass.enumConstants ?: emptyArray()
-            val names = constants.map { it.name }
+            val names = constants.map { it.toString().replace('_', ' ') }
             val selected = (current as? Enum<*>)?.ordinal ?: 0
             SegmentedRow(label, desc, names, selected.coerceAtLeast(0)) { idx ->
                 val pick = constants.getOrNull(idx) ?: return@SegmentedRow

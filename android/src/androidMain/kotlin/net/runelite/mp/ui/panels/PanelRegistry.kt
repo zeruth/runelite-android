@@ -4,9 +4,7 @@ import androidx.compose.runtime.Composable
 
 /**
  * Maps an RL nav-button tooltip to a Compose-native replacement for its Swing panel.
- * The icon strip looks here first when a button is tapped — a hit suppresses the
- * `ClientUI.openPanel` call (the AWT panel never paints) and the host's content
- * column renders the registered composable instead.
+ * These are optional Android views; the shared host defaults to the original Swing panel.
  *
  * Tooltips are matched exactly because that's the only stable identifier we have
  * from `NavigationButton` — the underlying plugin instance varies by build and the
@@ -22,9 +20,7 @@ internal object PanelRegistry
         //   WorldHopperPlugin → "World Switcher"
         //   HiscorePlugin     → "Hiscore"  (no second 's')
         //   TimeTrackingPlugin → "Time Tracking"  (already correct)
-        // Get these wrong and the icon strip falls back to opening the AWT Swing panel
-        // instead of routing to the Compose replacement — which is exactly the bug that
-        // hid the HiScore and World list panels on first launch.
+        // Exact tooltips make the optional Android views available in the shared host.
         "World Switcher" to { WorldHopperPanel() },
         "Hiscore" to { HiscoresPanel() },
         "Grand Exchange" to { GrandExchangePanel() },

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -50,15 +51,14 @@ internal fun PanelScaffold(
         modifier = Modifier
             .fillMaxSize()
             .background(RlPalette.DarkerGray)
-            .border(1.dp, RlPalette.SurfaceBorder),
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(RlPalette.DarkGray)
-                .padding(horizontal = 10.dp, vertical = 8.dp),
+                .padding(horizontal = 8.dp, vertical = 5.dp),
         ) {
-            Text(title, color = RlPalette.Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            Text(title, color = RlPalette.TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold)
             if (subtitle != null)
             {
                 Text(subtitle, color = RlPalette.TextSecondary, fontSize = 11.sp)
@@ -70,7 +70,7 @@ internal fun PanelScaffold(
                 modifier = Modifier
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
-                    .padding(8.dp),
+                    .padding(6.dp),
             ) {
                 content()
             }
@@ -129,13 +129,15 @@ internal fun PanelButton(
             .clip(RoundedCornerShape(4.dp))
             .background(if (enabled) RlPalette.MediumGray else Color(0xFF2A2A2A))
             .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 7.dp),
+            .heightIn(min = 32.dp)
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        contentAlignment = Alignment.Center,
     ) {
         Text(
             label,
             color = if (enabled) Color.White else RlPalette.TextDisabled,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Normal,
         )
     }
 }

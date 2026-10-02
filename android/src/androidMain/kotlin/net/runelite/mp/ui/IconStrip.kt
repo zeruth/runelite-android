@@ -1,5 +1,6 @@
 package net.runelite.mp.ui
 
+import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -29,6 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -50,9 +52,7 @@ internal const val NAV_KEY_PLUGINS = "__compose__plugins"
  * Click behaviour:
  *  - Our synthetic "Plugins" icon → flip the selection to it; content area shows the
  *    Compose plugin list.
- *  - Any RL [NavEntry] with a panel → call into ClientUI to open it (the panel renders
- *    inside the AWT bitmap), and flip the Compose selection so the content area shows
- *    a "rendered in-game" placeholder.
+ *  - Any RL [NavEntry] with a panel opens in the shared Swing host.
  *  - Action-only RL nav (no panel) → fire its onClick. Selection state is unchanged.
  */
 @Composable
@@ -62,6 +62,10 @@ internal fun NavIconStrip(
     onSelect: (String?) -> Unit,
 )
 {
+    val pluginsIcon = remember {
+        NavBarBridge::class.java.getResourceAsStream("/net/runelite/client/plugins/config/config_icon.png")
+            ?.use { BitmapFactory.decodeStream(it)?.asImageBitmap() }
+    }
     val entries = remember { mutableStateListOf<NavEntry>() }
     LaunchedEffect(Unit)
     {
@@ -88,15 +92,15 @@ internal fun NavIconStrip(
             .border(1.dp, RlPalette.SurfaceBorder),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(4.dp))
         // Our built-in Plugins icon — always at the top. Re-tapping the active icon
         // collapses the panel (state → null) so the user can reclaim the screen
         // without losing context.
         IconButton(
-            label = "🔧",
+            label = "P",
             tooltip = "Plugins",
             active = selected == NAV_KEY_PLUGINS,
-            iconBitmap = null,
+            iconBitmap = pluginsIcon,
         ) {
             if (selected == NAV_KEY_PLUGINS)
             {
@@ -114,8 +118,8 @@ internal fun NavIconStrip(
         Spacer(Modifier.height(4.dp))
         // Sticky-modifier chips. There's no hardware keyboard on Android, so OSRS
         // interactions that require Shift (drop items) or Alt (alt-action menu) get a
-        // tap-to-hold affordance pinned directly under the Plugins wrench. Green when
-        // engaged, red-bordered when idle so the user can scan their state at a glance.
+        // tap-to-hold affordance pinned directly under the Plugins wrench. Amber marks
+        // an engaged modifier; inactive controls blend into the strip.
         ModifierChip(label = "Shift", state = net.runelite.mp.ui.bridge.ModifierState.shiftActive.value) {
             net.runelite.mp.ui.bridge.ModifierState.toggleShift()
         }
@@ -127,16 +131,15 @@ internal fun NavIconStrip(
         ModifierChip(label = "⌨️", state = net.runelite.mp.ui.bridge.SoftKeyboardController.isKeyboardVisible.value) {
             net.runelite.mp.ui.bridge.SoftKeyboardController.toggle()
         }
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(4.dp))
         // RL-registered nav buttons. The list scrolls when it overflows the column height.
         LazyColumn(
             modifier = Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(0.dp),
         ) {
             items(entries, key = { it.key }) { entry ->
                 val isActive = selected == entry.key
-                val composeOverride = net.runelite.mp.ui.panels.PanelRegistry.hasPanel(entry.key)
                 IconButton(
                     label = entry.initial,
                     tooltip = entry.tooltip,
@@ -145,20 +148,15 @@ internal fun NavIconStrip(
                 ) {
                     if (isActive)
                     {
-                        // Same tap-to-close behaviour as the Plugins wrench — but only close
-                        // the AWT panel for non-Compose buttons. The Compose path never
-                        // opened one in the first place.
-                        if (!composeOverride) net.runelite.mp.ui.bridge.NavBarBridge.closePanels()
+                        // Re-tapping closes the selected panel.
+                        net.runelite.mp.ui.bridge.NavBarBridge.closePanels()
                         onSelect(null)
                     }
                     else
                     {
-                        if (composeOverride)
+                        if (entry.hasPanel)
                         {
-                            // Compose-replacement path: skip the AWT openPanel reflection
-                            // entirely so the Swing panel never paints into the game bitmap.
-                            // Still close any previously-open AWT panel from the prior
-                            // selection so it stops bleeding through.
+                            // The shared host owns rendering and activation of the original panel.
                             net.runelite.mp.ui.bridge.NavBarBridge.closePanels()
                             onSelect(entry.key)
                         }
@@ -176,28 +174,27 @@ internal fun NavIconStrip(
 
 /**
  * Two-state chip used for the Shift / Alt sticky-modifier toggles in the icon strip.
- * Green fill when engaged so the user can see the modifier is "down" at a glance; a
- * dim red border when idle so it reads as an inactive-but-armed control rather than
- * just a label. Tap toggles. Sized the same width as [IconButton] so the strip stays
+ * Amber fill when engaged so the user can see the modifier is "down" at a glance.
+ * Tap toggles. Sized the same width as [IconButton] so the strip stays
  * visually aligned even when the chip text is wider than a glyph.
  */
 @Composable
 private fun ModifierChip(label: String, state: Boolean, onClick: () -> Unit)
 {
-    val bg = if (state) Color(0xFF2F6A2F) else Color.Transparent
-    val borderColor = if (state) Color(0xFF4DC44D) else Color(0xFF8B2A2A)
+    val bg = if (state) RlPalette.AccentSurface else Color.Transparent
+    val borderColor = if (state) RlPalette.Accent else Color.Transparent
     Box(
         Modifier
-            .size(36.dp)
-            .clip(RoundedCornerShape(6.dp))
+            .size(32.dp)
+            .clip(RoundedCornerShape(2.dp))
             .background(bg)
-            .border(1.dp, borderColor, RoundedCornerShape(6.dp))
+            .border(1.dp, borderColor, RoundedCornerShape(2.dp))
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             label,
-            color = if (state) Color.White else Color(0xFFE0908F),
+            color = if (state) RlPalette.Accent else RlPalette.TextSecondary,
             fontSize = 11.sp,
             fontWeight = FontWeight.Bold,
         )
@@ -217,10 +214,10 @@ private fun IconButton(
     val border = if (active) RlPalette.Accent else Color.Transparent
     Box(
         Modifier
-            .size(36.dp)
-            .clip(RoundedCornerShape(6.dp))
+            .size(32.dp)
+            .clip(RoundedCornerShape(2.dp))
             .background(bg)
-            .border(1.dp, border, RoundedCornerShape(6.dp))
+            .border(1.dp, border, RoundedCornerShape(2.dp))
             .clickable(onClick = onClick)
             .padding(4.dp),
         contentAlignment = Alignment.Center,
@@ -231,7 +228,8 @@ private fun IconButton(
                 bitmap = iconBitmap,
                 contentDescription = tooltip,
                 contentScale = ContentScale.Fit,
-                modifier = Modifier.size(22.dp),
+                filterQuality = androidx.compose.ui.graphics.FilterQuality.None,
+                modifier = Modifier.size(20.dp),
             )
         }
         else

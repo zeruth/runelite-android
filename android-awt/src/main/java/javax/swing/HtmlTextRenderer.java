@@ -102,7 +102,8 @@ final class HtmlTextRenderer
 		Line current = new Line();
 		lines.add(current);
 
-		java.util.Deque<Color> colorStack = new java.util.ArrayDeque<>();
+		// null means inherit the label foreground; ArrayDeque rejects null entries.
+		java.util.Deque<Color> colorStack = new java.util.LinkedList<>();
 		java.util.Deque<Boolean> boldStack = new java.util.ArrayDeque<>();
 
 		Color color = null;

@@ -29,6 +29,8 @@ public class Container extends Component {
         if (index < 0 || index >= children.size()) children.add(comp);
         else children.add(index, comp);
         comp.setParent(this);
+        if (layout instanceof LayoutManager2) ((LayoutManager2) layout).addLayoutComponent(comp, null);
+        else if (layout != null) layout.addLayoutComponent(null, comp);
         invalidate();
         return comp;
     }
@@ -189,6 +191,8 @@ public class Container extends Component {
         super.paint(g);
         paintChildren(g);
     }
+
+    public void paintComponents(Graphics g) { paintChildren(g); }
 
     protected void paintChildren(Graphics g) {
         int count = children.size();

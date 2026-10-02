@@ -19,6 +19,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
+import androidx.core.text.HtmlCompat
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -42,57 +48,35 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.draw.drawBehind
 import net.runelite.mp.ui.RlPalette
+import net.runelite.mp.ui.RlFonts
 import kotlin.math.roundToInt
 
-/** Left-fading row aura — same primitive ARMSX2 uses to give the rows shape without
- *  drawing a hard border around each one. */
-private fun rowAura(): Brush = Brush.horizontalGradient(
-    listOf(Color.White.copy(alpha = 0.05f), Color.Transparent),
-)
-
+/** Flat section bars match the desktop sidebar and can collapse long forms. */
 @Composable
-fun SectionHeader(title: String)
-{
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .padding(top = 14.dp, bottom = 4.dp, start = 6.dp, end = 6.dp),
-    ) {
-        Text(
-            title,
-            color = RlPalette.Accent,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
-        )
-        Spacer(
-            Modifier
-                .fillMaxWidth()
-                .height(1.dp)
-                .padding(top = 16.dp)
-                .background(
-                    Brush.horizontalGradient(
-                        listOf(RlPalette.DividerStrong, Color.Transparent),
-                    ),
-                ),
-        )
+fun SectionHeader(title: String, expanded: Boolean = true, onClick: (() -> Unit)? = null) {
+    Row(Modifier.fillMaxWidth().background(RlPalette.DarkerGray)
+        .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+        .heightIn(min = 32.dp).padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+        if (onClick != null) Text(if (expanded) "▾  " else "▸  ", color = RlPalette.TextSecondary)
+        Text(title, color = RlPalette.Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
     }
 }
 
 @Composable
-fun RowLabel(label: String, description: String? = null, modifier: Modifier = Modifier)
-{
-    Column(modifier = modifier) {
-        Text(label, color = RlPalette.TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-        if (!description.isNullOrEmpty())
-        {
-            Text(
-                description,
-                color = RlPalette.TextSecondary,
-                fontSize = 11.sp,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
+fun RowLabel(label: String, description: String? = null, modifier: Modifier = Modifier) {
+    var showHelp by remember(label) { mutableStateOf(false) }
+    val help = remember(description) {
+        description?.let { HtmlCompat.fromHtml(it, HtmlCompat.FROM_HTML_MODE_LEGACY).toString().trim() }.orEmpty()
+    }
+    Column(modifier.animateContentSize()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(label, color = RlPalette.TextPrimary, fontSize = 14.sp, modifier = Modifier.weight(1f, fill = false))
+            if (help.isNotEmpty()) Box(Modifier.size(24.dp).clickable { showHelp = !showHelp }, contentAlignment = Alignment.Center) {
+                Text(if (showHelp) "−" else "?", color = RlPalette.TextSecondary, fontSize = 12.sp)
+            }
         }
+        if (showHelp) Text(help, color = RlPalette.TextSecondary, fontSize = 12.sp)
     }
 }
 
@@ -107,30 +91,17 @@ fun ToggleRow(
     Box(
         Modifier
             .fillMaxWidth()
-            .background(rowAura())
+            .background(RlPalette.DarkGray)
             .clickable { onChange(!value) }
-            .padding(horizontal = 8.dp, vertical = 8.dp),
+            .heightIn(min = 36.dp).padding(horizontal = 8.dp, vertical = 5.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             RowLabel(label, description, Modifier.weight(1f))
             Spacer(Modifier.size(8.dp))
-            // Compact iOS-ish toggle. Track + thumb, no shadow — keeps it
-            // looking native to the orange-on-dark palette.
-            val trackBg = if (value) RlPalette.Accent else Color(0xFF3A3A3A)
-            Box(
-                Modifier
-                    .size(width = 34.dp, height = 18.dp)
-                    .clip(RoundedCornerShape(9.dp))
-                    .background(trackBg),
-                contentAlignment = if (value) Alignment.CenterEnd else Alignment.CenterStart,
-            ) {
-                Box(
-                    Modifier
-                        .size(14.dp)
-                        .padding(start = if (value) 0.dp else 2.dp, end = if (value) 2.dp else 0.dp)
-                        .clip(RoundedCornerShape(7.dp))
-                        .background(Color.White),
-                )
+            Box(Modifier.size(18.dp).background(RlPalette.DarkerGray)
+                .border(1.dp, if (value) RlPalette.Accent else RlPalette.SurfaceBorder),
+                contentAlignment = Alignment.Center) {
+                if (value) Text("✓", color = RlPalette.Accent, fontSize = 16.sp)
             }
         }
     }
@@ -150,8 +121,8 @@ fun IntSliderRow(
     Box(
         Modifier
             .fillMaxWidth()
-            .background(rowAura())
-            .padding(horizontal = 8.dp, vertical = 8.dp),
+            .background(RlPalette.DarkGray)
+            .heightIn(min = 36.dp).padding(horizontal = 8.dp, vertical = 5.dp),
     ) {
         Column {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -221,41 +192,30 @@ private fun DiscreteSlider(value: Int, min: Int, max: Int, onChange: (Int) -> Un
     }
 }
 
+/** A bounded dropdown keeps long enum lists inside the phone sidebar. */
 @Composable
-fun SegmentedRow(
-    label: String,
-    description: String?,
-    options: List<String>,
-    selectedIndex: Int,
-    onChange: (Int) -> Unit,
-)
-{
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .background(rowAura())
-            .padding(horizontal = 8.dp, vertical = 8.dp),
-    ) {
-        Column {
-            RowLabel(label, description)
-            Spacer(Modifier.height(4.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                options.forEachIndexed { idx, opt ->
-                    val on = idx == selectedIndex
-                    Box(
-                        Modifier
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(if (on) RlPalette.Accent else Color(0xFF272525).copy(alpha = 0.5f))
-                            .clickable { onChange(idx) }
-                            .padding(horizontal = 8.dp, vertical = 3.dp),
-                    ) {
-                        Text(
-                            opt,
-                            color = if (on) Color.White else RlPalette.TextSecondary,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                        )
-                    }
+fun SegmentedRow(label: String, description: String?, options: List<String>, selectedIndex: Int, onChange: (Int) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Row(Modifier.fillMaxWidth().heightIn(min = 38.dp).padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+        RowLabel(label, description, Modifier.weight(1f))
+        Spacer(Modifier.size(6.dp))
+        Box(Modifier.widthIn(max = 126.dp)) {
+            Row(Modifier.border(1.dp, RlPalette.SurfaceBorder).background(RlPalette.DarkerGray)
+                .clickable { open = true }.padding(horizontal = 7.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                Text(options.getOrNull(selectedIndex).orEmpty(), color = RlPalette.TextPrimary,
+                    fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false))
+                Text("  ▾", color = RlPalette.TextSecondary, fontSize = 12.sp)
+            }
+            DropdownMenu(expanded = open, onDismissRequest = { open = false },
+                modifier = Modifier.widthIn(max = 230.dp).heightIn(max = 300.dp).background(RlPalette.DarkerGray)) {
+                options.forEachIndexed { index, option ->
+                    DropdownMenuItem(text = { Text(option,
+                        color = if (index == selectedIndex) RlPalette.Accent else RlPalette.TextPrimary,
+                        fontFamily = RlFonts.Regular, fontSize = 14.sp, maxLines = 2) },
+                        onClick = { open = false; onChange(index) })
                 }
             }
         }
@@ -273,8 +233,8 @@ fun TextRow(
     Box(
         Modifier
             .fillMaxWidth()
-            .background(rowAura())
-            .padding(horizontal = 8.dp, vertical = 8.dp),
+            .background(RlPalette.DarkGray)
+            .heightIn(min = 36.dp).padding(horizontal = 8.dp, vertical = 5.dp),
     ) {
         Column {
             RowLabel(label, description)
