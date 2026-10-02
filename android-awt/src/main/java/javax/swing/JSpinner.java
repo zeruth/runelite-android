@@ -7,9 +7,15 @@ public class JSpinner extends JComponent {
 
     public static class DefaultEditor extends JPanel {
         private static final long serialVersionUID = 1L;
-        public DefaultEditor(JSpinner spinner) {}
-        public JFormattedTextField getTextField() { return new JFormattedTextField(); }
-        public JSpinner getSpinner() { return null; }
+        private final JSpinner spinner;
+        private final JFormattedTextField textField;
+        public DefaultEditor(JSpinner spinner) {
+            this.spinner = spinner;
+            this.textField = new JFormattedTextField(spinner.getValue());
+            add(textField);
+        }
+        public JFormattedTextField getTextField() { return textField; }
+        public JSpinner getSpinner() { return spinner; }
         public void commitEdit() {}
     }
 
@@ -23,7 +29,10 @@ public class JSpinner extends JComponent {
     private JComponent editor;
 
     public JSpinner() { this(new SpinnerNumberModel()); }
-    public JSpinner(SpinnerModel model) { this.model = model; }
+    public JSpinner(SpinnerModel model) {
+        this.model = model;
+        this.editor = model instanceof SpinnerNumberModel ? new NumberEditor(this) : new DefaultEditor(this);
+    }
 
     public SpinnerModel getModel() { return model; }
     public void setModel(SpinnerModel model) { this.model = model; }
