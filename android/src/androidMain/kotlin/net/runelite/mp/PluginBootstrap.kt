@@ -66,6 +66,11 @@ object PluginBootstrap {
             loadDefaultConfig.invoke(pluginManager, null)
             Log.i(TAG, "loaded default plugin configurations")
 
+            net.runelite.mp.hd.AndroidHdHost.configure(
+                pluginManager as net.runelite.client.plugins.PluginManager,
+                (injector as com.google.inject.Injector).getInstance(net.runelite.client.config.ConfigManager::class.java)
+            )
+
             val startPlugins = pluginManagerClass.getMethod("startPlugins")
             startPlugins.invoke(pluginManager)
             Log.i(TAG, "started plugins in ${System.currentTimeMillis() - started}ms")

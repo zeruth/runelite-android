@@ -23,6 +23,12 @@ import java.util.List;
  */
 public abstract class Component implements ImageObserver, Serializable {
     private static final long serialVersionUID = -7644114512714619750L;
+    private static final Object TREE_LOCK = new Object();
+    private boolean ignoreRepaint;
+
+    public final Object getTreeLock() { return TREE_LOCK; }
+    public void setIgnoreRepaint(boolean ignoreRepaint) { this.ignoreRepaint = ignoreRepaint; }
+    public boolean getIgnoreRepaint() { return ignoreRepaint; }
 
     protected int x, y, width, height;
     // Defaults tuned for RuneLite's theme. On desktop FlatLaf populates

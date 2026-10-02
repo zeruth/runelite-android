@@ -132,9 +132,6 @@ public class Container extends Component {
 
     public Insets getInsets() { return new Insets(0, 0, 0, 0); }
 
-    private static final Object TREE_LOCK = new Object();
-    public final Object getTreeLock() { return TREE_LOCK; }
-
     @Override
     public void doLayout() {
         if (layout != null) layout.layoutContainer(this);

@@ -2,6 +2,7 @@ package net.runelite.rlawt;
 
 import android.opengl.GLES32;
 import java.awt.Canvas;
+import java.awt.Component;
 import net.runelite.client.plugins.gpugles.GlesHost;
 
 /**
@@ -18,6 +19,7 @@ import net.runelite.client.plugins.gpugles.GlesHost;
 public class AWTContext
 {
 	public AWTContext(Canvas ignored) { /* Canvas reference unused on Android */ }
+	public AWTContext(Component ignored) { /* Matches the desktop rlawt constructor ABI. */ }
 
 	public static void loadNatives() { /* no JOGL natives to load — EGL is system */ }
 

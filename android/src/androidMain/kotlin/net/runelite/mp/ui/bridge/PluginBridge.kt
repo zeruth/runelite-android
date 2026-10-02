@@ -42,12 +42,6 @@ internal object PluginBridge
         {
             val descAnn = plugin.javaClass.getAnnotation(PluginDescriptor::class.java) ?: continue
             val cfg = safeGetConfigProxy(pm, plugin)
-            // GPU (GLES) is the renderer the whole client relies on — software mode has
-            // known issues (e.g. Stretched Mode breaks it) and GLES is flawless — so it
-            // must stay on. Suppress its on/off toggle so it can't be disabled. Its gear
-            // (config) row is unaffected. Pinned here in our Compose UI rather than
-            // upstream. Matched by class so a display-name change can't un-pin it.
-            val pinnedOn = plugin.javaClass.name == "net.runelite.client.plugins.gpugles.GpuGlesPlugin"
             out += PluginRow(
                 plugin = plugin,
                 configProxy = cfg,
@@ -55,7 +49,7 @@ internal object PluginBridge
                 description = descAnn.description,
                 tags = descAnn.tags.toList(),
                 enabled = pm.isPluginEnabled(plugin),
-                toggleable = !pinnedOn,
+                toggleable = true,
                 hasConfig = cfg != null,
             )
         }

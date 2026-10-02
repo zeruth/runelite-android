@@ -49,6 +49,7 @@ include("android")
 include("android-desktop")
 project(":android").projectDir = file("./android")
 include("android-awt")
+include("android-hd")
 project(":android-awt").projectDir = file("./android-awt")
 apply(from = "./common.settings.gradle.kts")
 

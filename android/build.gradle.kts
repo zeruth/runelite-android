@@ -285,6 +285,7 @@ if (androidSdkAvailable) {
         // the runelite jars compile against; it must be on the classpath before
         // anything that touches AWT can resolve at dex time.
         "implementation"(project(":android-awt"))
+        "implementation"(project(":android-hd"))
         "implementation"(project(":jshell"))
         "implementation"(project(":client"))
         "implementation"("net.runelite:runelite-api:${project.version}")
@@ -329,6 +330,8 @@ if (androidSdkAvailable) {
 if (androidSdkAvailable) {
     // AGP 9's public DSL type; BaseAppModuleExtension was the pre-newDsl internal one.
     extensions.configure<com.android.build.api.dsl.ApplicationExtension>("android") {
+        ndkVersion = "27.1.12297006"
+        externalNativeBuild { cmake { path = file("src/androidMain/cpp/CMakeLists.txt"); version = "3.22.1" } }
         namespace = "net.runelite.mp"
         compileSdk = 37
 

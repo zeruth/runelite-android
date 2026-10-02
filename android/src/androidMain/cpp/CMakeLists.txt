@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.22.1)
+project(hdmemory C)
+add_library(hdmemory SHARED hd_memory.c)
+target_link_libraries(hdmemory GLESv3)
+target_compile_options(hdmemory PRIVATE -Wall -Wextra -Werror)

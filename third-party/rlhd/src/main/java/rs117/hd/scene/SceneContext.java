@@ -1,0 +1,432 @@
+package rs117.hd.scene;
+
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Objects;
+import java.util.stream.Stream;
+import javax.annotation.Nullable;
+import net.runelite.api.*;
+import net.runelite.api.coords.*;
+import rs117.hd.scene.areas.AABB;
+import rs117.hd.scene.areas.Area;
+import rs117.hd.scene.environments.Environment;
+import rs117.hd.scene.lights.Light;
+import rs117.hd.scene.materials.Material;
+import rs117.hd.scene.tile_overrides.TileOverride;
+import rs117.hd.scene.tile_overrides.TileOverrideVariables;
+import rs117.hd.utils.HDUtils;
+import rs117.hd.utils.collections.Int2IntHashMap;
+import rs117.hd.utils.collections.Int2ObjectHashMap;
+
+import static net.runelite.api.Constants.*;
+import static net.runelite.api.Constants.SCENE_SIZE;
+import static net.runelite.api.Perspective.*;
+import static rs117.hd.utils.MathUtils.*;
+
+public class SceneContext {
+	public static final byte TILE_WATER_FLAG = 1;
+	public static final byte TILE_SKIP_FLAG = 1 << 1;
+
+	public static final int TILE_OVERRIDE_MAIN = 0;
+	public static final int TILE_OVERRIDE_UNDERLAY = 1;
+	public static final int TILE_OVERRIDE_OVERLAY = 2;
+	public static final int TILE_OVERRIDE_COUNT = 3;
+
+	public static final int VERTEX_IS_LAND = 1;
+	public static final int VERTEX_IS_WATER = 1 << 1;
+	public static final int VERTEX_IS_OVERLAY = 1 << 2;
+	public static final int VERTEX_IS_UNDERLAY = 1 << 3;
+	public static final int VERTEX_IS_HIGH_PRIORITY_COLOR = 1 << 4;
+	public static final int VERTEX_UNDER_WATER_DEPTH_SHIFT = 5;
+	// This only needs 10 bits, since depth slope 1380 * .55 = 9.6 bits, but reserve 16 to be safe
+	public static final int VERTEX_UNDER_WATER_DEPTH_MASK = 0xFFFF;
+
+	// Thread safe tile override variables
+	public final static ThreadLocal<TileOverrideVariables> TILE_OVERRIDE_VARIABLES = ThreadLocal.withInitial(TileOverrideVariables::new);
+	public final Client client;
+	public final Scene scene;
+	public final int expandedMapLoadingChunks;
+
+	@Nullable
+	public final int[] sceneBase;
+	public final AABB sceneBounds;
+	public final ArrayList<Environment> environments = new ArrayList<>();
+	public final ArrayList<Light> lights = new ArrayList<>();
+	public final HashSet<Projectile> knownProjectiles = new HashSet<>();
+	public final ArrayList<TileObject> lightSpawnsToHandleOnClientThread = new ArrayList<>();
+	public int sizeX, sizeZ;
+	public int sceneOffset;
+	public int numVisibleLights = 0;
+	public boolean enableAreaHiding;
+	public boolean fillGaps;
+	public boolean isInChambersOfXeric;
+	public boolean isInHouse;
+
+	@Nullable
+	public Area currentArea;
+	public Area[] possibleAreas = new Area[0];
+	public byte[][] filledTiles = new byte[EXTENDED_SCENE_SIZE][EXTENDED_SCENE_SIZE];
+	public byte[] tileFlags;
+	public char[] tileOverrideIndices;
+
+	// Terrain data
+	public Int2ObjectHashMap<Material> vertexTerrainTexture;
+	public Int2IntHashMap vertexTerrainColor;
+	public Int2IntHashMap vertexTerrainData;
+	public Int2IntHashMap vertexTerrainNormalIndices;
+	public short[] vertexTerrainNormals;
+
+	public SceneContext(Client client, Scene scene, int expandedMapLoadingChunks) {
+		this.client = client;
+		this.scene = scene;
+		this.expandedMapLoadingChunks = scene.isInstance() ? 0 : expandedMapLoadingChunks;
+		sizeX = sizeZ = EXTENDED_SCENE_SIZE;
+		sceneOffset = (EXTENDED_SCENE_SIZE - SCENE_SIZE) / 2;
+		sceneBase = findSceneBase();
+		sceneBounds = findSceneBounds(sceneBase);
+	}
+
+	public synchronized void destroy() {}
+
+	public void setVertexIsLand(int hash) {
+		vertexTerrainData.or(hash, VERTEX_IS_LAND, 0);
+	}
+
+	public void setVertexIsWater(int hash) {
+		vertexTerrainData.or(hash, VERTEX_IS_WATER, 0);
+	}
+
+	public void setVertexHighPriorityColor(int hash) {
+		vertexTerrainData.or(hash, VERTEX_IS_HIGH_PRIORITY_COLOR, 0);
+	}
+
+	public void setVertexIsOverlay(int hash, boolean isOverlay) {
+		vertexTerrainData.or(hash, isOverlay ? VERTEX_IS_OVERLAY : VERTEX_IS_UNDERLAY, 0);
+	}
+
+	public void setVertexUnderwaterDepth(int hash, int depth) {
+		int value = (depth << VERTEX_UNDER_WATER_DEPTH_SHIFT);
+		int mask = VERTEX_UNDER_WATER_DEPTH_MASK << VERTEX_UNDER_WATER_DEPTH_SHIFT;
+		vertexTerrainData.setBits(hash, value, mask, 0);
+	}
+
+	public boolean isVertexHighPriorityColor(int hash) {
+		return vertexTerrainData.test(hash, VERTEX_IS_HIGH_PRIORITY_COLOR);
+	}
+
+	public boolean isVertexLand(int hash) {
+		return vertexTerrainData.test(hash, VERTEX_IS_LAND);
+	}
+
+	public boolean isVertexWater(int hash) {
+		return vertexTerrainData.test(hash, VERTEX_IS_WATER);
+	}
+
+	public boolean isVertexOverlay(int hash) {
+		return vertexTerrainData.test(hash, VERTEX_IS_OVERLAY);
+	}
+
+	public boolean isVertexUnderlay(int hash) {
+		return vertexTerrainData.test(hash, VERTEX_IS_UNDERLAY);
+	}
+
+	public short[] getVertexNormalOrDefault(int hash, short[] result, short[] defaultNormal) {
+		if (getVertexNormal(hash, result) != null)
+			return result;
+
+		result[0] = defaultNormal[0];
+		result[1] = defaultNormal[1];
+		result[2] = defaultNormal[2];
+
+		return result;
+	}
+
+	public short[] getVertexNormal(int hash, short[] result) {
+		int index = vertexTerrainNormalIndices.getOrDefault(hash, -1);
+		if (index == -1)
+			return null;
+
+		final int offset = index * 3;
+		result[0] = vertexTerrainNormals[offset];
+		result[1] = vertexTerrainNormals[offset + 1];
+		result[2] = vertexTerrainNormals[offset + 2];
+		return result;
+	}
+
+	public int getVertexUnderwaterDepth(int hash) {
+		return vertexTerrainData.getBits(
+			hash,
+			VERTEX_UNDER_WATER_DEPTH_MASK,
+			VERTEX_UNDER_WATER_DEPTH_SHIFT,
+			0
+		);
+	}
+
+	public void setTileFlag(int plane, int x, int y, byte flag) {
+		tileFlags[getTileIdx(plane, x, y)] |= flag;
+	}
+
+	public boolean isTileFlagSet(int plane, int x, int y, byte flag) {
+		return (tileFlags[getTileIdx(plane, x, y)] & flag) != 0;
+	}
+
+	public void setTileOverride(int plane, int x, int y, TileOverride[] overrides) {
+		setTileOverride(plane, x, y, overrides[0], overrides[1], overrides[2]);
+	}
+
+	public void setTileOverride(
+		int plane,
+		int x,
+		int y,
+		TileOverride mainOverride,
+		TileOverride underlayOverride,
+		TileOverride overlayOverride
+	) {
+		final int offset = getTileIdx(plane, x, y) * TILE_OVERRIDE_COUNT;
+
+		if (mainOverride != null && mainOverride != TileOverride.NONE)
+			tileOverrideIndices[offset + TILE_OVERRIDE_MAIN] = (char) (mainOverride.index + 1);
+
+		if (underlayOverride != null && underlayOverride != TileOverride.NONE)
+			tileOverrideIndices[offset + TILE_OVERRIDE_UNDERLAY] = (char) (underlayOverride.index + 1);
+
+		if (overlayOverride != null && overlayOverride != TileOverride.NONE)
+			tileOverrideIndices[offset + TILE_OVERRIDE_OVERLAY] = (char) (overlayOverride.index + 1);
+	}
+
+	public boolean getTileOverrides(int plane, int x, int y, TileOverride[] result) {
+		final int offset = getTileIdx(plane, x, y) * TILE_OVERRIDE_COUNT;
+
+		boolean hasOverrides = false;
+		for (int i = 0; i < TILE_OVERRIDE_COUNT; i++) {
+			final int idx = tileOverrideIndices[offset + i];
+			result[i] = idx > 0 ? TileOverrideManager.OVERRIDES[idx - 1] : TileOverride.NONE;
+			if (idx > 0)
+				hasOverrides = true;
+		}
+
+		return hasOverrides;
+	}
+
+	public TileOverride getTileOverride(int plane, int x, int y, int type) {
+		final int offset = getTileIdx(plane, x, y) * TILE_OVERRIDE_COUNT;
+		final int idx = tileOverrideIndices[offset + type];
+		return idx > 0 ? TileOverrideManager.OVERRIDES[idx - 1] : TileOverride.NONE;
+	}
+
+	public int[] getTileIndices(int tileIdx, int[] indices) {
+		indices[0] = tileIdx % sizeX;
+		indices[1] = (tileIdx / sizeX) % sizeZ;
+		indices[2] = tileIdx / (sizeX * sizeZ);
+		return indices;
+	}
+
+	public int getTileIdx(int plane, int x, int y) {
+		return x + y * sizeX + plane * sizeX * sizeZ;
+	}
+
+	/**
+	 * Transform local coordinates into world coordinates.
+	 * If the {@link LocalPoint} is not in the scene, this returns untranslated coordinates when in instances.
+	 *
+	 * @param localPoint to transform
+	 * @param plane      which the local coordinate is on
+	 * @return world coordinate
+	 */
+	public int[] localToWorld(LocalPoint localPoint, int plane) {
+		return localToWorld(localPoint.getX(), localPoint.getY(), plane);
+	}
+
+	public int[] localToWorld(LocalPoint localPoint, int plane, int[] result) {
+		return localToWorld(localPoint.getX(), localPoint.getY(), plane, result);
+	}
+
+	public int[] localToWorld(LocalPoint localPoint) {
+		return localToWorld(localPoint, client.getPlane());
+	}
+
+	public int[] localToWorld(int localX, int localY) {
+		return localToWorld(localX, localY, client.getPlane());
+	}
+
+	public int[] localToWorld(int localX, int localY, int plane) {
+		return sceneToWorld(localX >> LOCAL_COORD_BITS, localY >> LOCAL_COORD_BITS, plane);
+	}
+
+	public int[] localToWorld(int localX, int localY, int plane, int[] result) {
+		sceneToWorld(localX >> LOCAL_COORD_BITS, localY >> LOCAL_COORD_BITS, plane, result);
+		return result;
+	}
+
+	public void sceneToWorld(int sceneX, int sceneY, int plane, int[] result) {
+		if (sceneBase == null) {
+			HDUtils.sceneToWorld(scene, sceneX, sceneY, plane, result);
+			return;
+		}
+
+		result[0] = sceneBase[0] + sceneX;
+		result[1] = sceneBase[1] + sceneY;
+		result[2] = sceneBase[2] + plane;
+	}
+
+	public int[] sceneToWorld(int sceneX, int sceneY, int plane) {
+		int[] result = new int[3];
+		sceneToWorld(sceneX, sceneY, plane, result);
+		return result;
+	}
+
+	public void extendedSceneToWorld(int sceneExX, int sceneExY, int plane, int[] result) {
+		sceneToWorld(sceneExX - sceneOffset, sceneExY - sceneOffset, plane, result);
+	}
+
+	public int[] extendedSceneToWorld(int sceneExX, int sceneExY, int plane) {
+		return sceneToWorld(sceneExX - sceneOffset, sceneExY - sceneOffset, plane);
+	}
+
+	public Stream<int[]> worldToLocals(WorldPoint worldPoint) {
+		if (sceneBase != null)
+			return Stream.of(worldToLocal(worldPoint));
+		// If the scene is not contiguous, convert the world point to world points within the instance, then to local coords
+		return WorldPoint.toLocalInstance(scene, worldPoint)
+			.stream()
+			.filter(Objects::nonNull)
+			.map(instancePoint -> ivec(
+				(instancePoint.getX() - scene.getBaseX()) * LOCAL_TILE_SIZE,
+				(instancePoint.getY() - scene.getBaseY()) * LOCAL_TILE_SIZE,
+				instancePoint.getPlane()
+			));
+	}
+
+	/**
+	 * Gets the local coordinate at the south-western corner of the tile, if the scene is contiguous, otherwise null
+	 */
+	@Nullable
+	public int[] worldToLocal(WorldPoint worldPoint) {
+		if (sceneBase == null)
+			return null;
+		return ivec(
+			(worldPoint.getX() - sceneBase[0]) * LOCAL_TILE_SIZE,
+			(worldPoint.getY() - sceneBase[1]) * LOCAL_TILE_SIZE,
+			worldPoint.getPlane()
+		);
+	}
+
+	public boolean intersects(Area area) {
+		return intersects(area.aabbs);
+	}
+
+	public boolean intersects(AABB... aabbs) {
+		return HDUtils.sceneIntersects(scene, expandedMapLoadingChunks, aabbs);
+	}
+
+	public AABB getNonInstancedSceneBounds() {
+		return HDUtils.getNonInstancedSceneBounds(scene, expandedMapLoadingChunks);
+	}
+
+	/**
+	 * Returns the south-west coordinate of the scene in world coordinates, after resolving instance template chunks
+	 * to their original world coordinates. If the scene is instanced, this returns null when the chunks aren't contiguous.
+	 */
+	@Nullable
+	private int[] findSceneBase() {
+		int baseX = scene.getBaseX();
+		int baseY = scene.getBaseY();
+		int basePlane = 0;
+
+		if (scene.isInstance()) {
+			boolean foundChunk = false;
+
+			int[][][] chunks = scene.getInstanceTemplateChunks();
+			for (int plane = 0; plane < chunks.length; plane++) {
+				for (int x = 0; x < chunks[plane].length; x++) {
+					for (int y = 0; y < chunks[plane][x].length; y++) {
+						int chunk = chunks[plane][x][y];
+						if (chunk == -1)
+							continue; // Ignore unfilled chunks
+
+						// Ensure the chunk isn't rotated (although we technically could handle consistent rotation)
+						int rotation = chunk >> 1 & 0x3;
+						if (rotation != 0)
+							return null;
+
+						int chunkX = chunk >> 14 & 0x3FF;
+						int chunkY = chunk >> 3 & 0x7FF;
+						int chunkPlane = chunk >> 24 & 0x3;
+
+						if (foundChunk) {
+							int expectedX = baseX + x;
+							int expectedY = baseY + y;
+							int expectedPlane = basePlane + plane;
+							if (chunkX != expectedX || chunkY != expectedY || chunkPlane != expectedPlane)
+								return null; // Not contiguous
+						} else {
+							// Calculate the expected unextended scene base chunk
+							baseX = chunkX - x;
+							baseY = chunkY - y;
+							basePlane = chunkPlane - plane;
+							foundChunk = true;
+						}
+					}
+				}
+			}
+
+			if (!foundChunk)
+				return null;
+
+			// Transform chunk to world coordinates
+			baseX <<= 3;
+			baseY <<= 3;
+		}
+
+		return ivec(baseX, baseY, basePlane);
+	}
+
+	/**
+	 * Works for non-instanced scenes & contiguous instanced scenes.
+	 * Returns a best attempt for non-contiguous instanced scenes, which may be
+	 * significantly larger than necessary, but will always include all tiles.
+	 */
+	private AABB findSceneBounds(@Nullable int[] sceneBase) {
+		if (sceneBase != null) {
+			int x = sceneBase[0] - sceneOffset;
+			int y = sceneBase[1] - sceneOffset;
+			return new AABB(x, y, x + EXTENDED_SCENE_SIZE - 1, y + EXTENDED_SCENE_SIZE - 1);
+		}
+
+		// Assume instances are assembled from approximately adjacent chunks on the map
+		int minX = Integer.MAX_VALUE;
+		int minY = Integer.MAX_VALUE;
+		int minZ = MAX_Z;
+		int maxX = Integer.MIN_VALUE;
+		int maxY = Integer.MIN_VALUE;
+		int maxZ = 0;
+
+		int[][][] chunks = scene.getInstanceTemplateChunks();
+		for (int[][] plane : chunks) {
+			for (int[] column : plane) {
+				for (int chunk : column) {
+					if (chunk == -1)
+						continue;
+
+					// Extract chunk coordinates
+					int x = chunk >> 14 & 0x3FF;
+					int y = chunk >> 3 & 0x7FF;
+					int z = chunk >> 24 & 0x3;
+					minX = min(minX, x);
+					minY = min(minY, y);
+					minZ = min(minZ, z);
+					maxX = max(maxX, x);
+					maxY = max(maxY, y);
+					maxZ = max(maxZ, z);
+				}
+			}
+		}
+
+		// Return an AABB representing no match, if there are no chunks
+		if (maxX < minX)
+			return new AABB(-1, -1);
+
+		// Transform from chunk to world coordinates
+		return new AABB(minX << 3, minY << 3, minZ, (maxX << 3) + CHUNK_SIZE - 1, (maxY << 3) + CHUNK_SIZE - 1, maxZ);
+	}
+}

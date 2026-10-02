@@ -7,7 +7,7 @@ An unofficial Android port of [RuneLite](https://runelite.net) — the open-sour
 ## Info
 `android` runs the upstream RuneLite client — the same `runelite-client`, the same plugin system, the same `runelite-api` surface — on Android, against the live OSRS gamepack. Behavior is effectively 1:1 with desktop RuneLite where the platform allows.
 
-The base GPU plugin is intact via GLES. **117HD is not supported yet**
+The base GPU plugin is intact via GLES. [Experimental 117 HD support](android-hd/README.md) is available as an opt-in renderer.
 
 The **RuneLite plugin hub is mostly untested** on this client. The loader is wired up and individual plugins do load, but the catalogue as a whole hasn't been exercised — expect rough edges and please file an issue (with the plugin name) if something misbehaves.
 
