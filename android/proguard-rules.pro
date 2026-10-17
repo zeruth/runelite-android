@@ -62,6 +62,22 @@
 -keep class net.runelite.mp.util.** { *; }
 -keep class runelite.desugar.** { *; }
 
+# Downloaded hub plugins reach H2 through the parent loader after APK shrinking.
+-keep class org.h2.** { *; }
+# Optional paths inside the retained engine: JDBC 4.2 SQLType overloads, scripted
+# triggers, StAX SQLXML and JTS geometry conversion. Android does not supply these;
+# ordinary JDBC/string-backed dictionaries do not use them. Keep this list scoped.
+-dontwarn java.sql.SQLType
+-dontwarn java.sql.JDBCType
+-dontwarn javax.script.**
+-dontwarn javax.xml.stream.**
+-dontwarn javax.xml.transform.stax.**
+-dontwarn org.locationtech.jts.**
+# H2's h2.threadDeadlockDetector diagnostics are disabled by default.
+-dontwarn java.lang.management.LockInfo
+-dontwarn java.lang.management.MonitorInfo
+-dontwarn java.lang.management.ThreadInfo
+
 # ----------------------------------------------------------------------------
 # RuneLite client + API + cache. Lombok generates equals/hashCode/toString
 # that reflect on field names, plugins reach into client internals via

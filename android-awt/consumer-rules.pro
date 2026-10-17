@@ -13,6 +13,8 @@
 # Class.forName call inside the obfuscated client jar. Keep the entire surface.
 # ----------------------------------------------------------------------------
 -keep class java.awt.** { *; }
+# Android supplies JavaBeans callbacks; keep their shadow declarations compatible.
+-keep class java.beans.** { *; }
 -keep class javax.swing.** { *; }
 -keep class javax.sound.** { *; }
 -keep class javax.imageio.** { *; }

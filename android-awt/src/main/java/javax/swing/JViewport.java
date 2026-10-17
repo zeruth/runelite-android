@@ -14,6 +14,7 @@ public class JViewport extends JComponent {
     public static final int SIMPLE_SCROLL_MODE = 3;
 
     private Component view;
+    private final java.util.List<ChangeListener> changeListeners = new java.util.ArrayList<>();
     private int scrollMode = BLIT_SCROLL_MODE;
     private final Point viewPosition = new Point();
 
@@ -62,6 +63,8 @@ public class JViewport extends JComponent {
         // so positioning the view at negative coords slides the content under the
         // viewport without painting outside.
         view.setLocation(-viewPosition.x, -viewPosition.y);
+        javax.swing.event.ChangeEvent event = new javax.swing.event.ChangeEvent(this);
+        for (ChangeListener listener : new java.util.ArrayList<>(changeListeners)) listener.stateChanged(event);
     }
 
     @Override
@@ -71,7 +74,8 @@ public class JViewport extends JComponent {
             // scrollable content can grow; horizontal stays clamped to viewport.
             Dimension pref = view.getPreferredSize();
             int h = Math.max(getHeight(), pref.height);
-            view.setSize(getWidth(), h);
+            boolean wideTable = view instanceof JTable || view instanceof javax.swing.table.JTableHeader;
+            view.setSize(wideTable ? Math.max(getWidth(), pref.width) : getWidth(), h);
             // Re-clamp + re-apply scroll in case the view shrunk.
             viewPosition.setLocation(clampX(viewPosition.x), clampY(viewPosition.y));
             applyScroll();
@@ -80,7 +84,7 @@ public class JViewport extends JComponent {
     public void setExtentSize(Dimension newExtent) {}
     public int getScrollMode() { return scrollMode; }
     public void setScrollMode(int mode) { this.scrollMode = mode; }
-    public void addChangeListener(ChangeListener l) {}
-    public void removeChangeListener(ChangeListener l) {}
+    public void addChangeListener(ChangeListener l) { if (l != null) changeListeners.add(l); }
+    public void removeChangeListener(ChangeListener l) { changeListeners.remove(l); }
     public void scrollRectToVisible(Rectangle contentRect) {}
 }

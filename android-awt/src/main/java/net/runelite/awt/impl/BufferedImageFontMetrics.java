@@ -67,6 +67,19 @@ public final class BufferedImageFontMetrics extends FontMetrics {
         for (int i = 0; i < 128; i++) asciiWidths[i] = (int) Math.ceil(w[i]);
     }
 
+    public static int canDisplayUpTo(Font font, String text) {
+        android.graphics.Paint probe = new android.graphics.Paint();
+        probe.setTypeface(typefaceFor(font));
+        probe.setTextSize(font.getSize2D());
+        for (int index = 0; index < text.length();) {
+            int codePoint = text.codePointAt(index);
+            int end = index + Character.charCount(codePoint);
+            if (!probe.hasGlyph(text.substring(index, end))) return index;
+            index = end;
+        }
+        return -1;
+    }
+
     /** Resolve an AWT Font down to an Android Typeface. If the family is registered
      *  (e.g. runescape.ttf loaded via Font.createFont), use that Typeface as-is —
      *  do NOT layer Typeface.BOLD/ITALIC on top, since the loaded face already

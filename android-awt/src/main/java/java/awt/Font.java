@@ -31,6 +31,11 @@ public class Font implements Serializable {
     public int getSize()      { return size; }
     public float getSize2D()  { return size; }
 
+    /** First unsupported UTF-16 index, or -1 when the rendering font supports all text. */
+    public int canDisplayUpTo(String text) {
+        return net.runelite.awt.impl.BufferedImageFontMetrics.canDisplayUpTo(this, text);
+    }
+
     public boolean isPlain()  { return style == PLAIN; }
     public boolean isBold()   { return (style & BOLD) != 0; }
     public boolean isItalic() { return (style & ITALIC) != 0; }

@@ -13,7 +13,7 @@ public class TableModelEvent extends EventObject {
 
     protected int firstRow, lastRow, column, type;
 
-    public TableModelEvent(TableModel source) { this(source, HEADER_ROW, HEADER_ROW, ALL_COLUMNS, UPDATE); }
+    public TableModelEvent(TableModel source) { this(source, 0, Integer.MAX_VALUE, ALL_COLUMNS, UPDATE); }
     public TableModelEvent(TableModel source, int row) { this(source, row, row, ALL_COLUMNS, UPDATE); }
     public TableModelEvent(TableModel source, int first, int last) { this(source, first, last, ALL_COLUMNS, UPDATE); }
     public TableModelEvent(TableModel source, int first, int last, int col) { this(source, first, last, col, UPDATE); }

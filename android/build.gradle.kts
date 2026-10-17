@@ -261,6 +261,28 @@ configurations.all {
 // so there is no kotlin { } block to configure here.
 
 if (androidSdkAvailable) {
+    // Polywoof's thin hub jar expects H2 in its parent loader. Keep the SQL engine
+    // and resources, replacing the data source and excluding desktop integrations.
+    val h2Runtime = configurations.create("h2Runtime") {
+        isCanBeConsumed = false
+        isTransitive = false
+    }
+    dependencies.add(h2Runtime.name, "com.h2database:h2:2.1.212")
+    val androidH2 = tasks.register<Jar>("androidH2") {
+        archiveFileName.set("h2-android.jar")
+        destinationDirectory.set(layout.buildDirectory.dir("android-h2"))
+        from(provider { h2Runtime.files.map { zipTree(it) } })
+        // Desktop integrations are not part of the embedded Android database runtime.
+        val unsupported = listOf(
+            "org/h2/jdbcx/**",
+            "org/h2/server/web/*Servlet.class", "org/h2/server/web/*DbStarter.class",
+            "org/h2/tools/GUIConsole*.class", "org/h2/fulltext/FullTextLucene*.class",
+            "org/h2/util/DbDriverActivator.class", "org/h2/util/OsgiDataSourceFactory.class",
+            "org/h2/util/AbbaLockingDetector*.class"
+        )
+        inputs.property("unsupportedIntegrations", unsupported)
+        exclude(unsupported)
+    }
     // The android plugin is applied above by name (only when an SDK is present), so the typed
     // implementation() accessor does not exist at script-compile time; use the configuration name.
     dependencies {
@@ -302,6 +324,7 @@ if (androidSdkAvailable) {
         // resource-packs plugin needs — without it it dies at injector creation with
         // NoClassDefFoundError: org/tomlj/TomlTable.
         "implementation"("org.tomlj:tomlj:1.1.1")
+        "implementation"(files(androidH2.flatMap { it.archiveFile }))
         // Patched RS client (RuneLite's injected-client artifact). The raw jar has
         // invokedynamic makeConcatWithConstants sites whose recipes use constant
         // types D8's StringConcat desugarer rejects, so we pre-rewrite them to
