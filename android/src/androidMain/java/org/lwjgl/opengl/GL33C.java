@@ -6,6 +6,22 @@ import static android.opengl.GLES32.*;
 
 /** The LWJGL entry points used by 117 HD, implemented by the Android GLES driver. */
 public class GL33C extends GlesBindings {
+    // Mirror the face texture's backing buffer at the binding used by AndroidSupport.
+    private static final ThreadLocal<java.util.Map<Integer, Integer>> faceBuffers =
+        ThreadLocal.withInitial(java.util.HashMap::new);
+    public static void glTexBuffer(int target, int format, int buffer) {
+        GLES32.glTexBuffer(target, format, buffer);
+        if (target == GL_TEXTURE_BUFFER && format == GL_RGB32I) {
+            faceBuffers.get().put(glGetInteger(GL_TEXTURE_BINDING_BUFFER), buffer);
+        }
+    }
+    public static void glBindTexture(int target, int texture) {
+        GLES32.glBindTexture(target, texture);
+        if (target == GL_TEXTURE_BUFFER) {
+            GLES32.glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0,
+                faceBuffers.get().getOrDefault(texture, 0));
+        }
+    }
     static { System.loadLibrary("hdmemory"); }
     private static int bytes(Buffer b) {
         int width = b instanceof ByteBuffer ? 1 : b instanceof ShortBuffer ? 2 : b instanceof LongBuffer || b instanceof DoubleBuffer ? 8 : 4;
@@ -18,7 +34,7 @@ public class GL33C extends GlesBindings {
     public static int glGenVertexArrays() { int[] v = new int[1]; GLES32.glGenVertexArrays(1,v,0); return v[0]; }
     public static void glGenQueries(int[] v) { GLES32.glGenQueries(v.length,v,0); }
     public static void glDeleteBuffers(int v) { GLES32.glDeleteBuffers(1,new int[]{v},0); }
-    public static void glDeleteTextures(int v) { GLES32.glDeleteTextures(1,new int[]{v},0); }
+    public static void glDeleteTextures(int v) { faceBuffers.get().remove(v); GLES32.glDeleteTextures(1,new int[]{v},0); }
     public static void glDeleteFramebuffers(int v) { GLES32.glDeleteFramebuffers(1,new int[]{v},0); }
     public static void glDeleteRenderbuffers(int v) { GLES32.glDeleteRenderbuffers(1,new int[]{v},0); }
     public static void glDeleteVertexArrays(int v) { GLES32.glDeleteVertexArrays(1,new int[]{v},0); }

@@ -26,6 +26,15 @@ public final class AndroidSupport {
         + "precision highp usampler2DArray;\n";
     private AndroidSupport() {}
     public static String adaptShader(String source) {
+        // Mobile texture buffers can be limited to 65,536 texels. Crowded scenes
+        // exceed that limit; read the same packed RGB32I data through an SSBO.
+        if (source.contains("uniform isamplerBuffer textureFaces;")) {
+            source = source.replace("uniform isamplerBuffer textureFaces;",
+                "layout(std430, binding = 0) readonly buffer AndroidFaceData { int faceData[]; };\n"
+                + "ivec4 fetchFaceData(int index) { int base = index * 3; "
+                + "return ivec4(faceData[base], faceData[base + 1], faceData[base + 2], 1); }\n")
+                .replace("texelFetch(textureFaces,", "fetchFaceData(");
+        }
         return GLSL_HEADER + source.replaceAll("(?m)^#version[^\\r\\n]*", "");
     }
 }
