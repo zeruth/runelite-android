@@ -1,10 +1,9 @@
 package java.awt.geom;
 
 import java.awt.Rectangle;
-import java.awt.Shape;
 import java.io.Serializable;
 
-public abstract class Rectangle2D implements Shape, Cloneable, Serializable {
+public abstract class Rectangle2D extends RectangularShape implements Serializable {
     private static final long serialVersionUID = 1547053856191376818L;
 
     public static final int OUT_LEFT = 1;
@@ -21,6 +20,11 @@ public abstract class Rectangle2D implements Shape, Cloneable, Serializable {
     public abstract double getHeight();
     public abstract boolean isEmpty();
     public abstract void setRect(double x, double y, double w, double h);
+
+    @Override
+    public void setFrame(double x, double y, double w, double h) {
+        setRect(x, y, w, h);
+    }
 
     public double getMinX() { return getX(); }
     public double getMinY() { return getY(); }
@@ -106,15 +110,6 @@ public abstract class Rectangle2D implements Shape, Cloneable, Serializable {
         bits += java.lang.Double.doubleToLongBits(getWidth()) * 43;
         bits += java.lang.Double.doubleToLongBits(getHeight()) * 47;
         return (int) bits ^ (int) (bits >> 32);
-    }
-
-    @Override
-    public Object clone() {
-        try {
-            return super.clone();
-        } catch (CloneNotSupportedException e) {
-            throw new InternalError(e);
-        }
     }
 
     @Override
