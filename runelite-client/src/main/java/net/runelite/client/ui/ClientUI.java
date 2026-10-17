@@ -579,7 +579,7 @@ public class ClientUI
 			mouseManager.registerMouseListener(mouseListener);
 
 			// Decorate window with custom chrome and titlebar if needed
-			withTitleBar = config.enableCustomChrome();
+			withTitleBar = !HEADLESS_CHROME && config.enableCustomChrome();
 			toolbarPanel = new ClientToolbarPanel(!withTitleBar);
 
 			sidebarOpenIcon = ImageUtil.loadImageResource(ClientUI.class, withTitleBar ? "open.png" : "open_rs.png");
@@ -680,14 +680,14 @@ public class ClientUI
 			frame.pack();
 
 			// Create tray icon (needs to be created after frame is packed)
-			if (config.enableTrayIcon())
+			if (!HEADLESS_CHROME && config.enableTrayIcon())
 			{
 				trayIcon = createTrayIcon(ICON_16, title, frame);
 			}
 
 			// Move frame around (needs to be done after frame is packed)
 			boolean appliedSize = false;
-			if (config.rememberScreenBounds() && !safeMode)
+			if (!HEADLESS_CHROME && config.rememberScreenBounds() && !safeMode)
 			{
 				appliedSize = restoreClientBoundsConfig();
 				if (appliedSize)
@@ -724,7 +724,7 @@ public class ClientUI
 				}
 			}
 
-			if (!appliedSize)
+			if (!HEADLESS_CHROME && !appliedSize)
 			{
 				applyGameSize(true);
 				frame.setLocationRelativeTo(frame.getOwner());
@@ -733,7 +733,7 @@ public class ClientUI
 			// Show frame
 			frame.setVisible(true);
 			// On macos setResizable needs to be called after setVisible
-			frame.setResizable(!config.lockWindowSize());
+			frame.setResizable(HEADLESS_CHROME || !config.lockWindowSize());
 			frame.toFront();
 			requestFocus();
 			log.debug("Showing frame {}", frame);
@@ -1249,6 +1249,14 @@ public class ClientUI
 			return;
 		}
 
+		// The mobile host owns window geometry and decorations. Keep desktop profile
+		// preferences intact, but do not apply them on startup or configuration changes.
+		if (HEADLESS_CHROME)
+		{
+			frame.setContainedInScreen(ContainableFrame.Mode.NEVER);
+			return;
+		}
+
 		if (frame.getGraphicsConfiguration().getDevice().getFullScreenWindow() == null
 			&& !safeMode)
 		{
@@ -1362,6 +1370,11 @@ public class ClientUI
 
 	private void saveClientBoundsConfig()
 	{
+		if (HEADLESS_CHROME)
+		{
+			return;
+		}
+
 		if (lastNormalBounds != null)
 		{
 			configManager.setConfiguration(CONFIG_GROUP, CONFIG_CLIENT_BOUNDS, lastNormalBounds);
@@ -1591,7 +1604,7 @@ public class ClientUI
 				? sidebar.getPreferredSize().width
 				: 0;
 
-			boolean keepGameSize = (frame.getExtendedState() & Frame.MAXIMIZED_HORIZ) == 0
+			boolean keepGameSize = !HEADLESS_CHROME && (frame.getExtendedState() & Frame.MAXIMIZED_HORIZ) == 0
 				&& (config.automaticResizeType() == ExpandResizeType.KEEP_GAME_SIZE || forceSizingClient);
 
 			if (keepGameSize)

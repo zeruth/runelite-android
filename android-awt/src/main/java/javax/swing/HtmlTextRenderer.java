@@ -73,6 +73,29 @@ final class HtmlTextRenderer
 		return new Layout(lines, width, height);
 	}
 
+	/** Wrap HTML runs at the available label width, retaining their colors. */
+	static Layout measure(String html, FontMetrics fm, int maxWidth)
+	{
+		if (maxWidth <= 0) return measure(html, fm);
+		List<Line> lines = new ArrayList<>();
+		int width = 0;
+		for (Line source : parse(html)) {
+			Line line = new Line(); lines.add(line); int used = 0;
+			for (Run run : source.runs) {
+				for (String word : run.text.split("(?<=\\s)|(?=\\s)")) {
+					int w = fm.stringWidth(word);
+					if (used > 0 && used + w > maxWidth && !word.trim().isEmpty()) {
+						width = Math.max(width, used); line = new Line(); lines.add(line); used = 0;
+					}
+					if (used == 0 && word.trim().isEmpty()) continue;
+					line.runs.add(new Run(word, run.color, run.bold)); used += w;
+				}
+			}
+			width = Math.max(width, used);
+		}
+		return new Layout(lines, width, lines.size() * fm.getHeight());
+	}
+
 	/** Paint a previously-measured layout. {@code defaultColor} is used for runs
 	 *  that didn't override it via {@code <span style='color:...'>}. */
 	static void paint(Graphics g, Layout layout, FontMetrics fm, int x, int y, Color defaultColor)

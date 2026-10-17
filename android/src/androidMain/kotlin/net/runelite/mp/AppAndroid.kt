@@ -927,8 +927,8 @@ private data class Hit(val comp: java.awt.Component, val absX: Int, val absY: In
 private fun hitTest(window: java.awt.Window, winX: Int, winY: Int): Hit? {
     fun walk(c: java.awt.Component, tx: Int, ty: Int): Hit? {
         if (!c.isVisible || c.width <= 0 || c.height <= 0) return null
-        val ax = tx + c.x
-        val ay = ty + c.y
+        val ax = tx + if (c is java.awt.Window) 0 else c.x
+        val ay = ty + if (c is java.awt.Window) 0 else c.y
         if (winX < ax || winY < ay || winX >= ax + c.width || winY >= ay + c.height) return null
         var deepest: Hit? = Hit(c, ax, ay)
         if (c is java.awt.Container) {
@@ -1084,12 +1084,12 @@ private class ScrollDragSession(
 
     private fun scrollPaneAbsX(): Int {
         var x = 0; var c: java.awt.Component? = scrollPane
-        while (c != null) { x += c.x; c = c.parent }
+        while (c != null && c !is java.awt.Window) { x += c.x; c = c.parent }
         return x
     }
     private fun scrollPaneAbsY(): Int {
         var y = 0; var c: java.awt.Component? = scrollPane
-        while (c != null) { y += c.y; c = c.parent }
+        while (c != null && c !is java.awt.Window) { y += c.y; c = c.parent }
         return y
     }
 
@@ -1243,11 +1243,11 @@ private fun beginDrag(downPos: Offset, currentPos: Offset, boxSize: IntSize): Dr
     return session
 }
 
-/** Hit-test a known component to recover its absolute screen-space origin. */
+/** Hit-test a known component to recover its window-local origin. */
 private fun hitTestExact(window: java.awt.Window, target: java.awt.Component): Hit? {
     fun walk(c: java.awt.Component, tx: Int, ty: Int): Hit? {
-        val ax = tx + c.x
-        val ay = ty + c.y
+        val ax = tx + if (c is java.awt.Window) 0 else c.x
+        val ay = ty + if (c is java.awt.Window) 0 else c.y
         if (c === target) return Hit(c, ax, ay)
         if (c is java.awt.Container) {
             for (child in c.components) {
@@ -1281,7 +1281,7 @@ private fun localCoords(target: java.awt.Component, wx: Int, wy: Int): Pair<Int,
     var dx = 0
     var dy = 0
     var cur: java.awt.Component? = target
-    while (cur != null) {
+    while (cur != null && cur !is java.awt.Window) {
         dx += cur.x
         dy += cur.y
         cur = cur.parent

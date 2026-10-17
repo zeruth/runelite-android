@@ -1,5 +1,5 @@
-use crate::fill::src_over;
-use crate::{CLEAR, SRC};
+use crate::fill::{src_over, src_atop};
+use crate::{CLEAR, SRC, SRC_ATOP};
 use jni::sys::{jfloat, jint};
 
 /// Nearest-neighbour scaled blit with composite + global alpha. For dw==sw and dh==sh
@@ -64,6 +64,7 @@ pub fn blit(
             match composite_rule {
                 SRC => dst[dst_idx] = sp as i32,
                 CLEAR => dst[dst_idx] = 0,
+                SRC_ATOP => dst[dst_idx] = src_atop(sp, dst[dst_idx] as u32) as i32,
                 _ => {
                     let dp = dst[dst_idx] as u32;
                     dst[dst_idx] = src_over(sp, dp) as i32;

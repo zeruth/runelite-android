@@ -52,15 +52,14 @@ import net.runelite.mp.ui.bridge.ExternalPluginEntry
 import net.runelite.mp.ui.bridge.FavoritesBridge
 import net.runelite.mp.ui.bridge.PluginBridge
 import net.runelite.mp.ui.bridge.PluginRow
-import net.runelite.mp.ui.bridge.ProfileBridge
-import net.runelite.mp.ui.bridge.ProfileRow
+
+
 
 /**
  * Three top-level surfaces inside the same sidebar shell:
  *  - {@link SidebarTab#PLUGINS}: list of installed plugins with toggles + gear shortcut.
  *    Identical to the pre-tabbed sidebar.
- *  - {@link SidebarTab#PROFILES}: list of config profiles; tap to activate, "+" creates,
- *    inline pencil/x for rename and delete. Backed by [ProfileBridge].
+ *  - {@link SidebarTab#PROFILES}: original RuneLite Profiles panel through the Swing adapter.
  *  - {@link SidebarTab#EXTERNAL}: plugin hub view. First open triggers a one-shot
  *    manifest download; subsequent renders reuse the cached list. Tap installs/removes.
  *
@@ -310,199 +309,8 @@ private fun PluginRowItem(
 @Composable
 private fun ProfilesTab()
 {
-    val profiles = remember { mutableStateListOf<ProfileRow>() }
-    var creating by remember { mutableStateOf(false) }
-    var newName by remember { mutableStateOf("") }
-    var renamingId by remember { mutableStateOf<Long?>(null) }
-    var renameText by remember { mutableStateOf("") }
-
-    LaunchedEffect(Unit)
-    {
-        while (true)
-        {
-            val next = ProfileBridge.list()
-            val same = next.size == profiles.size && next.indices.all {
-                profiles[it].id == next[it].id && profiles[it].active == next[it].active &&
-                    profiles[it].name == next[it].name
-            }
-            if (!same)
-            {
-                profiles.clear()
-                profiles.addAll(next)
-            }
-            delay(1000)
-        }
-    }
-
-    Column(modifier = Modifier.fillMaxSize())
-    {
-        // Top toolbar — "New profile" affordance. When tapped, swaps to an inline name
-        // field; submitting (enter / blur tap on +) commits.
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(RlPalette.DarkGray)
-                .padding(horizontal = 8.dp, vertical = 6.dp),
-        ) {
-            if (creating)
-            {
-                Box(
-                    Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(RlPalette.DarkerGray)
-                        .border(1.dp, RlPalette.SurfaceBorder, RoundedCornerShape(4.dp))
-                        .padding(horizontal = 8.dp, vertical = 5.dp),
-                ) {
-                    if (newName.isEmpty())
-                    {
-                        Text("Profile name…", color = RlPalette.TextDisabled, fontSize = 12.sp)
-                    }
-                    BasicTextField(
-                        value = newName,
-                        onValueChange = { newName = it },
-                        singleLine = true,
-                        textStyle = TextStyle(color = Color.White, fontSize = 12.sp),
-                        cursorBrush = SolidColor(RlPalette.Accent),
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-                Spacer(Modifier.size(6.dp))
-                ToolButton("✓") {
-                    if (newName.isNotBlank())
-                    {
-                        ProfileBridge.create(newName)
-                        newName = ""
-                        creating = false
-                    }
-                }
-                Spacer(Modifier.size(4.dp))
-                ToolButton("✕") { newName = ""; creating = false }
-            }
-            else
-            {
-                Text("Profiles", color = RlPalette.Accent, fontSize = 13.sp, fontWeight = FontWeight.Bold,
-                    modifier = Modifier.weight(1f))
-                ToolButton("＋", tooltip = "New profile") { creating = true }
-            }
-        }
-
-        if (profiles.isEmpty())
-        {
-            EmptyState("No profiles yet.")
-            return@Column
-        }
-
-        LazyColumn(modifier = Modifier.fillMaxSize())
-        {
-            items(profiles, key = { it.rowKey }) { row ->
-                ProfileRowItem(
-                    row = row,
-                    renaming = row.id == renamingId,
-                    renameText = renameText,
-                    onRenameTextChange = { renameText = it },
-                    onActivate = { if (!row.active) ProfileBridge.switchTo(row.id) },
-                    onStartRename = { renamingId = row.id; renameText = row.name },
-                    onCommitRename = {
-                        if (renameText.isNotBlank())
-                        {
-                            ProfileBridge.rename(row.id, renameText)
-                        }
-                        renamingId = null
-                    },
-                    onCancelRename = { renamingId = null },
-                    onDelete = { ProfileBridge.delete(row.id) },
-                )
-            }
-        }
-    }
+    net.runelite.mp.ui.panels.PluginPanelHost(net.runelite.mp.ui.bridge.NavBarBridge.PROFILES_PANEL_KEY)
 }
-
-@Composable
-private fun ProfileRowItem(
-    row: ProfileRow,
-    renaming: Boolean,
-    renameText: String,
-    onRenameTextChange: (String) -> Unit,
-    onActivate: () -> Unit,
-    onStartRename: () -> Unit,
-    onCommitRename: () -> Unit,
-    onCancelRename: () -> Unit,
-    onDelete: () -> Unit,
-)
-{
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(if (row.active) RlPalette.AccentSurface else Color.Transparent)
-            .clickable(enabled = !renaming, onClick = onActivate)
-            .padding(horizontal = 8.dp, vertical = 8.dp),
-    ) {
-        if (renaming)
-        {
-            Box(
-                Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(RlPalette.DarkerGray)
-                    .border(1.dp, RlPalette.SurfaceBorder, RoundedCornerShape(4.dp))
-                    .padding(horizontal = 8.dp, vertical = 5.dp),
-            ) {
-                BasicTextField(
-                    value = renameText,
-                    onValueChange = onRenameTextChange,
-                    singleLine = true,
-                    textStyle = TextStyle(color = Color.White, fontSize = 12.sp),
-                    cursorBrush = SolidColor(RlPalette.Accent),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-            Spacer(Modifier.size(6.dp))
-            ToolButton("✓") { onCommitRename() }
-            Spacer(Modifier.size(4.dp))
-            ToolButton("✕") { onCancelRename() }
-        }
-        else
-        {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    row.name,
-                    color = if (row.active) Color.White else RlPalette.TextPrimary,
-                    fontSize = 13.sp,
-                    fontWeight = if (row.active) FontWeight.Bold else FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    if (row.active) "Active" else if (row.sync) "Synced" else "Local",
-                    color = RlPalette.TextSecondary,
-                    fontSize = 11.sp,
-                )
-            }
-            ToolButton("✎", tooltip = "Rename") { onStartRename() }
-            Spacer(Modifier.size(4.dp))
-            // Active profile can't be deleted — disable visually so the user understands.
-            ToolButton(
-                label = "🗑",
-                tooltip = if (row.active) "Switch profiles first" else "Delete",
-                enabled = !row.active,
-            ) { onDelete() }
-        }
-    }
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .height(1.dp)
-            .background(RlPalette.DividerSoft),
-    )
-}
-
-// --------------------------------------------------------------------------------------
-// External (plugin hub) tab — installed + available externals.
-// --------------------------------------------------------------------------------------
-
 @Composable
 private fun ExternalTab()
 {

@@ -10,7 +10,7 @@ public class EventQueue {
     }
 
     public synchronized void postEvent(AWTEvent event) {
-        if (event != null) queue.addLast(event);
+        if (event != null) { queue.addLast(event); notifyAll(); }
     }
 
     public synchronized AWTEvent getNextEvent() throws InterruptedException {
@@ -67,12 +67,57 @@ public class EventQueue {
             }
         };
 
-    private static final java.util.concurrent.ExecutorService EDT =
-        java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+    private static final java.util.concurrent.ThreadPoolExecutor EDT =
+        new java.util.concurrent.ThreadPoolExecutor(1, 1, 0L, java.util.concurrent.TimeUnit.MILLISECONDS,
+            new java.util.concurrent.LinkedBlockingQueue<Runnable>(), r -> {
             Thread t = new Thread(r, "AWT-InvokeLater");
             t.setUncaughtExceptionHandler(EDT_UEH);
             return t;
         });
+
+    /** RuneLite drains pending removal events inside the existing EDT, not a second worker. */
+    public SecondaryLoop createSecondaryLoop() {
+        return new SecondaryLoop() {
+            private volatile boolean active;
+            @Override public boolean enter() {
+                synchronized (this) {
+                    if (active) return false;
+                    active = true;
+                }
+                try {
+                    if (isDispatchThread()) {
+                        while (active) {
+                            AWTEvent event;
+                            synchronized (EventQueue.this) { event = queue.pollFirst(); }
+                            if (event != null) {
+                                if (event.getSource() instanceof Component)
+                                    ((Component) event.getSource()).dispatchEvent(event);
+                                continue;
+                            }
+                            // Includes SwingUtil's invokeLater(loop::exit), preserving
+                            // serialization and allowing nested invokeAndWait to finish.
+                            Runnable task = EDT.getQueue().poll(50, java.util.concurrent.TimeUnit.MILLISECONDS);
+                            if (task != null) runGuarded(task);
+                        }
+                    } else {
+                        synchronized (this) { while (active) wait(); }
+                    }
+                    return true;
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    return false;
+                } finally {
+                    synchronized (this) { active = false; notifyAll(); }
+                }
+            }
+            @Override public synchronized boolean exit() {
+                if (!active) return false;
+                active = false;
+                notifyAll();
+                return true;
+            }
+        };
+    }
 
     public static void invokeLater(Runnable r) {
         if (r == null) return;

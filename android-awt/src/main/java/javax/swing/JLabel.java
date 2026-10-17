@@ -54,11 +54,11 @@ public class JLabel extends JComponent implements SwingConstants {
     public java.awt.Dimension getPreferredSize() {
         if (isPreferredSizeSet()) return super.getPreferredSize();
         java.awt.Dimension c = cachedPref;
-        if (c != null) return new java.awt.Dimension(c);
+        if (c != null && !HtmlTextRenderer.isHtml(text)) return new java.awt.Dimension(c);
         java.awt.FontMetrics fm = getFontMetrics(getFont());
         int textW, textH;
         if (HtmlTextRenderer.isHtml(text)) {
-            HtmlTextRenderer.Layout layout = HtmlTextRenderer.measure(text, fm);
+            HtmlTextRenderer.Layout layout = HtmlTextRenderer.measure(text, fm, getWidth() - 2);
             textW = layout.width;
             textH = layout.height;
         } else {
@@ -80,7 +80,7 @@ public class JLabel extends JComponent implements SwingConstants {
         super.paintComponent(g);
         java.awt.FontMetrics fm = g.getFontMetrics(getFont());
         boolean html = HtmlTextRenderer.isHtml(text);
-        HtmlTextRenderer.Layout htmlLayout = html ? HtmlTextRenderer.measure(text, fm) : null;
+        HtmlTextRenderer.Layout htmlLayout = html ? HtmlTextRenderer.measure(text, fm, getWidth() - 2) : null;
         int textW = htmlLayout != null ? htmlLayout.width
             : (text == null ? 0 : fm.stringWidth(text));
         int textH = htmlLayout != null ? htmlLayout.height : fm.getHeight();

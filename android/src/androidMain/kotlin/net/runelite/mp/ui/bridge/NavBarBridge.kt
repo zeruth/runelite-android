@@ -30,13 +30,53 @@ internal data class NavEntry(
 
 internal object NavBarBridge
 {
+    const val PROFILES_PANEL_KEY = "runelite:profiles"
+
+    private var profilesPanel: net.runelite.client.ui.PluginPanel? = null // EDT only
+
     fun panel(key: String): net.runelite.client.ui.PluginPanel?
     {
-        val ui = RuneLiteAccess.instance(Class.forName("net.runelite.client.ui.ClientUI")) ?: return null
+        return try {
+            onEdt {
+                val ui = RuneLiteAccess.instance(Class.forName("net.runelite.client.ui.ClientUI"))
+                ui?.let {
+                    if (key == PROFILES_PANEL_KEY) {
+                        // Own the Swing tree; the hidden desktop tab must not relayout it.
+                        profilesPanel ?: run {
+                            val manager = RuneLiteAccess.instance(net.runelite.client.config.ConfigManager::class.java)
+                            if (manager?.profile == null) return@run null
+                            val panel = RuneLiteAccess.instance(Class.forName(
+                                "net.runelite.client.plugins.config.ProfilePanel")) as? net.runelite.client.ui.PluginPanel
+                            panel?.let { created ->
+                                RuneLiteAccess.instance(net.runelite.client.eventbus.EventBus::class.java)?.register(created)
+                                profilesPanel = created
+                            }
+                            panel
+                        }
+                    } else buttons(it).firstOrNull { button -> identityKey(button) == key }?.panel
+                }
+            }
+        } catch (_: Throwable) { null }
+    }
+
+    private fun <T> onEdt(read: () -> T): T {
+        if (javax.swing.SwingUtilities.isEventDispatchThread()) return read()
+        var result: T? = null
+        javax.swing.SwingUtilities.invokeAndWait { result = read() }
+        @Suppress("UNCHECKED_CAST")
+        return result as T
+    }
+
+    private fun buttons(ui: Any): List<NavigationButton> {
         val field = ui.javaClass.getDeclaredField("sidebarEntries").apply { isAccessible = true }
         @Suppress("UNCHECKED_CAST")
-        val entries = field.get(ui) as Collection<NavigationButton>
-        return entries.firstOrNull { identityKey(it) == key }?.panel
+        val panels = (field.get(ui) as? Collection<NavigationButton>)?.toList().orEmpty()
+        // RuneLite stores action-only buttons (including Account login/logout) separately.
+        val toolbar = ui.javaClass.getDeclaredField("toolbarPanel").apply { isAccessible = true }.get(ui)
+        val entries = toolbar.javaClass.getDeclaredField("entries").apply { isAccessible = true }
+        @Suppress("UNCHECKED_CAST")
+        val actions = (entries.get(toolbar) as? Map<NavigationButton, *>)?.keys.orEmpty()
+        return (panels + actions).distinct()
     }
     /** Currently-selected button's key, or null if the user hasn't picked one yet
      *  (we surface the Compose plugin list as the default). Lives outside Compose
@@ -49,9 +89,7 @@ internal object NavBarBridge
         catch (t: Throwable) { return emptyList() } ?: return emptyList()
         val entries = try
         {
-            val field = ui.javaClass.getDeclaredField("sidebarEntries").apply { isAccessible = true }
-            @Suppress("UNCHECKED_CAST")
-            (field.get(ui) as? Collection<NavigationButton>) ?: emptyList()
+            onEdt { buttons(ui) }
         }
         catch (t: Throwable) { return emptyList() }
 
@@ -103,26 +141,18 @@ internal object NavBarBridge
      *  panel), invoke its onClick Runnable. Either path keeps native RL state in sync. */
     private fun invoke(ui: Any, btn: NavigationButton)
     {
-        if (btn.panel != null)
-        {
-            selectedKey = identityKey(btn)
-            try
-            {
-                val m = ui.javaClass.getDeclaredMethod(
-                    "openPanel",
-                    NavigationButton::class.java,
-                    Boolean::class.javaPrimitiveType,
-                )
-                m.isAccessible = true
-                javax.swing.SwingUtilities.invokeLater { m.invoke(ui, btn, true) }
-            }
-            catch (t: Throwable) { /* swallow — Compose panel host falls back to placeholder */ }
-            return
-        }
-        // Action-only button — invoke its Runnable on the AWT thread.
-        val click = btn.onClick ?: return
+        val key = identityKey(btn)
         javax.swing.SwingUtilities.invokeLater {
-            try { click.run() } catch (t: Throwable) { /* host logs */ }
+            try {
+                // A Compose row can outlive the NavigationButton that supplied it.
+                val current = buttons(ui).firstOrNull { identityKey(it) == key } ?: return@invokeLater
+                if (current.panel != null) {
+                    selectedKey = key
+                    val method = ui.javaClass.getDeclaredMethod("openPanel", NavigationButton::class.java, Boolean::class.javaPrimitiveType)
+                    method.isAccessible = true
+                    method.invoke(ui, current, true)
+                } else current.onClick?.run()
+            } catch (_: Throwable) { /* the host falls back to its unavailable-panel message */ }
         }
     }
 

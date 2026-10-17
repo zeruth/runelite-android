@@ -22,6 +22,14 @@ public class JFileChooser extends JComponent {
     private int fileSelectionMode = FILES_ONLY;
     private boolean multiSelectionEnabled;
     private FileFilter fileFilter;
+    private boolean acceptAllFileFilterUsed = true;
+    public void setAcceptAllFileFilterUsed(boolean used) { acceptAllFileFilterUsed = used; }
+    public boolean isAcceptAllFileFilterUsed() { return acceptAllFileFilterUsed; }
+    private String dialogTitle;
+    private int dialogType = OPEN_DIALOG;
+    public interface DialogHandler { int show(JFileChooser chooser, boolean save); }
+    private static volatile DialogHandler dialogHandler;
+    public static void setDialogHandler(DialogHandler handler) { dialogHandler = handler; }
 
     public JFileChooser() {}
     public JFileChooser(String currentDirectoryPath) { currentDirectory = new File(currentDirectoryPath); }
@@ -39,14 +47,17 @@ public class JFileChooser extends JComponent {
     public void setMultiSelectionEnabled(boolean b) { this.multiSelectionEnabled = b; }
     public FileFilter getFileFilter() { return fileFilter; }
     public void setFileFilter(FileFilter filter) { this.fileFilter = filter; }
-    public void addChoosableFileFilter(FileFilter filter) {}
+    public void addChoosableFileFilter(FileFilter filter) { fileFilter = filter; }
     public boolean removeChoosableFileFilter(FileFilter f) { return false; }
     public FileFilter[] getChoosableFileFilters() { return new FileFilter[0]; }
-    public int showOpenDialog(Component parent) { return CANCEL_OPTION; }
-    public int showSaveDialog(Component parent) { return CANCEL_OPTION; }
-    public int showDialog(Component parent, String approveButtonText) { return CANCEL_OPTION; }
-    public void setDialogTitle(String dialogTitle) {}
-    public String getDialogTitle() { return null; }
-    public void setDialogType(int dialogType) {}
-    public int getDialogType() { return OPEN_DIALOG; }
+    public int showOpenDialog(Component parent) { dialogType = OPEN_DIALOG; return showDialog(parent, null); }
+    public int showSaveDialog(Component parent) { dialogType = SAVE_DIALOG; return showDialog(parent, null); }
+    public int showDialog(Component parent, String approveButtonText) {
+        DialogHandler handler = dialogHandler;
+        return handler == null ? CANCEL_OPTION : handler.show(this, dialogType == SAVE_DIALOG);
+    }
+    public void setDialogTitle(String title) { dialogTitle = title; }
+    public String getDialogTitle() { return dialogTitle; }
+    public void setDialogType(int type) { dialogType = type; }
+    public int getDialogType() { return dialogType; }
 }

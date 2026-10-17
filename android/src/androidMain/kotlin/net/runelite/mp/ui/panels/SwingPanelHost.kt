@@ -8,6 +8,8 @@ import android.graphics.Paint
 import android.graphics.Rect
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
+import android.view.HapticFeedbackConstants
 import android.widget.EditText
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -36,7 +38,6 @@ internal fun PluginPanelHost(key: String)
         if (PanelRegistry.hasPanel(key)) {
             Text(
                 if (androidView) "Android view · switch to Original" else "Original · switch to Android view",
-                color = net.runelite.mp.ui.RlPalette.TextPrimary,
                 modifier = Modifier.fillMaxWidth().clickable { androidView = !androidView }.padding(8.dp),
             )
         }
@@ -53,6 +54,9 @@ internal class SwingPanelView(context: Context, private val panelKey: String) : 
 {
     private var panel: PluginPanel? = null // AWT thread only
     private var root: JComponent? = null
+    private var mountedGeneration = -1L // AWT thread only
+    @Volatile private var mountSerial = 0L
+    @Volatile private var attachmentSerial = 0L // Android writes, EDT reads
     private var frame: Bitmap? = null // Android thread only
     private val paint = Paint()
     @Volatile private var running = false
@@ -61,24 +65,36 @@ internal class SwingPanelView(context: Context, private val panelKey: String) : 
     private var downY = 0f
     private var lastY = 0f
     private var dragged = false
+    private var longPressed = false
+    private var touchActive = false
+    private var touchMount = -1L
+    private var contextPopup: AlertDialog? = null
+    private var inputPopup: AlertDialog? = null
+    private var swingPopup: JPopupMenu? = null // AWT thread only
+    private val longPress = Runnable {
+        if (running && touchActive && touchMount == mountSerial && !dragged) {
+            longPressed = true
+            performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+        }
+    }
     private var error: String? = null
     private val logicalWidth = 240
+    private var diagnosed = false
     private val render = object : Runnable {
         override fun run() {
             if (!running) return
             if (!busy && width > 0 && height > 0) {
                 busy = true
+                val attachment = attachmentSerial
                 val h = (height * logicalWidth / width).coerceAtLeast(1)
                 SwingUtilities.invokeLater {
                     var bitmap: Bitmap? = null
                     var failure: String? = null
+                    var renderedMount = mountSerial
                     try {
-                        if (running) {
-                            if (panel == null) {
-                                panel = NavBarBridge.panel(panelKey)
-                                root = panel?.wrappedPanel
-                                panel?.let { SwingUtil.activate(it) }
-                            }
+                        if (running && attachment == attachmentSerial) {
+                            mountPanel(NavBarBridge.panel(panelKey), panelGeneration())
+                            renderedMount = mountSerial
                             val component = root
                             if (component == null) failure = "Panel unavailable: $panelKey"
                             else {
@@ -86,6 +102,13 @@ internal class SwingPanelView(context: Context, private val panelKey: String) : 
                                 component.setBounds(0, 0, logicalWidth, h)
                                 invalidateTree(component)
                                 component.validate()
+                                if (!diagnosed) {
+                                    diagnosed = true
+                                    fun describe(c: Component, depth: Int): String =
+                                        "${c.javaClass.simpleName} ${c.bounds} visible=${c.isVisible}\n" +
+                                            if (c is Container && depth < 5) c.components.joinToString("") { describe(it, depth + 1) } else ""
+                                    android.util.Log.i("SwingPanelHost", "$panelKey host=${width}x${height}\n${describe(component, 0)}")
+                                }
                                 val image = BufferedImage(logicalWidth, h, BufferedImage.TYPE_INT_ARGB)
                                 val graphics = image.createGraphics()
                                 try {
@@ -103,7 +126,7 @@ internal class SwingPanelView(context: Context, private val panelKey: String) : 
                     }
                     post {
                         busy = false
-                        if (running) { frame = bitmap; error = failure; invalidate() }
+                        if (running && attachment == attachmentSerial && renderedMount == mountSerial) { frame = bitmap; error = failure; invalidate() }
                     }
                 }
             }
@@ -113,21 +136,54 @@ internal class SwingPanelView(context: Context, private val panelKey: String) : 
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
+        attachmentSerial++
         running = true
         post(render)
     }
 
     override fun onDetachedFromWindow() {
         running = false
+        attachmentSerial++
         removeCallbacks(render)
-        SwingUtilities.invokeLater {
-            panel?.let { SwingUtil.deactivate(it) }
-            panel = null
-            root = null
-        }
-        frame = null
+        clearAndroidState(mountSerial)
+        SwingUtilities.invokeLater { mountPanel(null, -1L) }
         super.onDetachedFromWindow()
     }
+
+    private fun panelGeneration(): Long = 0L
+
+    /** The EDT replaces the entire binding, including closures for the previous tree. */
+    private fun mountPanel(next: PluginPanel?, generation: Long) {
+        if (next === panel && generation == mountedGeneration) return
+        swingPopup?.isVisible = false
+        swingPopup = null
+        panel?.let { SwingUtil.deactivate(it) }
+        root = null
+        panel = next
+        mountedGeneration = generation
+        mountSerial++
+        diagnosed = false
+        root = next?.wrappedPanel
+        next?.let { SwingUtil.activate(it) }
+        val serial = mountSerial
+        post { clearAndroidState(serial) }
+    }
+
+    private fun clearAndroidState(serial: Long) {
+        if (serial != mountSerial) return
+        removeCallbacks(longPress)
+        touchActive = false; touchMount = -1L; dragged = false; longPressed = false
+        downX = 0f; downY = 0f; lastY = 0f
+        parent?.requestDisallowInterceptTouchEvent(false)
+        contextPopup?.dismiss(); contextPopup = null
+        inputPopup?.dismiss(); inputPopup = null
+        frame = null; error = null
+        invalidate()
+    }
+
+    /** Revalidate on the EDT even when input arrives before the next repaint. */
+    private fun isCurrentMount(serial: Long): Boolean = running && serial == mountSerial &&
+        panel === NavBarBridge.panel(panelKey) && mountedGeneration == panelGeneration()
 
     override fun onDraw(canvas: Canvas) {
         val saved = canvas.save()
@@ -144,26 +200,47 @@ internal class SwingPanelView(context: Context, private val panelKey: String) : 
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        if (!running) return false
         val scale = logicalWidth.toFloat() / width.coerceAtLeast(1)
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
-                downX = event.x; downY = event.y; lastY = event.y; dragged = false
+                removeCallbacks(longPress)
+                downX = event.x; downY = event.y; lastY = event.y; dragged = false; longPressed = false; touchActive = true; touchMount = mountSerial
+                postDelayed(longPress, ViewConfiguration.getLongPressTimeout().toLong())
                 parent?.requestDisallowInterceptTouchEvent(true)
             }
             MotionEvent.ACTION_MOVE -> {
-                if (kotlin.math.abs(event.y - downY) > 8 * resources.displayMetrics.density) dragged = true
+                val slop = ViewConfiguration.get(context).scaledTouchSlop * 2
+                if (kotlin.math.abs(event.y - downY) > slop || kotlin.math.abs(event.x - downX) > slop) {
+                    dragged = true
+                    removeCallbacks(longPress)
+                }
                 val delta = (lastY - event.y) * scale
-                if (dragged && kotlin.math.abs(delta) >= 12) {
+                if (dragged && !longPressed && kotlin.math.abs(delta) >= 12) {
                     val x = (downX * scale).toInt(); val y = (downY * scale).toInt()
-                    SwingUtilities.invokeLater { scroll(x, y, if (delta > 0) 1 else -1) }
+                    val serial = touchMount
+                    SwingUtilities.invokeLater { if (isCurrentMount(serial)) scroll(x, y, if (delta > 0) 1 else -1) }
                     lastY = event.y
                 }
             }
             MotionEvent.ACTION_UP -> {
-                if (!dragged) {
+                removeCallbacks(longPress)
+                val serial = touchMount
+                val currentTouch = touchActive && serial == mountSerial
+                val held = currentTouch && longPressed && !dragged
+                touchActive = false
+                if (held) {
+                    // Wait for release before giving another window touch focus.
+                    val x = (downX * scale).toInt(); val y = (downY * scale).toInt()
+                    SwingUtilities.invokeLater {
+                        try { if (isCurrentMount(serial)) contextMenu(x, y) } catch (t: Throwable) {
+                            android.util.Log.e("SwingPanelHost", "Panel context menu failed: $panelKey", t)
+                        }
+                    }
+                } else if (currentTouch && !dragged && !longPressed) {
                     val x = (event.x * scale).toInt(); val y = (event.y * scale).toInt()
                     SwingUtilities.invokeLater {
-                        try { tap(x, y) } catch (t: Throwable) {
+                        try { if (isCurrentMount(serial)) tap(x, y) } catch (t: Throwable) {
                             android.util.Log.e("SwingPanelHost", "Panel input failed: $panelKey", t)
                         }
                     }
@@ -171,7 +248,11 @@ internal class SwingPanelView(context: Context, private val panelKey: String) : 
                 }
                 parent?.requestDisallowInterceptTouchEvent(false)
             }
-            MotionEvent.ACTION_CANCEL -> parent?.requestDisallowInterceptTouchEvent(false)
+            MotionEvent.ACTION_CANCEL -> {
+                removeCallbacks(longPress)
+                touchActive = false
+                parent?.requestDisallowInterceptTouchEvent(false)
+            }
         }
         return true
     }
@@ -183,7 +264,7 @@ internal class SwingPanelView(context: Context, private val panelKey: String) : 
         var hit: Component? = hit(base, x, y)
         while (hit != null) {
             if (hit is JScrollPane) {
-                hit.dispatchMouseEvent(MouseWheelEvent(hit, MouseEvent.MOUSE_WHEEL, System.currentTimeMillis(), 0,
+                hit.dispatchEvent(MouseWheelEvent(hit, MouseEvent.MOUSE_WHEEL, System.currentTimeMillis(), 0,
                     0, 0, 0, false, MouseWheelEvent.WHEEL_UNIT_SCROLL, 3, direction))
                 return
             }
@@ -194,30 +275,35 @@ internal class SwingPanelView(context: Context, private val panelKey: String) : 
 
     private fun tap(x: Int, y: Int) {
         if (!running) return
+        val serial = mountSerial
         val base = root ?: return
         var target: Component = hit(base, x, y)
         // Compound controls own their editor/renderer children.
         var ancestor: Component? = target
         while (ancestor != null) {
-            if (!ancestor.isEnabled) return
+            // Swing permits mouse listeners on disabled leaf controls (profile cards
+            // use disabled names/arrows to expand). Never invoke their editing/actions.
+            if (!ancestor.isEnabled && !(ancestor === target &&
+                    (target is JTextComponent || target is AbstractButton) && target.mouseListeners.isNotEmpty())) return
             if (ancestor is JComboBox<*> || ancestor is JSpinner) { target = ancestor; break }
             if (ancestor === base) break
             ancestor = ancestor.parent
         }
         when (val control = target) {
-            is JTextComponent -> if (control.isEditable) {
+            is JTextComponent -> if (control.isEnabled && control.isEditable) {
                 val text = control.text
                 post {
-                    if (!running) return@post
+                    if (!running || serial != mountSerial) return@post
                     val editor = EditText(context).apply {
                         setText(text)
                         if (control is JPasswordField) inputType = 129
                     }
-                    AlertDialog.Builder(context).setTitle("Edit value").setView(editor)
+                    inputPopup?.dismiss()
+                    inputPopup = AlertDialog.Builder(context).setTitle("Edit value").setView(editor)
                         .setNegativeButton("Cancel", null).setPositiveButton("Apply") { _, _ ->
                             val value = editor.text.toString()
                             SwingUtilities.invokeLater {
-                                if (running && control.isEnabled && control.isEditable) {
+                                if (isCurrentMount(serial) && control.isEnabled && control.isEditable) {
                                     control.text = value
                                     if (control is JTextField) control.postActionEvent()
                                 }
@@ -229,20 +315,22 @@ internal class SwingPanelView(context: Context, private val panelKey: String) : 
             is JComboBox<*> -> {
                 val items = (0 until control.itemCount).map { control.getItemAt(it) }.toTypedArray()
                 post {
-                    if (!running) return@post
-                    AlertDialog.Builder(context).setTitle("Select value")
+                    if (!running || serial != mountSerial) return@post
+                    inputPopup?.dismiss()
+                    inputPopup = AlertDialog.Builder(context).setTitle("Select value")
                         .setItems(items.map { it.toString() }.toTypedArray()) { _, index ->
-                            SwingUtilities.invokeLater { if (running && control.isEnabled) control.selectedItem = items[index] }
+                            SwingUtilities.invokeLater { if (isCurrentMount(serial) && control.isEnabled) control.selectedItem = items[index] }
                         }.show()
                 }
                 return
             }
             is JSpinner -> {
                 post {
-                    if (!running) return@post
-                    AlertDialog.Builder(context).setTitle("Adjust value").setItems(arrayOf("Decrease", "Increase")) { _, index ->
+                    if (!running || serial != mountSerial) return@post
+                    inputPopup?.dismiss()
+                    inputPopup = AlertDialog.Builder(context).setTitle("Adjust value").setItems(arrayOf("Decrease", "Increase")) { _, index ->
                         SwingUtilities.invokeLater {
-                            if (running && control.isEnabled) {
+                            if (isCurrentMount(serial) && control.isEnabled) {
                                 val next = if (index == 0) control.previousValue else control.nextValue
                                 if (next != null) control.value = next
                             }
@@ -258,12 +346,94 @@ internal class SwingPanelView(context: Context, private val panelKey: String) : 
         var node: Component? = target
         while (node != null && node !== base) { localX -= node.x; localY -= node.y; node = node.parent }
         for (id in intArrayOf(MouseEvent.MOUSE_PRESSED, MouseEvent.MOUSE_RELEASED, MouseEvent.MOUSE_CLICKED)) {
-            target.dispatchMouseEvent(MouseEvent(target, id, System.currentTimeMillis(), 0, localX, localY, 1, false, MouseEvent.BUTTON1))
+            target.dispatchEvent(MouseEvent(target, id, System.currentTimeMillis(), 0, localX, localY, 1, false, MouseEvent.BUTTON1))
         }
         if (target is AbstractButton && target.isEnabled) target.doClick()
         if (target is JTabbedPane) {
             val index = target.indexAtLocation(localX, localY)
             if (index >= 0) target.selectedIndex = index
+        }
+    }
+
+    /** Right-click on the Swing thread, then present its real actions on Android. */
+    private fun contextMenu(x: Int, y: Int) {
+        if (!running) return
+        val serial = mountSerial
+        val base = root ?: return
+        val deepest = hit(base, x, y)
+        var node: Component? = deepest
+        var owner: JComponent? = null
+        var target: Component? = null
+        while (node != null) {
+            if (!node.isEnabled) return
+            if (owner == null && node is JComponent && node.componentPopupMenu != null) owner = node
+            if (target == null && node.mouseListeners.isNotEmpty()) target = node
+            if (node === base) break
+            node = node.parent
+        }
+        val recipient = target ?: owner ?: deepest
+        var localX = x; var localY = y
+        node = recipient
+        while (node != null && node !== base) { localX -= node.x; localY -= node.y; node = node.parent }
+        JPopupMenu.takeShownPopupMenu()
+        for (id in intArrayOf(MouseEvent.MOUSE_PRESSED, MouseEvent.MOUSE_RELEASED, MouseEvent.MOUSE_CLICKED)) {
+            recipient.dispatchEvent(MouseEvent(recipient, id, System.currentTimeMillis(),
+                if (id == MouseEvent.MOUSE_PRESSED) java.awt.event.InputEvent.BUTTON3_DOWN_MASK else 0,
+                localX, localY, 1, id == MouseEvent.MOUSE_PRESSED, MouseEvent.BUTTON3))
+        }
+        val shown = JPopupMenu.takeShownPopupMenu()
+        val menu = shown ?: owner?.componentPopupMenu ?: return
+        swingPopup = menu
+        if (shown == null) {
+            menu.show(owner, localX, localY)
+            JPopupMenu.takeShownPopupMenu()
+        }
+        val items = menu.components.filterIsInstance<JMenuItem>().filter { it.isVisible }
+        if (items.isEmpty()) { menu.isVisible = false; return }
+        val labels = items.map { it.text ?: "" }
+        val enabled = items.map { it.isEnabled }
+        val checked = items.map { it.isSelected }
+        post {
+            if (!running || serial != mountSerial) { SwingUtilities.invokeLater { menu.isVisible = false }; return@post }
+            contextPopup?.dismiss()
+            val panelScale = width.toFloat() / logicalWidth
+            val titles = labels.mapIndexed { index, label -> if (checked[index]) "✓ $label" else label }
+            val adapter = object : android.widget.ArrayAdapter<String>(context, android.R.layout.simple_list_item_1, titles) {
+                override fun areAllItemsEnabled() = enabled.all { it }
+                override fun isEnabled(position: Int) = enabled[position]
+                override fun getView(position: Int, convertView: View?, parent: android.view.ViewGroup): View =
+                    super.getView(position, convertView, parent).apply {
+                        isEnabled = enabled[position]
+                        alpha = if (enabled[position]) 1f else 0.45f
+                        setBackgroundColor(android.graphics.Color.rgb(30, 30, 30))
+                        (this as? android.widget.TextView)?.setTextColor(android.graphics.Color.WHITE)
+                        (this as? android.widget.TextView)?.apply {
+                            setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, 14f * panelScale)
+                            minHeight = (36f * panelScale).toInt()
+                            setPadding((10f * panelScale).toInt(), 0, (10f * panelScale).toInt(), 0)
+                            setSingleLine(true)
+                            ellipsize = android.text.TextUtils.TruncateAt.END
+                        }
+                    }
+            }
+            val popup = AlertDialog.Builder(context).setAdapter(adapter) { _, index ->
+                val item = items.getOrNull(index)
+                SwingUtilities.invokeLater {
+                    if (isCurrentMount(serial) && item != null && item.isEnabled && item.isVisible) {
+                        android.util.Log.i("SwingPanelHost", "Context action $panelKey: ${labels[index]}")
+                        item.doClick()
+                    }
+                }
+            }.create()
+            popup.setOnDismissListener {
+                SwingUtilities.invokeLater { menu.isVisible = false; if (swingPopup === menu) swingPopup = null }
+                if (contextPopup === popup) contextPopup = null
+            }
+            contextPopup = popup
+            popup.show()
+            popup.listView.setBackgroundColor(android.graphics.Color.rgb(30, 30, 30))
+            popup.window?.setLayout(width.coerceAtLeast(240), android.view.ViewGroup.LayoutParams.WRAP_CONTENT)
+            android.util.Log.i("SwingPanelHost", "Context menu $panelKey: ${labels.joinToString()}")
         }
     }
 

@@ -274,7 +274,9 @@ public class Window extends Container {
             savedClip = g.getClip();
         }
         try {
-            g.translate(c.getX(), c.getY());
+            // Top-level bounds are desktop screen coordinates, not buffer coordinates.
+            // Imported profiles may restore a window on a second monitor.
+            if (!(c instanceof Window)) g.translate(c.getX(), c.getY());
             g.clipRect(0, 0, c.getWidth(), c.getHeight());
 
             if (c instanceof Canvas) {

@@ -22,54 +22,27 @@ public class JOptionPane extends JComponent {
     public static final int QUESTION_MESSAGE = 3;
     public static final int PLAIN_MESSAGE = -1;
 
-    // Android has no modal Swing dialogs; we don't synthesise one. Returning CANCEL/CLOSED
-    // for every confirmation meant Reset / Delete / etc. silently never executed — the
-    // user tapping the button got nothing. Default to the AFFIRMATIVE response so taps on
-    // buttons that route through JOptionPane confirm work as expected (the user already
-    // chose to tap the action, they don't need a second confirmation tap on mobile).
-
-    public static int showConfirmDialog(Component parent, Object message) { return YES_OPTION; }
-    public static int showConfirmDialog(Component parent, Object message, String title, int optionType) { return affirmativeFor(optionType); }
-    public static int showConfirmDialog(Component parent, Object message, String title, int optionType, int messageType) { return affirmativeFor(optionType); }
-    public static int showConfirmDialog(Component parent, Object message, String title, int optionType, int messageType, Icon icon) { return affirmativeFor(optionType); }
-
+    public interface DialogHandler { int show(String message, String title, int optionType, Object[] options); }
+    private static volatile DialogHandler dialogHandler;
+    public static void setDialogHandler(DialogHandler handler) { dialogHandler = handler; }
+    private static int show(Object message, String title, int optionType, Object[] options) {
+        DialogHandler handler = dialogHandler;
+        return handler == null ? CLOSED_OPTION : handler.show(String.valueOf(message), title, optionType, options);
+    }
+    public static int showConfirmDialog(Component parent, Object message) { return show(message, "Confirm", YES_NO_CANCEL_OPTION, null); }
+    public static int showConfirmDialog(Component parent, Object message, String title, int optionType) { return show(message, title, optionType, null); }
+    public static int showConfirmDialog(Component parent, Object message, String title, int optionType, int messageType) { return show(message, title, optionType, null); }
+    public static int showConfirmDialog(Component parent, Object message, String title, int optionType, int messageType, Icon icon) { return show(message, title, optionType, null); }
     public static String showInputDialog(Object message) { return null; }
     public static String showInputDialog(Component parent, Object message) { return null; }
     public static String showInputDialog(Component parent, Object message, Object initialSelectionValue) { return null; }
     public static String showInputDialog(Component parent, Object message, String title, int messageType) { return null; }
     public static Object showInputDialog(Component parent, Object message, String title, int messageType, Icon icon, Object[] selectionValues, Object initialSelectionValue) { return null; }
 
-    public static void showMessageDialog(Component parent, Object message) {}
-    public static void showMessageDialog(Component parent, Object message, String title, int messageType) {}
-    public static void showMessageDialog(Component parent, Object message, String title, int messageType, Icon icon) {}
-
-    /**
-     * Returns the index of the first option label that looks affirmative ("Yes" / "OK" /
-     * "Reset" / "Continue") so callers like ConfigPanel's Reset button actually proceed.
-     * Falls back to 0 (the first option) if nothing matches, since callers typically pass
-     * the affirmative choice first.
-     */
+    public static void showMessageDialog(Component parent, Object message) { show(message, "RuneLite", DEFAULT_OPTION, null); }
+    public static void showMessageDialog(Component parent, Object message, String title, int messageType) { show(message, title, DEFAULT_OPTION, null); }
+    public static void showMessageDialog(Component parent, Object message, String title, int messageType, Icon icon) { show(message, title, DEFAULT_OPTION, null); }
     public static int showOptionDialog(Component parent, Object message, String title, int optionType, int messageType, Icon icon, Object[] options, Object initialValue) {
-        if (options == null || options.length == 0) return YES_OPTION;
-        for (int i = 0; i < options.length; i++) {
-            Object o = options[i];
-            if (o == null) continue;
-            String s = o.toString();
-            if (s.equalsIgnoreCase("yes")
-                || s.equalsIgnoreCase("ok")
-                || s.equalsIgnoreCase("reset")
-                || s.equalsIgnoreCase("continue")
-                || s.equalsIgnoreCase("delete")
-                || s.equalsIgnoreCase("remove")) {
-                return i;
-            }
-        }
-        return 0;
-    }
-
-    private static int affirmativeFor(int optionType) {
-        // YES_NO / YES_NO_CANCEL → YES_OPTION (=0); OK_CANCEL → OK_OPTION (=0).
-        // Either way the affirmative response is index 0 in real Swing, so just return that.
-        return YES_OPTION;
+        return show(message, title, optionType, options);
     }
 }

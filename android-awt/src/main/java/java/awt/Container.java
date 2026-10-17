@@ -15,6 +15,10 @@ public class Container extends Component {
     }
 
     public int getComponentCount() { return children.size(); }
+    @Override public void removeNotify() {
+        for (Component child : getComponents()) child.removeNotify();
+        super.removeNotify();
+    }
 
     public Component getComponent(int n) { return children.get(n); }
 
@@ -189,7 +193,9 @@ public class Container extends Component {
         paintChildren(g);
     }
 
-    public void paintComponents(Graphics g) { paintChildren(g); }
+    public void paintComponents(Graphics g) {
+        paintChildren(g);
+    }
 
     protected void paintChildren(Graphics g) {
         int count = children.size();

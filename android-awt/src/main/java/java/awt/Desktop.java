@@ -2,8 +2,6 @@ package java.awt;
 
 import java.io.IOException;
 import java.net.URI;
-import java.util.EnumSet;
-import java.util.Set;
 
 public class Desktop {
     public enum Action {
@@ -15,24 +13,28 @@ public class Desktop {
     }
 
     private static final Desktop INSTANCE = new Desktop();
-    private static final Set<Action> SUPPORTED = EnumSet.noneOf(Action.class);
+    public interface BrowseHandler { void browse(URI uri) throws IOException; }
+    private static volatile BrowseHandler browseHandler;
+    public static void setBrowseHandler(BrowseHandler handler) { browseHandler = handler; }
 
     public static Desktop getDesktop() {
         return INSTANCE;
     }
 
     public static boolean isDesktopSupported() {
-        return false;
+        return browseHandler != null;
     }
 
     public boolean isSupported(Action action) {
-        return SUPPORTED.contains(action);
+        return action == Action.BROWSE && browseHandler != null;
     }
 
     public void browse(URI uri) throws IOException {
-        // Desktop chrome isn't available on Android; host bridge should override this
-        // by launching an android.content.Intent.ACTION_VIEW.
-        throw new UnsupportedOperationException("Desktop.browse not implemented in headless shadow");
+        BrowseHandler handler = browseHandler;
+        if (handler == null) throw new IOException("No browser bridge installed");
+        if (uri == null || !("https".equalsIgnoreCase(uri.getScheme()) || "http".equalsIgnoreCase(uri.getScheme())))
+            throw new IOException("Only HTTP(S) browser links are supported");
+        handler.browse(uri);
     }
 
     public void open(java.io.File file) throws IOException {

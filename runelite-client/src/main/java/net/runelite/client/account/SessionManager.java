@@ -64,7 +64,7 @@ public class SessionManager
 	private final String oauthRedirect;
 	private final ScheduledExecutorService scheduledExecutorService;
 
-	private HttpServer server;
+	private volatile HttpServer server;
 
 	@Inject
 	private SessionManager(
@@ -179,7 +179,18 @@ public class SessionManager
 		eventBus.post(new SessionClose());
 	}
 
-	public void login()
+	/** Whether the browser callback is still pending (used by Android's login service). */
+	public boolean isLoginPending()
+	{
+		return server != null;
+	}
+
+	public void cancelLogin()
+	{
+		stopServer();
+	}
+
+	public synchronized void login()
 	{
 		if (server == null)
 		{
@@ -261,10 +272,13 @@ public class SessionManager
 		server.start();
 	}
 
-	private void stopServer()
+	private synchronized void stopServer()
 	{
 		log.debug("Stopping server {}", server);
-		server.stop(0);
+		if (server != null)
+		{
+			server.stop(0);
+		}
 		server = null;
 	}
 }

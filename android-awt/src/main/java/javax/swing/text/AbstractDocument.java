@@ -7,6 +7,14 @@ import javax.swing.event.UndoableEditListener;
 public abstract class AbstractDocument implements Document, Serializable {
     private static final long serialVersionUID = -6841412929076416620L;
 
+    private DocumentFilter documentFilter;
+    public void setDocumentFilter(DocumentFilter filter) { documentFilter = filter; }
+    public DocumentFilter getDocumentFilter() { return documentFilter; }
+    public void replace(int offset, int length, String text, AttributeSet attrs) throws BadLocationException {
+        remove(offset, length);
+        insertString(offset, text, attrs);
+    }
+
     public abstract static class AbstractElement implements Element {}
     public abstract static class BranchElement extends AbstractElement {}
     public abstract static class LeafElement extends AbstractElement {}

@@ -1,4 +1,4 @@
-use crate::{CLEAR, SRC};
+use crate::{CLEAR, SRC, SRC_ATOP};
 use jni::sys::jint;
 
 /// Fill an axis-aligned rectangle on an ARGB int[] buffer. The buffer's row stride is
@@ -41,7 +41,7 @@ pub fn fill_rect(
                 let off = row as usize * stride;
                 for col in x0..x1 {
                     let dst = buf[off + col as usize] as u32;
-                    buf[off + col as usize] = src_over(argb as u32, dst) as i32;
+                    buf[off + col as usize] = if composite_rule == SRC_ATOP { src_atop(argb as u32, dst) } else { src_over(argb as u32, dst) } as i32;
                 }
             }
         }
@@ -83,7 +83,7 @@ pub fn plot_span(
         _ => {
             for col in c0..c1 {
                 let dst = buf[off + col as usize] as u32;
-                buf[off + col as usize] = src_over(argb as u32, dst) as i32;
+                buf[off + col as usize] = if composite_rule == SRC_ATOP { src_atop(argb as u32, dst) } else { src_over(argb as u32, dst) } as i32;
             }
         }
     }
@@ -282,4 +282,43 @@ pub fn clamp_rect(img_w: jint, img_h: jint, x: jint, y: jint, w: jint, h: jint) 
     let x1 = (x + w).max(0).min(img_w);
     let y1 = (y + h).max(0).min(img_h);
     (x0, y0, x1, y1)
+}
+
+/// Source-atop on straight ARGB pixels: preserve destination coverage, including
+/// transparent corners and antialiased edges when tinting Swing icons.
+#[inline]
+pub fn src_atop(src: u32, dst: u32) -> u32 {
+    let da = dst >> 24;
+    if da == 0 { return 0; }
+    let sa = src >> 24;
+    let inv = 255 - sa;
+    let channel = |shift: u32| -> u32 {
+        ((((src >> shift) & 255) * sa + ((dst >> shift) & 255) * inv + 127) / 255) << shift
+    };
+    (da << 24) | channel(16) | channel(8) | channel(0)
+}
+
+#[cfg(test)]
+mod tint_tests {
+    use super::*;
+    #[test]
+    fn recolor_preserves_transparent_and_antialiased_pixels() {
+        let mut pixels = [0, 0x40ffffffu32 as i32, 0xffffffffu32 as i32];
+        fill_rect(&mut pixels, 3, 1, 0, 0, 3, 1, 0xffff8800u32 as i32, SRC_ATOP);
+        assert_eq!(pixels.map(|p| p as u32), [0, 0x40ff8800, 0xffff8800]);
+    }
+    #[test]
+    fn translucent_tint_blends_color_without_changing_coverage() {
+        assert_eq!(src_atop(0x80ff0000, 0x400000ff), 0x4080007f);
+        assert_eq!(src_atop(0x00ff0000, 0x400000ff), 0x400000ff);
+    }
+    #[test]
+    fn spans_and_image_blits_preserve_coverage() {
+        let mut pixels = [0, 0x80ffffffu32 as i32];
+        plot_span(&mut pixels, 2, 0, 0, 2, 2, 1, 0xffff8800u32 as i32, SRC_ATOP);
+        assert_eq!(pixels.map(|p| p as u32), [0, 0x80ff8800]);
+        crate::blit::blit(&[0xff0000ffu32 as i32; 2], 2, 1, 0, 0, 2, 1,
+            &mut pixels, 2, 1, 0, 0, 2, 1, SRC_ATOP, 1.0);
+        assert_eq!(pixels.map(|p| p as u32), [0, 0x800000ff]);
+    }
 }

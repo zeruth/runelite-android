@@ -170,6 +170,8 @@ public abstract class Component implements ImageObserver, Serializable {
     public void setEnabled(boolean e) { enabled = e; }
     public boolean isShowing()    { return visible && parent == null ? false : (parent != null ? parent.isShowing() : visible); }
     public boolean isDisplayable() { return true; }
+    /** Android components have no native AWT peer to dispose; discard layout validity. */
+    public void removeNotify() { invalidate(); }
 
     public Graphics getGraphics() {
         // Host-provided rendering target; none in the headless shadow.
@@ -383,6 +385,21 @@ public abstract class Component implements ImageObserver, Serializable {
                     for (MouseWheelListener l : mouseWheelListeners) l.mouseWheelMoved(we);
                 }
                 break;
+        }
+    }
+
+    /** Desktop entry point for plugins sending input to a component's listeners. */
+    public final void dispatchEvent(AWTEvent event) {
+        if (event == null) throw new NullPointerException("event");
+        if (event instanceof KeyEvent) {
+            KeyEvent key = (KeyEvent) event;
+            if (!key.isConsumed()
+                    && !KeyboardFocusManager.getCurrentKeyboardFocusManager().dispatchKeyEvent(key)
+                    && !key.isConsumed()) {
+                dispatchKeyEvent(key);
+            }
+        } else if (event instanceof MouseEvent) {
+            dispatchMouseEvent((MouseEvent) event);
         }
     }
 
