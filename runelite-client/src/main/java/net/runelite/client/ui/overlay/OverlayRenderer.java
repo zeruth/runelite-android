@@ -42,6 +42,8 @@ import java.awt.geom.AffineTransform;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
+import java.util.WeakHashMap;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import javax.swing.SwingUtilities;
@@ -92,6 +94,8 @@ public class OverlayRenderer extends MouseAdapter
 	private final EventBus eventBus;
 	private final ChatMessageManager chatMessageManager;
 	private final SnapCorners snapCorners;
+	// Missing APIs will not recover next frame. Weak keys allow unloaded overlays to be collected.
+	private final Set<Overlay> failedOverlays = Collections.newSetFromMap(new WeakHashMap<>());
 
 	private Font font, tooltipFont, interfaceFont;
 
@@ -299,6 +303,11 @@ public class OverlayRenderer extends MouseAdapter
 		final Point location = new Point();
 		for (Overlay overlay : overlays)
 		{
+			if (failedOverlays.contains(overlay))
+			{
+				continue;
+			}
+
 			final OverlayPosition overlayPosition = getCorrectedOverlayPosition(overlay);
 			final Rectangle bounds = overlay.getBounds();
 			final Point preferredLocation = overlay.getPreferredLocation();
@@ -343,7 +352,7 @@ public class OverlayRenderer extends MouseAdapter
 			graphics.setPaint(paint);
 			graphics.setRenderingHints(renderingHints);
 			graphics.setBackground(background);
-			if (!graphics.getClip().equals(clip))
+			if (!clip.equals(graphics.getClip()))
 			{
 				graphics.setClip(clip);
 			}
@@ -764,6 +773,14 @@ public class OverlayRenderer extends MouseAdapter
 		try
 		{
 			overlayDimension = overlay.render(graphics);
+		}
+		catch (LinkageError error)
+		{
+			// Android compatibility gaps must not terminate the game thread. Leave VM errors fatal.
+			failedOverlays.add(overlay);
+			overlay.getBounds().setSize(0, 0);
+			log.warn("Disabling overlay {} for this session after a linkage error", overlay.getClass().getName(), error);
+			return;
 		}
 		catch (Exception ex)
 		{
