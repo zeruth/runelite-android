@@ -60,6 +60,8 @@ internal class SwingPanelView(context: Context, private val panelKey: String) : 
     private var lastY = 0f
     private var dragged = false
     private var longPressed = false
+    private var secondaryPress = false
+    private val clicks = net.runelite.mp.input.PanelClickSequence() // EDT only
     private var touchActive = false
     private var touchMount = -1L
     private var contextPopup: AlertDialog? = null
@@ -171,6 +173,7 @@ internal class SwingPanelView(context: Context, private val panelKey: String) : 
     /** The EDT replaces the entire binding, including closures for the previous tree. */
     private fun mountPanel(next: PluginPanel?, generation: Long) {
         if (next === panel && generation == mountedGeneration) return
+        clicks.reset()
         swingPopup?.isVisible = false
         swingPopup = null
         panel?.let { SwingUtil.deactivate(it) }
@@ -219,6 +222,7 @@ internal class SwingPanelView(context: Context, private val panelKey: String) : 
         if (!running || event.actionMasked != MotionEvent.ACTION_SCROLL) {
             return super.onGenericMotionEvent(event)
         }
+        SwingUtilities.invokeLater { clicks.reset() }
         val delta = -event.getAxisValue(MotionEvent.AXIS_VSCROLL)
         if (delta == 0f) return super.onGenericMotionEvent(event)
         val scale = logicalWidth.toFloat() / width.coerceAtLeast(1)
@@ -246,17 +250,21 @@ internal class SwingPanelView(context: Context, private val panelKey: String) : 
             MotionEvent.ACTION_DOWN -> {
                 removeCallbacks(longPress)
                 downX = event.x; downY = event.y; lastY = event.y; dragged = false; longPressed = false; touchActive = true; touchMount = mountSerial
-                postDelayed(longPress, ViewConfiguration.getLongPressTimeout().toLong())
+                secondaryPress = event.buttonState and MotionEvent.BUTTON_SECONDARY != 0
+                if (event.getToolType(0) != MotionEvent.TOOL_TYPE_MOUSE)
+                    postDelayed(longPress, ViewConfiguration.getLongPressTimeout().toLong())
                 parent?.requestDisallowInterceptTouchEvent(true)
             }
             MotionEvent.ACTION_MOVE -> {
+                if (!touchActive) return true
                 val slop = ViewConfiguration.get(context).scaledTouchSlop * 2
                 if (kotlin.math.abs(event.y - downY) > slop || kotlin.math.abs(event.x - downX) > slop) {
+                    if (!dragged) SwingUtilities.invokeLater { clicks.reset() }
                     dragged = true
                     removeCallbacks(longPress)
                 }
                 val delta = (lastY - event.y) * scale
-                if (dragged && !longPressed && kotlin.math.abs(delta) >= 12) {
+                if (dragged && !longPressed && !secondaryPress && kotlin.math.abs(delta) >= 12) {
                     val x = (downX * scale).toInt(); val y = (downY * scale).toInt()
                     val serial = touchMount
                     SwingUtilities.invokeLater { if (isCurrentMount(serial)) scroll(x, y, if (delta > 0) 1 else -1) }
@@ -267,7 +275,7 @@ internal class SwingPanelView(context: Context, private val panelKey: String) : 
                 removeCallbacks(longPress)
                 val serial = touchMount
                 val currentTouch = touchActive && serial == mountSerial
-                val held = currentTouch && longPressed && !dragged
+                val held = currentTouch && (longPressed || secondaryPress) && !dragged
                 touchActive = false
                 if (held) {
                     // Wait for release before giving another window touch focus.
@@ -279,8 +287,17 @@ internal class SwingPanelView(context: Context, private val panelKey: String) : 
                     }
                 } else if (currentTouch && !dragged && !longPressed) {
                     val x = (event.x * scale).toInt(); val y = (event.y * scale).toInt()
+                    // Capture Android event timestamps/coordinates before queuing work. EDT lag
+                    // must not turn a slow pair into a double click or discard a fast pair.
+                    val pressedAt = event.downTime
+                    val releasedAt = event.eventTime
+                    val px = event.x; val py = event.y
+                    val device = event.deviceId; val tool = event.getToolType(0)
+                    val tolerance = if (tool == MotionEvent.TOOL_TYPE_MOUSE)
+                        ViewConfiguration.get(context).scaledTouchSlop.toFloat()
+                    else ViewConfiguration.get(context).scaledDoubleTapSlop.toFloat()
                     SwingUtilities.invokeLater {
-                        try { if (isCurrentMount(serial)) tap(x, y) } catch (t: Throwable) {
+                        try { if (isCurrentMount(serial)) tap(x, y, pressedAt, releasedAt, px, py, device, tool, tolerance) } catch (t: Throwable) {
                             android.util.Log.e("SwingPanelHost", "Panel input failed: $panelKey", t)
                         }
                     }
@@ -288,7 +305,8 @@ internal class SwingPanelView(context: Context, private val panelKey: String) : 
                 }
                 parent?.requestDisallowInterceptTouchEvent(false)
             }
-            MotionEvent.ACTION_CANCEL -> {
+            MotionEvent.ACTION_POINTER_DOWN, MotionEvent.ACTION_CANCEL -> {
+                SwingUtilities.invokeLater { clicks.reset() }
                 removeCallbacks(longPress)
                 touchActive = false
                 parent?.requestDisallowInterceptTouchEvent(false)
@@ -313,7 +331,8 @@ internal class SwingPanelView(context: Context, private val panelKey: String) : 
         }
     }
 
-    private fun tap(x: Int, y: Int) {
+    private fun tap(x: Int, y: Int, pressedAt: Long, releasedAt: Long,
+                    px: Float, py: Float, device: Int, tool: Int, tolerance: Float) {
         if (!running) return
         val serial = mountSerial
         val base = root ?: return
@@ -324,11 +343,15 @@ internal class SwingPanelView(context: Context, private val panelKey: String) : 
             // Swing permits mouse listeners on disabled leaf controls (profile cards
             // use disabled names/arrows to expand). Never invoke their editing/actions.
             if (!ancestor.isEnabled && !(ancestor === target &&
-                    (target is JTextComponent || target is AbstractButton) && target.mouseListeners.isNotEmpty())) return
+                    (target is JTextComponent || target is AbstractButton) && target.mouseListeners.isNotEmpty())) {
+                clicks.reset()
+                return
+            }
             if (ancestor is JComboBox<*> || ancestor is JSpinner) { target = ancestor; break }
             if (ancestor === base) break
             ancestor = ancestor.parent
         }
+        if (target is JTextComponent || target is JComboBox<*> || target is JSpinner) clicks.reset()
         when (val control = target) {
             is JTextComponent -> if (control.isEnabled && control.isEditable) {
                 val text = control.text
@@ -385,8 +408,13 @@ internal class SwingPanelView(context: Context, private val panelKey: String) : 
         var localX = x; var localY = y
         var node: Component? = target
         while (node != null && node !== base) { localX -= node.x; localY -= node.y; node = node.parent }
+        val count = clicks.click(target, pressedAt, releasedAt, px.toDouble(), py.toDouble(), device, tool,
+            ViewConfiguration.getDoubleTapTimeout().toLong(), tolerance.toDouble())
+        // Deliver the first click immediately; only the second gets clickCount=2.
         for (id in intArrayOf(MouseEvent.MOUSE_PRESSED, MouseEvent.MOUSE_RELEASED, MouseEvent.MOUSE_CLICKED)) {
-            target.dispatchEvent(MouseEvent(target, id, System.currentTimeMillis(), 0, localX, localY, 1, false, MouseEvent.BUTTON1))
+            target.dispatchEvent(MouseEvent(target, id, System.currentTimeMillis(),
+                if (id == MouseEvent.MOUSE_PRESSED) java.awt.event.InputEvent.BUTTON1_DOWN_MASK else 0,
+                localX, localY, count, false, MouseEvent.BUTTON1))
         }
         if (target is AbstractButton && target.isEnabled) target.doClick()
         if (target is JTabbedPane) {
@@ -397,6 +425,7 @@ internal class SwingPanelView(context: Context, private val panelKey: String) : 
 
     /** Right-click on the Swing thread, then present its real actions on Android. */
     private fun contextMenu(x: Int, y: Int) {
+        clicks.reset()
         if (!running) return
         val serial = mountSerial
         val base = root ?: return
