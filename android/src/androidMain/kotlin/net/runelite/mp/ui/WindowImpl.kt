@@ -47,7 +47,7 @@ import net.runelite.mp.ui.bridge.PluginRow
  */
 object WindowImpl
 {
-    private val ICON_WIDTH = 36.dp
+    private val ICON_WIDTH = 52.dp
     private val CONTENT_WIDTH = 256.dp
 
     /** First launch shows the game with NO panel open — user explicitly taps a nav
