@@ -7,6 +7,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -36,6 +38,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
+import net.runelite.mp.ui.bridge.PinnedKeys
+import net.runelite.mp.ui.bridge.ModifierState
+import net.runelite.mp.ui.bridge.KeyDispatch
 import net.runelite.mp.ui.bridge.NavBarBridge
 import net.runelite.mp.ui.bridge.NavEntry
 
@@ -84,103 +89,126 @@ internal fun NavIconStrip(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .width(width)
-            .fillMaxHeight()
-            .background(RlPalette.DarkerGray)
-            .border(1.dp, RlPalette.SurfaceBorder),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Spacer(Modifier.height(4.dp))
-        // Our built-in Plugins icon — always at the top. Re-tapping the active icon
-        // collapses the panel (state → null) so the user can reclaim the screen
-        // without losing context.
-        IconButton(
-            label = "P",
-            tooltip = "Plugins",
-            active = selected == NAV_KEY_PLUGINS,
-            iconBitmap = pluginsIcon,
+    val pins = PinnedKeys.settings.value
+    BoxWithConstraints(Modifier.width(width).fillMaxHeight()) {
+        val maxKeysHeight = maxHeight * 0.5f
+        Column(
+            modifier = Modifier
+                .width(width)
+                .fillMaxHeight()
+                .background(RlPalette.DarkerGray)
+                .border(1.dp, RlPalette.SurfaceBorder),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            if (selected == NAV_KEY_PLUGINS)
-            {
-                onSelect(null)
-            }
-            else
-            {
-                // No AWT panel to open for the Compose-native Plugins screen, but if
-                // a native panel WAS open we still want to close it on the AWT side
-                // so it stops bleeding through into the bitmap.
-                net.runelite.mp.ui.bridge.NavBarBridge.closePanels()
-                onSelect(NAV_KEY_PLUGINS)
-            }
-        }
-        Spacer(Modifier.height(4.dp))
-        // Sticky-modifier chips. There's no hardware keyboard on Android, so OSRS
-        // interactions that require Shift (drop items) or Alt (alt-action menu) get a
-        // tap-to-hold affordance pinned directly under the Plugins wrench. Amber marks
-        // an engaged modifier; inactive controls blend into the strip.
-        ModifierChip(label = "Shift", state = net.runelite.mp.ui.bridge.ModifierState.shiftActive.value) {
-            net.runelite.mp.ui.bridge.ModifierState.toggleShift()
-        }
-        Spacer(Modifier.height(4.dp))
-        ModifierChip(label = "Alt", state = net.runelite.mp.ui.bridge.ModifierState.altActive.value) {
-            net.runelite.mp.ui.bridge.ModifierState.toggleAlt()
-        }
-        Spacer(Modifier.height(4.dp))
-        ModifierChip(label = "⌨️", state = net.runelite.mp.ui.bridge.SoftKeyboardController.isKeyboardVisible.value) {
-            net.runelite.mp.ui.bridge.SoftKeyboardController.toggle()
-        }
-        Spacer(Modifier.height(4.dp))
-        // Only while a same-version watch has RuneLite open. Engaging it points the
-        // Plugins screen at the watch (and tints the chrome blue) until tapped again.
-        if (net.runelite.mp.wear.WatchLink.watch != null)
-        {
-            val link = net.runelite.mp.wear.WatchLink
-            ModifierChip(label = "⌚", state = link.configuring) {
-                link.configuring = !link.configuring
-                if (link.configuring && selected != NAV_KEY_PLUGINS)
+            Spacer(Modifier.height(4.dp))
+            // Our built-in Plugins icon — always at the top. Re-tapping the active icon
+            // collapses the panel (state → null) so the user can reclaim the screen
+            // without losing context.
+            IconButton(
+                label = "P",
+                tooltip = "Plugins",
+                active = selected == NAV_KEY_PLUGINS,
+                iconBitmap = pluginsIcon,
+            ) {
+                if (selected == NAV_KEY_PLUGINS)
                 {
+                    onSelect(null)
+                }
+                else
+                {
+                    // No AWT panel to open for the Compose-native Plugins screen, but if
+                    // a native panel WAS open we still want to close it on the AWT side
+                    // so it stops bleeding through into the bitmap.
                     net.runelite.mp.ui.bridge.NavBarBridge.closePanels()
                     onSelect(NAV_KEY_PLUGINS)
                 }
             }
             Spacer(Modifier.height(4.dp))
-        }
-        // RL-registered nav buttons. The list scrolls when it overflows the column height.
-        LazyColumn(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(0.dp),
-        ) {
-            items(entries, key = { it.key }) { entry ->
-                val isActive = selected == entry.key
-                IconButton(
-                    label = entry.initial,
-                    tooltip = entry.tooltip,
-                    active = isActive,
-                    iconBitmap = entry.icon,
-                ) {
-                    if (isActive)
+            if (!pins.atBottom) PinnedKeyChips(pins.keys, maxKeysHeight)
+            ModifierChip(label = "⌨️", state = net.runelite.mp.ui.bridge.SoftKeyboardController.isKeyboardVisible.value) {
+                net.runelite.mp.ui.bridge.SoftKeyboardController.toggle()
+            }
+            Spacer(Modifier.height(4.dp))
+            // Only while a same-version watch has RuneLite open. Engaging it points the
+            // Plugins screen at the watch (and tints the chrome blue) until tapped again.
+            if (net.runelite.mp.wear.WatchLink.watch != null)
+            {
+                val link = net.runelite.mp.wear.WatchLink
+                ModifierChip(label = "⌚", state = link.configuring) {
+                    link.configuring = !link.configuring
+                    if (link.configuring && selected != NAV_KEY_PLUGINS)
                     {
-                        // Re-tapping closes the selected panel.
                         net.runelite.mp.ui.bridge.NavBarBridge.closePanels()
-                        onSelect(null)
+                        onSelect(NAV_KEY_PLUGINS)
                     }
-                    else
-                    {
-                        if (entry.hasPanel)
+                }
+                Spacer(Modifier.height(4.dp))
+            }
+            // RL-registered nav buttons. The list scrolls when it overflows the column height.
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(0.dp),
+            ) {
+                items(entries, key = { it.key }) { entry ->
+                    val isActive = selected == entry.key
+                    IconButton(
+                        label = entry.initial,
+                        tooltip = entry.tooltip,
+                        active = isActive,
+                        iconBitmap = entry.icon,
+                    ) {
+                        if (isActive)
                         {
-                            // The shared host owns rendering and activation of the original panel.
+                            // Re-tapping closes the selected panel.
                             net.runelite.mp.ui.bridge.NavBarBridge.closePanels()
-                            onSelect(entry.key)
+                            onSelect(null)
                         }
                         else
                         {
-                            entry.onClick()
-                            if (entry.hasPanel) onSelect(entry.key)
+                            if (entry.hasPanel)
+                            {
+                                // The shared host owns rendering and activation of the original panel.
+                                net.runelite.mp.ui.bridge.NavBarBridge.closePanels()
+                                onSelect(entry.key)
+                            }
+                            else
+                            {
+                                entry.onClick()
+                                if (entry.hasPanel) onSelect(entry.key)
+                            }
                         }
                     }
+                }
+            }
+            if (pins.atBottom) PinnedKeyChips(pins.keys, maxKeysHeight)
+        }
+    }
+}
+
+@Composable
+private fun PinnedKeyChips(keys: List<String>, maxHeight: androidx.compose.ui.unit.Dp) {
+    if (keys.isEmpty()) return
+    LazyColumn(
+        modifier = Modifier.fillMaxWidth().heightIn(max = maxHeight),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 4.dp),
+    ) {
+        items(keys, key = { it }) { key ->
+            val active = when (key) {
+                "Ctrl" -> ModifierState.controlActive.value
+                "Shift" -> ModifierState.shiftActive.value
+                "Alt" -> ModifierState.altActive.value
+                else -> false
+            }
+            ModifierChip(key, active) {
+                when (key) {
+                    "Ctrl" -> ModifierState.toggleControl()
+                    "Shift" -> ModifierState.toggleShift()
+                    "Alt" -> ModifierState.toggleAlt()
+                    "Space" -> KeyDispatch.sendSpace()
+                    else -> KeyDispatch.sendChar(key.single())
                 }
             }
         }
@@ -188,19 +216,18 @@ internal fun NavIconStrip(
 }
 
 /**
- * Two-state chip used for the Shift / Alt sticky-modifier toggles in the icon strip.
+ * Toolbar key chip; sticky modifiers use the active state.
  * Amber fill when engaged so the user can see the modifier is "down" at a glance.
- * Tap toggles. Sized the same width as [IconButton] so the strip stays
- * visually aligned even when the chip text is wider than a glyph.
+ * Uses a 48 dp touch target with a visible boundary even when released.
  */
 @Composable
 private fun ModifierChip(label: String, state: Boolean, onClick: () -> Unit)
 {
     val bg = if (state) RlPalette.AccentSurface else Color.Transparent
-    val borderColor = if (state) RlPalette.Accent else Color.Transparent
+    val borderColor = if (state) RlPalette.Accent else RlPalette.SurfaceBorder
     Box(
         Modifier
-            .size(32.dp)
+            .size(48.dp)
             .clip(RoundedCornerShape(2.dp))
             .background(bg)
             .border(1.dp, borderColor, RoundedCornerShape(2.dp))
@@ -210,8 +237,10 @@ private fun ModifierChip(label: String, state: Boolean, onClick: () -> Unit)
         Text(
             label,
             color = if (state) RlPalette.Accent else RlPalette.TextSecondary,
-            fontSize = 11.sp,
+            fontSize = 12.sp,
             fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            softWrap = false,
         )
     }
 }

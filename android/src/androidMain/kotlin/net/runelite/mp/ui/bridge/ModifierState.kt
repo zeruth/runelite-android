@@ -26,18 +26,29 @@ import java.awt.event.KeyListener
 object ModifierState
 {
     /** AWT VK codes — explicit because our android-awt shim doesn't ship `VK_*`. */
+    private const val VK_CONTROL = 17
     private const val VK_SHIFT = 16
     private const val VK_ALT = 18
 
+    val controlActive = mutableStateOf(false)
     val shiftActive = mutableStateOf(false)
     val altActive = mutableStateOf(false)
 
     fun modifierMask(): Int
     {
         var m = 0
+        if (controlActive.value) m = m or InputEvent.CTRL_DOWN_MASK
         if (shiftActive.value) m = m or InputEvent.SHIFT_DOWN_MASK
         if (altActive.value) m = m or InputEvent.ALT_DOWN_MASK
         return m
+    }
+
+    fun toggleControl()
+    {
+        val next = !controlActive.value
+        controlActive.value = next
+        dispatch(VK_CONTROL, next)
+        ensureHeartbeat()
     }
 
     fun toggleShift()
@@ -114,6 +125,7 @@ object ModifierState
                 if (client != null)
                 {
                     val kc = if (vk == VK_SHIFT) net.runelite.api.KeyCode.KC_SHIFT
+                        else if (vk == VK_CONTROL) net.runelite.api.KeyCode.KC_CONTROL
                         else net.runelite.api.KeyCode.KC_ALT
                     android.util.Log.i("ModifierState", "  client.isKeyPressed($kc) = ${client.isKeyPressed(kc)}")
                 }
@@ -196,6 +208,7 @@ object ModifierState
                 isHeartbeat.set(true)
                 try
                 {
+                    if (controlActive.value) dispatch(VK_CONTROL, true)
                     if (shiftActive.value) dispatch(VK_SHIFT, true)
                     if (altActive.value) dispatch(VK_ALT, true)
                 }
