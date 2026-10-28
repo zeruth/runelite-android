@@ -163,6 +163,10 @@
 # ImmutableMap/List builders that the patched RuneLite client calls into.
 # Same generic-signature concern as Guice — keep the whole tree.
 -keep class com.google.common.** { *; }
+
+# Hub plugins load after R8 runs and link against the host's protobuf runtime.
+# Preserve its public binary surface, including methods only those plugins use.
+-keep class com.google.protobuf.** { *; }
 -dontwarn com.google.common.**
 
 # ----------------------------------------------------------------------------
