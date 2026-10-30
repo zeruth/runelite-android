@@ -155,9 +155,107 @@ public final class TestGraphicsCompatibility {
             Font scaled = font.deriveFont(AffineTransform.getScaleInstance(2, 1));
             require(scaled.isTransformed(), "font transform lost"); near(scaled.getStringBounds("Test", context).getWidth(), font.getStringBounds("Test", context).getWidth() * 2, 1);
         });
+        check("fallback-gradient-global-coordinates", () -> {
+            BufferedImage full = image(180, 150), clipped = image(180, 150);
+            for (BufferedImage target : new BufferedImage[]{full, clipped}) {
+                Graphics2D g = target.createGraphics();
+                if (target == clipped) g.setClip(73, 49, 27, 31);
+                g.translate(31, 19); g.rotate(.12);
+                g.setPaint(new LinearGradientPaint(0, 0, 140, 80, new float[]{0, .4f, 1}, new Color[]{Color.RED, Color.GREEN, Color.BLUE}));
+                g.fillRect(0, 0, 130, 100); g.dispose();
+            }
+            for (int y=49;y<80;y++) for (int x=73;x<100;x++) color(clipped.getRGB(x,y),full.getRGB(x,y),1);
+            require(clipped.getRGB(72,49)==0,"drawing escaped clip");
+        });
+        check("fallback-reused-buffer-clear-and-xor", () -> {
+            BufferedImage target=image(160,120); Graphics2D g=target.createGraphics();
+            g.setColor(Color.BLUE);g.fillRect(0,0,160,120);
+            g.setXORMode(Color.WHITE);g.setColor(Color.RED);
+            g.fillOval(30,20,15,11);g.fillOval(30,20,15,11);
+            color(target.getRGB(37,25),Color.BLUE.getRGB(),0);
+            g.setPaintMode();g.setComposite(AlphaComposite.Clear);g.rotate(.01,80,60);
+            g.fillRect(75,55,10,10);g.dispose();
+            require(target.getRGB(80,60)==0,"clear did not clear");color(target.getRGB(20,20),Color.BLUE.getRGB(),0);
+        });
+        check("fallback-cropped-flipped-image", () -> {
+            BufferedImage source=image(80,60);Graphics2D sg=source.createGraphics();
+            sg.setColor(Color.RED);sg.fillRect(0,0,40,60);sg.setColor(Color.GREEN);sg.fillRect(40,0,40,60);sg.dispose();
+            BufferedImage target=image(160,100);Graphics2D g=target.createGraphics();g.translate(10,5);
+            g.drawImage(source,100,10,20,50,20,10,60,30,null);g.dispose();
+            color(target.getRGB(40,30),Color.GREEN.getRGB(),0);color(target.getRGB(100,30),Color.RED.getRGB(),0);
+            require(target.getRGB(15,30)==0,"image escaped destination");
+        });
+        check("fallback-text-clip-and-overhang", () -> {
+            BufferedImage full=image(220,100),clipped=image(220,100);
+            for(BufferedImage target:new BufferedImage[]{full,clipped}){
+                Graphics2D g=target.createGraphics();if(target==clipped)g.setClip(65,20,60,50);
+                g.translate(33,12);g.rotate(.08);g.setFont(new Font("Dialog",Font.ITALIC,26).deriveFont(new AffineTransform(1,0,.2,1,0,0)));
+                g.setColor(Color.WHITE);g.drawString("Testing fj",3.5f,40.5f);g.dispose();
+            }
+            for(int y=20;y<70;y++)for(int x=65;x<125;x++)color(clipped.getRGB(x,y),full.getRGB(x,y),1);
+            require(nonempty(clipped)>20,"text disappeared");
+        });
+        check("fallback-dirty-region-work-budget", () -> {
+            CountingImage target=new CountingImage(1024,768);Graphics2D g=target.createGraphics();
+            g.setPaint(new GradientPaint(0,0,Color.RED,1024,768,Color.BLUE));
+            long started=System.nanoTime();for(int i=0;i<40;i++)g.fillRect(700+i%3,500,20,16);g.dispose();
+            System.out.println("FALLBACK small-gradient readPixels="+target.readPixels+" writtenPixels="+target.writtenPixels+" ms="+(System.nanoTime()-started)/1000000);
+            require(target.readPixels<40*2000L&&target.writtenPixels<40*2000L,"small drawing copied the full target");
+            require(target.readBuffers.size()<=1&&target.writeBuffers.size()<=1,"repeated draws allocated pixel arrays");
+            require((target.getRGB(710,508)>>>24)==255,"gradient disappeared");
+            require(target.getRGB(0,0)==0,"drawing escaped dirty region");
+        });
+        check("fallback-source-crop-work-budget", () -> {
+            CountingImage source=new CountingImage(1024,768);source.setRGB(500,400,Color.RED.getRGB());
+            BufferedImage target=image(160,100);Graphics2D g=target.createGraphics();g.rotate(.01);
+            for(int i=0;i<10;i++)g.drawImage(source,40,30,60,50,500,400,510,410,null);g.dispose();
+            require(source.readPixels<=1440,"image crop read the entire source");
+            require(source.readBuffers.size()<=1,"image draws allocated source arrays");
+        });
+        check("fallback-image-does-not-sample-paint", () -> {
+            BufferedImage source=image(8,8);source.setRGB(3,3,Color.RED.getRGB());
+            BufferedImage target=image(80,60);Graphics2D g=target.createGraphics();
+            g.setPaint(new Paint(){
+                public int getTransparency(){return Transparency.OPAQUE;}
+                public PaintContext createContext(ColorModel cm,Rectangle device,Rectangle2D user,AffineTransform transform,RenderingHints hints){throw new AssertionError("image sampled unrelated paint");}
+            });
+            g.drawImage(source,AffineTransform.getTranslateInstance(31,22),null);g.dispose();
+            color(target.getRGB(34,25),Color.RED.getRGB(),0);
+        });
+        check("fallback-copy-area-overlap-and-work-budget", () -> {
+            CountingImage target=new CountingImage(512,384,BufferedImage.TYPE_4BYTE_ABGR);
+            for(int x=200;x<220;x++)for(int y=150;y<166;y++)target.setRGB(x,y,0xff000000|(x<<8)|y);
+            int[] before=target.getRGB(200,150,20,16,null,0,20);target.readPixels=0;
+            Graphics2D g=target.createGraphics();g.setClip(206,153,12,12);g.copyArea(200,150,20,16,5,3);g.dispose();
+            require(target.readPixels<2000,"copyArea copied the whole image");
+            for(int y=153;y<165;y++)for(int x=206;x<218;x++)color(target.getRGB(x,y),before[(y-153)*20+x-205],0);
+            color(target.getRGB(200,150),before[0],0);
+        });
+        check("fallback-reentrant-custom-paint", () -> {
+            BufferedImage outer=image(150,100),nested=image(120,80);Graphics2D g=outer.createGraphics();
+            Paint delegate=new GradientPaint(0,0,Color.RED,150,0,Color.BLUE);
+            g.setPaint(new Paint(){
+                public int getTransparency(){return Transparency.OPAQUE;}
+                public PaintContext createContext(ColorModel cm,Rectangle device,Rectangle2D user,AffineTransform transform,RenderingHints hints){
+                    Graphics2D ng=nested.createGraphics();ng.setPaint(delegate);ng.fillRect(80,50,20,15);ng.dispose();
+                    return delegate.createContext(cm,device,user,transform,hints);
+                }
+            });g.fillRect(30,20,12,10);g.dispose();
+            require((outer.getRGB(35,25)>>>24)==255,"outer drawing corrupted");require((nested.getRGB(85,55)>>>24)==255,"nested drawing corrupted");
+            require(outer.getRGB(85,55)==0,"nested pixels leaked into outer");
+        });
         if (args.length > 0) { long started = System.nanoTime(); writeGallery(new File(args[0])); System.out.println("GALLERY ms=" + (System.nanoTime() - started) / 1000000); }
         System.out.println("GRAPHICS RESULT passed=" + passed + " failed=" + failed);
         if (failed != 0) throw new AssertionError(failed + " graphics contracts failed");
+    }
+    private static final class CountingImage extends BufferedImage {
+        long readPixels,writtenPixels;
+        final Set<int[]> readBuffers=Collections.newSetFromMap(new IdentityHashMap<int[],Boolean>());
+        final Set<int[]> writeBuffers=Collections.newSetFromMap(new IdentityHashMap<int[],Boolean>());
+        CountingImage(int w,int h){super(w,h,BufferedImage.TYPE_INT_ARGB);}
+        CountingImage(int w,int h,int type){super(w,h,type);}
+        @Override public int[] getRGB(int x,int y,int w,int h,int[] data,int offset,int stride){readPixels+=(long)w*h;if(data!=null)readBuffers.add(data);return super.getRGB(x,y,w,h,data,offset,stride);}
+        @Override public void setRGB(int x,int y,int w,int h,int[] data,int offset,int stride){writtenPixels+=(long)w*h;writeBuffers.add(data);super.setRGB(x,y,w,h,data,offset,stride);}
     }
     private static void writeGallery(File output) throws IOException {
         BufferedImage canvas = image(480, 320);

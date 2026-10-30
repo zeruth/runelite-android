@@ -435,22 +435,35 @@ public class BufferedImageGraphics2D extends Graphics2D {
     public void copyArea(int x, int y, int w, int h, int dx, int dy) {
         if (!image.isCanonicalBuffer() || !transformIsTranslateOnly()) {
             syncTarget();
-            int[] original = image.getRGB(0, 0, width, height, null, 0, width);
             java.awt.geom.AffineTransform device = new java.awt.geom.AffineTransform(transform);
             device.preConcatenate(java.awt.geom.AffineTransform.getScaleInstance(deviceScale, deviceScale));
             Shape source = device.createTransformedShape(new Rectangle(x, y, w, h));
             java.awt.geom.Point2D delta = device.deltaTransform(new java.awt.geom.Point2D.Double(dx, dy), null);
             int moveX = (int)Math.round(delta.getX()), moveY = (int)Math.round(delta.getY());
-            for (int row = 0; row < height; row++) for (int col = 0; col < width; col++) {
-                int sx = col - moveX, sy = row - moveY;
-                if (sx < 0 || sy < 0 || sx >= width || sy >= height || !source.contains(sx + .5, sy + .5)) continue;
-                boolean inside = clip.contains(col, row);
-                if (inside && clipRects != null) {
-                    inside = false;
-                    for (int i = 0; i < clipRects.length; i += 4) if (col >= clipRects[i] && col < clipRects[i + 2] && row >= clipRects[i + 1] && row < clipRects[i + 3]) { inside = true; break; }
+            Rectangle capture = source.getBounds().intersection(new Rectangle(0, 0, width, height));
+            Rectangle destination = new Rectangle(capture);
+            destination.translate(moveX, moveY);
+            destination = destination.intersection(clip).intersection(new Rectangle(0, 0, width, height));
+            if (destination.isEmpty()) return;
+            capture = new Rectangle(destination.x-moveX,destination.y-moveY,destination.width,destination.height);
+            GeneralScratch cached = GENERAL_SCRATCH.get();
+            boolean retained = !cached.busy && (long)capture.width*capture.height <= MAX_RETAINED_PIXELS;
+            GeneralScratch scratch = retained ? cached : new GeneralScratch();
+            scratch.busy = true;
+            try {
+                scratch.preparePixels(capture.width,capture.height);
+                int[] original = image.getRGB(capture.x,capture.y,capture.width,capture.height,scratch.destination,0,capture.width);
+                for (int row = destination.y; row < destination.y+destination.height; row++) for (int col = destination.x; col < destination.x+destination.width; col++) {
+                    int sx = col - moveX, sy = row - moveY;
+                    if (sx < 0 || sy < 0 || sx >= width || sy >= height || !source.contains(sx + .5, sy + .5)) continue;
+                    boolean inside = clip.contains(col, row);
+                    if (inside && clipRects != null) {
+                        inside = false;
+                        for (int i = 0; i < clipRects.length; i += 4) if (col >= clipRects[i] && col < clipRects[i + 2] && row >= clipRects[i + 1] && row < clipRects[i + 3]) { inside = true; break; }
+                    }
+                    if (inside) image.setRGB(col, row, original[(sy-capture.y)*capture.width+sx-capture.x]);
                 }
-                if (inside) image.setRGB(col, row, original[sy * width + sx]);
-            }
+            } finally { scratch.busy=false; if(!retained)scratch.recycle(); }
             return;
         }
 
@@ -1359,12 +1372,25 @@ public class BufferedImageGraphics2D extends Graphics2D {
     }
     private void drawGeneralText(String str,float x,float y){
         if(str==null)throw new NullPointerException("text");
+        if(str.isEmpty())return;
+        android.graphics.Paint metrics = new android.graphics.Paint();
+        configureText(metrics);
+        android.graphics.Rect ink = new android.graphics.Rect();
+        metrics.getTextBounds(str, 0, str.length(), ink);
+        android.graphics.Paint.FontMetrics fm = metrics.getFontMetrics();
+        // Include glyph overhangs, spacing and underline/strike-through before transforming.
+        java.awt.geom.Rectangle2D bounds = new java.awt.geom.Rectangle2D.Double(
+            Math.min(0, ink.left) - 2, Math.min(fm.top, ink.top) - 2,
+            Math.max(metrics.measureText(str), ink.right) - Math.min(0, ink.left) + 4,
+            Math.max(fm.bottom, ink.bottom) - Math.min(fm.top, ink.top) + 4);
+        AffineTransform local = AffineTransform.getTranslateInstance(x, y);
+        local.concatenate(font.getTransform());
         renderGeneral((canvas,p,mask)->{
             canvas.save();canvas.translate(x,y);
             AffineTransform ft=font.getTransform();android.graphics.Matrix matrix=new android.graphics.Matrix();
             matrix.setValues(new float[]{(float)ft.getScaleX(),(float)ft.getShearX(),(float)ft.getTranslateX(),(float)ft.getShearY(),(float)ft.getScaleY(),(float)ft.getTranslateY(),0,0,1});
             canvas.concat(matrix);canvas.drawText(str,0,0,p);canvas.restore();
-        },true);
+        },true,local.createTransformedShape(bounds),true);
     }
     @Override public void drawString(AttributedCharacterIterator it,int x,int y){drawString(it,(float)x,(float)y);}
     @Override public void drawString(AttributedCharacterIterator it,float x,float y){
@@ -1741,7 +1767,7 @@ public class BufferedImageGraphics2D extends Graphics2D {
     private interface CanvasOperation{void draw(android.graphics.Canvas canvas,android.graphics.Paint paint,boolean mask);}
     private void generalShape(Shape shape,boolean filled){
         Shape outline=!filled?stroke.createStrokedShape(shape):shape;android.graphics.Path path=androidPath(outline);
-        renderGeneral((canvas,p,mask)->canvas.drawPath(path,p),false);
+        renderGeneral((canvas,p,mask)->canvas.drawPath(path,p),false,outline,true);
     }
     private boolean drawImageBackground(java.awt.Image img,int x,int y,int w,int h,Color background){
         BufferedImage src=buffered(img);if(src==null)return false;
@@ -1751,55 +1777,131 @@ public class BufferedImageGraphics2D extends Graphics2D {
     }
     private void generalImage(BufferedImage src,int x,int y,int w,int h,AffineTransform local,Color background){
         if(w==0||h==0)return;
-        int[] sourcePixels = src.getRGB(0, 0, src.getWidth(), src.getHeight(), null, 0, src.getWidth());
-        if (background != null) {
-            int bg = background.getRGB();
-            for (int i = 0; i < sourcePixels.length; i++) {
-                int pixel = sourcePixels[i], alpha = pixel >>> 24, ba = bg >>> 24;
-                int outAlpha = alpha + (ba * (255 - alpha) + 127) / 255;
-                int composed = outAlpha << 24;
-                for (int shift = 0; shift < 24; shift += 8) {
-                    int component = ((pixel >>> shift) & 255) * alpha + (((bg >>> shift) & 255) * ba * (255 - alpha) + 127) / 255;
-                    if (outAlpha != 0) component = (component + outAlpha / 2) / outAlpha;
-                    composed |= component << shift;
+        Shape destinationBounds = local.createTransformedShape(new java.awt.geom.Rectangle2D.Double(
+            Math.min(x,x+w),Math.min(y,y+h),Math.abs((double)w),Math.abs((double)h)));
+        syncTarget();
+        if(generalBounds(destinationBounds).isEmpty())return;
+        Rectangle source = new Rectangle(Math.min(x,x+w),Math.min(y,y+h),Math.abs(w),Math.abs(h));
+        // Filtering at a cropped edge still needs its neighbouring source texel.
+        if(renderingHints.get(RenderingHints.KEY_INTERPOLATION)!=RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR)
+            source.grow(1,1);
+        source = source.intersection(new Rectangle(0,0,src.getWidth(),src.getHeight()));
+        if(source.isEmpty())return;
+        final Rectangle sourceRegion = source;
+        GeneralScratch cached = IMAGE_SCRATCH.get();
+        boolean retained = !cached.busy && (long)source.width * source.height <= MAX_RETAINED_PIXELS;
+        GeneralScratch scratch = retained ? cached : new GeneralScratch();
+        scratch.busy = true;
+        try {
+            scratch.prepare(source.width,source.height);
+            int[] sourcePixels = src.getRGB(source.x, source.y, source.width, source.height, scratch.destination, 0, source.width);
+            if (background != null) {
+                int bg = background.getRGB();
+                for (int i = 0; i < source.width * source.height; i++) {
+                    int pixel = sourcePixels[i], alpha = pixel >>> 24, ba = bg >>> 24;
+                    int outAlpha = alpha + (ba * (255 - alpha) + 127) / 255;
+                    int composed = outAlpha << 24;
+                    for (int shift = 0; shift < 24; shift += 8) {
+                        int component = ((pixel >>> shift) & 255) * alpha + (((bg >>> shift) & 255) * ba * (255 - alpha) + 127) / 255;
+                        if (outAlpha != 0) component = (component + outAlpha / 2) / outAlpha;
+                        composed |= component << shift;
+                    }
+                    sourcePixels[i] = composed;
                 }
-                sourcePixels[i] = composed;
             }
-        }
-        android.graphics.Bitmap bitmap=android.graphics.Bitmap.createBitmap(sourcePixels,src.getWidth(),src.getHeight(),android.graphics.Bitmap.Config.ARGB_8888);
-        try{
+            android.graphics.Bitmap bitmap=scratch.bitmap;
+            bitmap.setPixels(sourcePixels,0,source.width,0,0,source.width,source.height);
             renderGeneral((canvas,p,mask)->{
                 android.graphics.Matrix m=new android.graphics.Matrix();m.setValues(new float[]{(float)local.getScaleX(),(float)local.getShearX(),(float)local.getTranslateX(),(float)local.getShearY(),(float)local.getScaleY(),(float)local.getTranslateY(),0,0,1});
                 canvas.save();canvas.concat(m);canvas.clipRect(Math.min(x,x+w),Math.min(y,y+h),Math.max(x,x+w),Math.max(y,y+h));
                 if(mask)canvas.drawRect(Math.min(x,x+w),Math.min(y,y+h),Math.max(x,x+w),Math.max(y,y+h),p);
                 else{
                     p.setShader(null);p.setColor(android.graphics.Color.WHITE);
-                    canvas.drawBitmap(bitmap,0,0,p);
+                    canvas.drawBitmap(bitmap,sourceRegion.x,sourceRegion.y,p);
                 }
                 canvas.restore();
-            },false);
-        }finally{bitmap.recycle();}
+            },false,destinationBounds,false);
+        }finally{scratch.busy=false;if(!retained)scratch.recycle();}
     }
-    /** Slow path for noncontiguous images and desktop drawing features; common UI raster calls retain native fast paths. */
-    private void renderGeneral(CanvasOperation operation,boolean text){
-        syncTarget();int w=image.getWidth(),h=image.getHeight();if(w<=0||h<=0)return;
+    /** Scratch storage is shared across short-lived Graphics copies, bounded per drawing thread.
+     * A custom Paint/Composite can reenter drawing; nested calls must lease separate storage. */
+    private static final int MAX_RETAINED_PIXELS = 256 * 1024;
+    private static final ThreadLocal<GeneralScratch> GENERAL_SCRATCH = ThreadLocal.withInitial(GeneralScratch::new);
+    private static final ThreadLocal<GeneralScratch> IMAGE_SCRATCH = ThreadLocal.withInitial(GeneralScratch::new);
+    private static final class GeneralScratch {
+        boolean busy;
+        int[] destination = new int[0], result = new int[0], auxiliary = new int[0];
+        android.graphics.Bitmap bitmap, paintBitmap, maskBitmap;
+        void preparePixels(int w, int h) {
+            int count = Math.multiplyExact(w, h);
+            if (destination.length < count) {
+                destination = new int[count];
+            }
+        }
+        void prepare(int w, int h) {
+            preparePixels(w,h);
+            bitmap = resize(bitmap, w, h);
+        }
+        static android.graphics.Bitmap resize(android.graphics.Bitmap bitmap, int w, int h) {
+            if (bitmap == null || (long)bitmap.getAllocationByteCount() < (long)w * h * 4) {
+                if (bitmap != null) bitmap.recycle();
+                return android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888);
+            }
+            if (bitmap.getWidth() != w || bitmap.getHeight() != h)
+                bitmap.reconfigure(w, h, android.graphics.Bitmap.Config.ARGB_8888);
+            return bitmap;
+        }
+        void recycle() {
+            if (bitmap != null) bitmap.recycle();
+            if (paintBitmap != null) paintBitmap.recycle();
+            if (maskBitmap != null) maskBitmap.recycle();
+        }
+    }
+
+    private Rectangle generalBounds(Shape userBounds) {
+        AffineTransform device = new AffineTransform(transform);
+        device.preConcatenate(AffineTransform.getScaleInstance(deviceScale, deviceScale));
+        java.awt.geom.Rectangle2D bounds = device.createTransformedShape(userBounds).getBounds2D();
+        // Round outward, including antialias/filter coverage at the shape boundary.
+        double x0 = Math.max(Math.max(0, clip.x), Math.floor(bounds.getMinX()) - 2);
+        double y0 = Math.max(Math.max(0, clip.y), Math.floor(bounds.getMinY()) - 2);
+        double x1 = Math.min(Math.min(width, clipX1()), Math.ceil(bounds.getMaxX()) + 2);
+        double y1 = Math.min(Math.min(height, clipY1()), Math.ceil(bounds.getMaxY()) + 2);
+        if (!(x1 > x0 && y1 > y0)) return new Rectangle();
+        return new Rectangle((int)x0, (int)y0, (int)(x1-x0), (int)(y1-y0));
+    }
+
+    /** Only the affected device rectangle crosses the Bitmap/ARGB boundary. */
+    private void renderGeneral(CanvasOperation operation,boolean text,Shape userBounds,boolean usePaint){
+        syncTarget();
+        Rectangle region = generalBounds(userBounds);
+        int w=region.width,h=region.height;if(w<=0||h<=0)return;
         boolean special=xorColor!=null||!(composite instanceof AlphaComposite);
-        int[] destination=image.getRGB(0,0,w,h,null,0,w);
-        android.graphics.Bitmap bitmap=android.graphics.Bitmap.createBitmap(w,h,android.graphics.Bitmap.Config.ARGB_8888);
-        if(!special)bitmap.setPixels(destination,0,w,0,0,w,h);
-        android.graphics.Bitmap paintBitmap=null,maskBitmap=null;
+        GeneralScratch cached = GENERAL_SCRATCH.get();
+        boolean retained = !cached.busy && (long)w * h <= MAX_RETAINED_PIXELS;
+        GeneralScratch scratch = retained ? cached : new GeneralScratch();
+        scratch.busy = true;
         try{
-            android.graphics.Canvas canvas=new android.graphics.Canvas(bitmap);configureCanvas(canvas);
+            scratch.prepare(w,h);
+            int count=w*h;
+            if(scratch.result.length<count)scratch.result=new int[count];
+            if(scratch.auxiliary.length<count)scratch.auxiliary=new int[count];
+            int[] destination=image.getRGB(region.x,region.y,w,h,scratch.destination,0,w);
+            android.graphics.Bitmap bitmap=scratch.bitmap;
+            if(!special)bitmap.setPixels(destination,0,w,0,0,w,h);
+            else bitmap.eraseColor(android.graphics.Color.TRANSPARENT);
+            android.graphics.Canvas canvas=new android.graphics.Canvas(bitmap);configureCanvas(canvas,region);
             android.graphics.Paint p=new android.graphics.Paint();
             p.setAntiAlias(text?renderingHints.get(RenderingHints.KEY_TEXT_ANTIALIASING)!=RenderingHints.VALUE_TEXT_ANTIALIAS_OFF:renderingHints.get(RenderingHints.KEY_ANTIALIASING)==RenderingHints.VALUE_ANTIALIAS_ON);
             p.setFilterBitmap(renderingHints.get(RenderingHints.KEY_INTERPOLATION)!=RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
-            if(text){p.setTypeface(BufferedImageFontMetrics.typefaceFor(font));p.setTextSize(font.getSize2D());p.setLetterSpacing(font.getTracking());p.setUnderlineText(font.isUnderlined());p.setStrikeThruText(font.isStrikethrough());}
-            if(paint instanceof Color)p.setColor(((Color)paint).getRGB());
+            if(text)configureText(p);
+            if(!usePaint)p.setColor(android.graphics.Color.WHITE);
+            else if(paint instanceof Color)p.setColor(((Color)paint).getRGB());
             else{
                 AffineTransform device=new AffineTransform(transform);device.preConcatenate(AffineTransform.getScaleInstance(deviceScale,deviceScale));
-                PaintContext context=paint.createContext(java.awt.image.ColorModel.getRGBdefault(),new Rectangle(0,0,w,h),new java.awt.geom.Rectangle2D.Double(0,0,w,h),device,renderingHints);
+                PaintContext context=paint.createContext(java.awt.image.ColorModel.getRGBdefault(),region,userBounds.getBounds2D(),device,renderingHints);
                 try{
-                    java.awt.image.Raster raster=context.getRaster(0,0,w,h);int[] colors=new int[w*h];java.awt.image.ColorModel cm=context.getColorModel();
+                    java.awt.image.Raster raster=context.getRaster(region.x,region.y,w,h);int[] colors=scratch.auxiliary;java.awt.image.ColorModel cm=context.getColorModel();
                     if (raster instanceof java.awt.image.WritableRaster && raster.getMinX() == 0 && raster.getMinY() == 0) {
                         BufferedImage sampled = new BufferedImage(cm, (java.awt.image.WritableRaster)raster, cm.isAlphaPremultiplied(), null);
                         sampled.getRGB(0, 0, w, h, colors, 0, w);
@@ -1807,33 +1909,40 @@ public class BufferedImageGraphics2D extends Graphics2D {
                         Object pixel = null;
                         for(int row=0;row<h;row++)for(int col=0;col<w;col++){pixel=raster.getDataElements(raster.getMinX()+col,raster.getMinY()+row,pixel);colors[row*w+col]=cm.getRGB(pixel);}
                     }
-                    paintBitmap=android.graphics.Bitmap.createBitmap(colors,w,h,android.graphics.Bitmap.Config.ARGB_8888);
-                    android.graphics.BitmapShader shader=new android.graphics.BitmapShader(paintBitmap,android.graphics.Shader.TileMode.CLAMP,android.graphics.Shader.TileMode.CLAMP);
-                    android.graphics.Matrix inverse=new android.graphics.Matrix();androidMatrix(transform).invert(inverse);shader.setLocalMatrix(inverse);p.setShader(shader);
+                    scratch.paintBitmap=GeneralScratch.resize(scratch.paintBitmap,w,h);
+                    scratch.paintBitmap.setPixels(colors,0,w,0,0,w,h);
+                    android.graphics.BitmapShader shader=new android.graphics.BitmapShader(scratch.paintBitmap,android.graphics.Shader.TileMode.CLAMP,android.graphics.Shader.TileMode.CLAMP);
+                    android.graphics.Matrix inverse=new android.graphics.Matrix();canvas.getMatrix().invert(inverse);shader.setLocalMatrix(inverse);p.setShader(shader);
                 }finally{context.dispose();}
             }
             if(!special){
                 AlphaComposite alpha=(AlphaComposite)composite;p.setAlpha(Math.round(p.getAlpha()*alpha.getAlpha()));p.setXfermode(new android.graphics.PorterDuffXfermode(porterDuff(alpha.getRule())));
             }
             operation.draw(canvas,p,false);
-            int[] result=new int[w*h];bitmap.getPixels(result,0,w,0,0,w,h);
+            int[] result=scratch.result;bitmap.getPixels(result,0,w,0,0,w,h);
             if(special){
-                maskBitmap=android.graphics.Bitmap.createBitmap(w,h,android.graphics.Bitmap.Config.ARGB_8888);android.graphics.Canvas maskCanvas=new android.graphics.Canvas(maskBitmap);configureCanvas(maskCanvas);
+                scratch.maskBitmap=GeneralScratch.resize(scratch.maskBitmap,w,h);
+                android.graphics.Bitmap maskBitmap=scratch.maskBitmap;maskBitmap.eraseColor(android.graphics.Color.TRANSPARENT);
+                android.graphics.Canvas maskCanvas=new android.graphics.Canvas(maskBitmap);configureCanvas(maskCanvas,region);
                 android.graphics.Paint maskPaint=new android.graphics.Paint(p);maskPaint.setShader(null);maskPaint.setColor(android.graphics.Color.WHITE);maskPaint.setXfermode(null);
-                operation.draw(maskCanvas,maskPaint,true);int[] coverage=new int[w*h];maskBitmap.getPixels(coverage,0,w,0,0,w,h);
-                if(xorColor!=null){for(int i=0;i<result.length;i++)result[i]=(coverage[i]>>>24)==0?destination[i]:(destination[i]&0xff000000)|((destination[i]^result[i]^xorColor.getRGB())&0xffffff);}
+                operation.draw(maskCanvas,maskPaint,true);int[] coverage=scratch.auxiliary;maskBitmap.getPixels(coverage,0,w,0,0,w,h);
+                if(xorColor!=null){for(int i=0;i<count;i++)result[i]=(coverage[i]>>>24)==0?destination[i]:(destination[i]&0xff000000)|((destination[i]^result[i]^xorColor.getRGB())&0xffffff);}
                 else{
                     BufferedImage src=new BufferedImage(w,h,BufferedImage.TYPE_INT_ARGB),dst=new BufferedImage(w,h,BufferedImage.TYPE_INT_ARGB),out=new BufferedImage(w,h,BufferedImage.TYPE_INT_ARGB);
                     src.setRGB(0,0,w,h,result,0,w);dst.setRGB(0,0,w,h,destination,0,w);
                     java.awt.CompositeContext context=composite.createContext(src.getColorModel(),dst.getColorModel(),renderingHints);
                     try{context.compose(src.getRaster(),dst.getRaster(),out.getRaster());}finally{context.dispose();}
-                    result=out.getRGB(0,0,w,h,null,0,w);for(int i=0;i<result.length;i++)if((coverage[i]>>>24)==0)result[i]=destination[i];
+                    out.getRGB(0,0,w,h,result,0,w);for(int i=0;i<count;i++)if((coverage[i]>>>24)==0)result[i]=destination[i];
                 }
             }
-            image.setRGB(0,0,w,h,result,0,w);
-        }finally{bitmap.recycle();if(paintBitmap!=null)paintBitmap.recycle();if(maskBitmap!=null)maskBitmap.recycle();}
+            image.setRGB(region.x,region.y,w,h,result,0,w);
+        }finally{scratch.busy=false;if(!retained)scratch.recycle();}
     }
-    private void configureCanvas(android.graphics.Canvas canvas){
+    private void configureText(android.graphics.Paint p){
+        p.setTypeface(BufferedImageFontMetrics.typefaceFor(font));p.setTextSize(font.getSize2D());p.setLetterSpacing(font.getTracking());p.setUnderlineText(font.isUnderlined());p.setStrikeThruText(font.isStrikethrough());
+    }
+    private void configureCanvas(android.graphics.Canvas canvas,Rectangle region){
+        canvas.translate(-region.x,-region.y);
         if(clipRects==null)canvas.clipRect(clip.x,clip.y,clip.x+clip.width,clip.y+clip.height);
         else{android.graphics.Path clipping=new android.graphics.Path();for(int i=0;i<clipRects.length;i+=4)clipping.addRect(clipRects[i],clipRects[i+1],clipRects[i+2],clipRects[i+3],android.graphics.Path.Direction.CW);canvas.clipPath(clipping);}
         canvas.concat(androidMatrix(transform));
