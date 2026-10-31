@@ -8,7 +8,9 @@ import net.runelite.awt.impl.AndroidAudioBridge;
 public final class TestAudioLineContracts {
     static void check(boolean value,String message){if(!value)throw new AssertionError(message);}
     static Object track(SourceDataLine line)throws Exception{
-        Field slot=line.getClass().getDeclaredField("slot");slot.setAccessible(true);Object state=slot.get(line);
+        Class<?> type=line.getClass();
+        while(type!=null) { try { type.getDeclaredField("slot"); break; } catch(NoSuchFieldException ignored) { type=type.getSuperclass(); } }
+        Field slot=type.getDeclaredField("slot");slot.setAccessible(true);Object state=slot.get(line);
         Field track=state.getClass().getDeclaredField("track");track.setAccessible(true);return track.get(state);
     }
     static String state(SourceDataLine line)throws Exception{
@@ -22,9 +24,11 @@ public final class TestAudioLineContracts {
         SourceDataLine one=AndroidAudioBridge.openSourceDataLine(format,8192);
         SourceDataLine two=AndroidAudioBridge.openSourceDataLine(format,8192);
         one.open();two.open();check(track(one)!=track(two),"active lines need independent tracks");
+        System.out.println("AUDIO sdk="+android.os.Build.VERSION.SDK_INT+" requested=8192 "+state(one));
         one.start();two.start();one.write(new byte[4096],0,4096);two.write(new byte[4096],0,4096);
         long deadline=System.nanoTime()+3_000_000_000L;
         while(one.getLongFramePosition()<2048&&System.nanoTime()<deadline)Thread.sleep(10);
+        System.out.println("AUDIO after short write bytes=4096 "+state(one));
         check(one.getLongFramePosition()==2048,"played frame counter: "+state(one));one.drain();
         two.stop();long frozen=two.getLongFramePosition();Thread.sleep(30);check(two.getLongFramePosition()==frozen,"pause freezes playback");
         two.flush();check(two.available()>0,"flush frees this line");two.start();two.close();
