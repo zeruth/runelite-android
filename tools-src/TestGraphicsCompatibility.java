@@ -155,6 +155,28 @@ public final class TestGraphicsCompatibility {
             Font scaled = font.deriveFont(AffineTransform.getScaleInstance(2, 1));
             require(scaled.isTransformed(), "font transform lost"); near(scaled.getStringBounds("Test", context).getWidth(), font.getStringBounds("Test", context).getWidth() * 2, 1);
         });
+        check("gradient-context-buffer-ownership", () -> {
+            Paint[] paints = {
+                new GradientPaint(-3, 2, new Color(255, 20, 40, 100), 51, 39, new Color(10, 90, 255, 220), true),
+                new LinearGradientPaint(0, 0, 70, 50, new float[]{0,.4f,1}, new Color[]{Color.RED, Color.GREEN, Color.BLUE}),
+                new RadialGradientPaint(20, 20, 30, new float[]{0,1}, new Color[]{Color.WHITE, Color.BLACK})
+            };
+            for (Paint paint : paints) {
+                AffineTransform transform = AffineTransform.getRotateInstance(.2, 20, 20);
+                PaintContext first = paint.createContext(ColorModel.getRGBdefault(), new Rectangle(0,0,80,60), new Rectangle(0,0,80,60), transform, new RenderingHints(null));
+                PaintContext nested = paint.createContext(ColorModel.getRGBdefault(), new Rectangle(0,0,80,60), new Rectangle(0,0,80,60), transform, new RenderingHints(null));
+                try {
+                    Raster full = first.getRaster(0,0,80,60);
+                    int[] saved = new int[80*60];
+                    for(int y=0;y<60;y++)for(int x=0;x<80;x++)saved[y*80+x]=first.getColorModel().getRGB(full.getDataElements(x,y,null));
+                    Raster other = nested.getRaster(300,200,13,11);
+                    require(full.getDataBuffer()!=other.getDataBuffer(), "live paint contexts share writable storage");
+                    for(int y=0;y<60;y++)for(int x=0;x<80;x++)color(first.getColorModel().getRGB(full.getDataElements(x,y,null)),saved[y*80+x],0);
+                    Raster crop = first.getRaster(9,7,17,13);
+                    for(int y=0;y<13;y++)for(int x=0;x<17;x++)color(first.getColorModel().getRGB(crop.getDataElements(x,y,null)),saved[(y+7)*80+x+9],1);
+                } finally { nested.dispose(); first.dispose(); }
+            }
+        });
         check("fallback-gradient-global-coordinates", () -> {
             BufferedImage full = image(180, 150), clipped = image(180, 150);
             for (BufferedImage target : new BufferedImage[]{full, clipped}) {

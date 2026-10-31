@@ -61,10 +61,14 @@ public abstract class MultipleGradientPaint implements Paint {
         try { inverse = combined.createInverse(); }
         catch (java.awt.geom.NoninvertibleTransformException e) { throw new IllegalArgumentException("Singular gradient transform", e); }
         return new PaintContext() {
-            public void dispose() { /* The context owns no external resources. */ }
+            private BufferedImage image;
+            public void dispose() { net.runelite.awt.impl.GradientRasterCache.release(image); image=null; }
             public ColorModel getColorModel() { return ColorModel.getRGBdefault(); }
             public Raster getRaster(int x, int y, int width, int height) {
-                BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+                if (image == null || image.getWidth() < width || image.getHeight() < height) {
+                    net.runelite.awt.impl.GradientRasterCache.release(image);
+                    image=net.runelite.awt.impl.GradientRasterCache.acquire(width,height);
+                }
                 int[] pixels = image.backingArray();
                 double m00 = inverse.getScaleX(), m01 = inverse.getShearX(), m02 = inverse.getTranslateX();
                 double m10 = inverse.getShearY(), m11 = inverse.getScaleY(), m12 = inverse.getTranslateY();
@@ -72,7 +76,7 @@ public abstract class MultipleGradientPaint implements Paint {
                     double px = m00 * (x + .5) + m01 * (y + row + .5) + m02;
                     double py = m10 * (x + .5) + m11 * (y + row + .5) + m12;
                     for (int col = 0; col < width; col++, px += m00, py += m10)
-                        pixels[row * width + col] = sample(fraction(px, py));
+                        pixels[row * image.getWidth() + col] = sample(fraction(px, py));
                 }
                 return image.getRaster();
             }

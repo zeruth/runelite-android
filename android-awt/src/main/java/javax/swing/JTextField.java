@@ -37,6 +37,7 @@ public class JTextField extends JTextComponent {
     }
 
     private java.awt.Dimension cachedPref;
+    @Override public void invalidate() { cachedPref = null; super.invalidate(); }
     @Override
     public java.awt.Dimension getPreferredSize() {
         if (isPreferredSizeSet()) return super.getPreferredSize();

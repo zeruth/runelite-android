@@ -114,6 +114,9 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
     @Volatile private var logicalWidth = BASE_LOGICAL_WIDTH
     private var diagnosed = false
     private val wheel = net.runelite.mp.input.MouseWheelSteps()
+    private var paintedRoot: JComponent? = null // AWT thread only
+    private var paintedGeneration = -1L // AWT thread only
+    private var paintedLayoutGeneration = -1L // AWT thread only
     private val render = object : Runnable {
         override fun run() {
             if (!running) return
@@ -143,8 +146,16 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
                             else {
                                 component.isVisible = true
                                 component.setBounds(0, 0, lw, h)
-                                invalidateTree(component)
-                                component.validate()
+                                val resized = raster?.let { it.width != pw || it.height != ph } ?: true
+                                val active = android.os.SystemClock.uptimeMillis() - lastInteraction < 500 || !flinger.isFinished
+                                val dirty = component !== paintedRoot || resized || !component.isValid() ||
+                                    component.subtreeLayoutGeneration() != paintedLayoutGeneration ||
+                                    component.subtreePaintGeneration() != paintedGeneration
+                                if (!dirty && !active) return@invokeLater
+                                if (!component.isValid()) component.validate()
+                                // Keep repaint requests raised during paint pending for the next frame.
+                                val generation = component.subtreePaintGeneration()
+                                val layoutGeneration = component.subtreeLayoutGeneration()
                                 if (!diagnosed) {
                                     diagnosed = true
                                     fun describe(c: Component, depth: Int): String =
@@ -167,16 +178,19 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
                                 target.setPixels(image.backingArray(), 0, pw, 0, 0, pw, ph)
                                 backBitmap = backBitmap xor 1
                                 bitmap = target
+                                paintedRoot = component
+                                paintedGeneration = generation
+                                paintedLayoutGeneration = layoutGeneration
                             }
                         }
                     } catch (t: Throwable) {
                         android.util.Log.e("SwingPanelHost", "Cannot render $panelKey", t)
                         failure = "Panel could not render. See logs."
                     }
-                    post {
+                    finally { post {
                         busy = false
-                        if (running && attachment == attachmentSerial && renderedMount == mountSerial) { frame = bitmap; error = failure; invalidate() }
-                    }
+                        if (running && attachment == attachmentSerial && renderedMount == mountSerial && (bitmap != null || failure != null)) { frame = bitmap; error = failure; invalidate() }
+                    } }
                 }
             }
             // Frame rate while the panel is being touched or scrolled (a drag at the idle
@@ -206,6 +220,7 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
             root = null
             // Full-res buffers are several MB each; don't park them while the sidebar is shut.
             raster = null
+            paintedRoot = null
             bitmaps.fill(null)
         }
         super.onDetachedFromWindow()
@@ -1081,10 +1096,6 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
         return component
     }
 
-    private fun invalidateTree(component: Component) {
-        component.invalidate()
-        if (component is Container) component.components.forEach { invalidateTree(it) }
-    }
 
     private companion object {
         val hosts = java.util.concurrent.CopyOnWriteArrayList<java.lang.ref.WeakReference<SwingPanelView>>()

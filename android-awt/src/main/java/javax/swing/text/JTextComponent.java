@@ -11,9 +11,17 @@ public abstract class JTextComponent extends JComponent {
 
     protected Document doc;
     protected String text = "";
+    private final javax.swing.event.DocumentListener documentListener = new DocumentRepaintListener();
+    private final class DocumentRepaintListener implements javax.swing.event.DocumentListener, java.io.Serializable {
+        private static final long serialVersionUID = 1L;
+        public void insertUpdate(javax.swing.event.DocumentEvent e) { revalidate(); repaint(); }
+        public void removeUpdate(javax.swing.event.DocumentEvent e) { revalidate(); repaint(); }
+        public void changedUpdate(javax.swing.event.DocumentEvent e) { revalidate(); repaint(); }
+    }
 
     public JTextComponent() {
         this.doc = new PlainDocument();
+        this.doc.addDocumentListener(documentListener);
         setCaret(new DefaultCaret());
         setHighlighter(new DefaultHighlighter());
     }
@@ -39,7 +47,8 @@ public abstract class JTextComponent extends JComponent {
     public Document getDocument() { return doc; }
     public void setDocument(Document d) {
         if(d==null)throw new IllegalArgumentException("document");Document old=doc;
-        if(caret!=null&&old!=null)caret.deinstall(this);doc=d;if(caret!=null)caret.install(this);
+        if(old!=null)old.removeDocumentListener(documentListener);
+        if(caret!=null&&old!=null)caret.deinstall(this);doc=d;doc.addDocumentListener(documentListener);if(caret!=null)caret.install(this);
         if(highlighter!=null)highlighter.install(this);firePropertyChange("document",old,d);revalidate();repaint();
     }
     public String getText(int offset,int length) throws BadLocationException { return doc.getText(offset,length); }

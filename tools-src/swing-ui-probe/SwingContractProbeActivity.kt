@@ -127,6 +127,7 @@ class SwingContractProbeActivity : ComponentActivity() {
                             Log.i(TAG, result)
                         } catch (error: Throwable) { output.writeText(error.stackTraceToString()); throw error }
                     }
+                    "panel-rendering" -> Thread({ PanelRenderingProbe.run(this) }, "Panel-rendering-contracts").start()
                     "graphics" -> {
                         val output = File(filesDir, "graphics-result.txt")
                         try {

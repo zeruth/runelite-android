@@ -42,20 +42,27 @@ public class GradientPaint implements Paint {
         final AffineTransform inverse;
         try{inverse=xform.createInverse();}catch(java.awt.geom.NoninvertibleTransformException e){throw new IllegalArgumentException(e);}
         return new PaintContext(){
-            public void dispose(){}
+            private java.awt.image.BufferedImage image;
+            public void dispose(){net.runelite.awt.impl.GradientRasterCache.release(image);image=null;}
             public ColorModel getColorModel(){return ColorModel.getRGBdefault();}
             public java.awt.image.Raster getRaster(int x,int y,int w,int h){
-                java.awt.image.BufferedImage image=new java.awt.image.BufferedImage(w,h,java.awt.image.BufferedImage.TYPE_INT_ARGB);
-                int[] pixels=new int[w*h];
-                double dx=x2-x1,dy=y2-y1,length=dx*dx+dy*dy;java.awt.geom.Point2D.Double point=new java.awt.geom.Point2D.Double();
-                for(int row=0;row<h;row++)for(int col=0;col<w;col++){
-                    point.setLocation(x+col+0.5,y+row+0.5);inverse.transform(point,point);
-                    double t=length==0?0:((point.x-x1)*dx+(point.y-y1)*dy)/length;
-                    if(cyclic){t=t-Math.floor(t/2)*2;if(t>1)t=2-t;}else t=Math.max(0,Math.min(1,t));
-                    int pixel=0,a=c1.getRGB(),b=c2.getRGB();for(int shift=0;shift<=24;shift+=8)pixel|=((int)Math.round(((a>>>shift)&255)*(1-t)+((b>>>shift)&255)*t))<<shift;
-                    pixels[row*w+col]=pixel;
+                if(image==null||image.getWidth()<w||image.getHeight()<h){
+                    net.runelite.awt.impl.GradientRasterCache.release(image);
+                    image=net.runelite.awt.impl.GradientRasterCache.acquire(w,h);
                 }
-                image.setRGB(0,0,w,h,pixels,0,w);
+                int[] pixels=image.backingArray();int stride=image.getWidth();
+                double dx=x2-x1,dy=y2-y1,length=dx*dx+dy*dy;
+                double m00=inverse.getScaleX(),m01=inverse.getShearX(),m02=inverse.getTranslateX();
+                double m10=inverse.getShearY(),m11=inverse.getScaleY(),m12=inverse.getTranslateY();
+                int a=c1.getRGB(),b=c2.getRGB();
+                for(int row=0;row<h;row++)for(int col=0;col<w;col++){
+                    double px=x+col+0.5,py=y+row+0.5;
+                    double ux=m00*px+m01*py+m02,uy=m10*px+m11*py+m12;
+                    double t=length==0?0:((ux-x1)*dx+(uy-y1)*dy)/length;
+                    if(cyclic){t=t-Math.floor(t/2)*2;if(t>1)t=2-t;}else t=Math.max(0,Math.min(1,t));
+                    int pixel=0;for(int shift=0;shift<=24;shift+=8)pixel|=((int)Math.round(((a>>>shift)&255)*(1-t)+((b>>>shift)&255)*t))<<shift;
+                    pixels[row*stride+col]=pixel;
+                }
                 return image.getRaster();
             }
         };

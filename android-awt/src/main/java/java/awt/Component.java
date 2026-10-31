@@ -43,7 +43,7 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
     public void removePropertyChangeListener(String name, java.beans.PropertyChangeListener listener) { properties().removePropertyChangeListener(name, listener); }
     public java.beans.PropertyChangeListener[] getPropertyChangeListeners() { return properties().getPropertyChangeListeners(); }
     public java.beans.PropertyChangeListener[] getPropertyChangeListeners(String name) { return properties().getPropertyChangeListeners(name); }
-    public void firePropertyChange(String name, Object oldValue, Object newValue) { if (propertyChanges != null) propertyChanges.firePropertyChange(name, oldValue, newValue); }
+    public void firePropertyChange(String name, Object oldValue, Object newValue) { if (!java.util.Objects.equals(oldValue, newValue)) repaint(); if (propertyChanges != null) propertyChanges.firePropertyChange(name, oldValue, newValue); }
     public void firePropertyChange(String name, boolean oldValue, boolean newValue) { if (oldValue != newValue) firePropertyChange(name, Boolean.valueOf(oldValue), Boolean.valueOf(newValue)); }
     public void firePropertyChange(String name, int oldValue, int newValue) { if (oldValue != newValue) firePropertyChange(name, Integer.valueOf(oldValue), Integer.valueOf(newValue)); }
     public void firePropertyChange(String name, byte oldValue, byte newValue) { if (oldValue != newValue) firePropertyChange(name, Byte.valueOf(oldValue), Byte.valueOf(newValue)); }
@@ -160,7 +160,7 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
     public void setLocation(int x, int y) {
         boolean moved = this.x != x || this.y != y;
         this.x = x; this.y = y;
-        if (moved) fireComponentMoved();
+        if (moved) { repaint(); fireComponentMoved(); }
     }
     public void setLocation(Point p)            { setLocation(p.x, p.y); }
     public void setSize(int w, int h) {
@@ -179,7 +179,7 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
         // size falls back to getSize(). The JDK invalidates on move too; doing that here
         // would just make every layout pass re-dirty the tree it had just laid out.
         if (resized) invalidate();
-        if (moved) fireComponentMoved();
+        if (moved) { repaint(); fireComponentMoved(); }
         if (resized) fireComponentResized();
     }
     public void setBounds(Rectangle r)          { setBounds(r.x, r.y, r.width, r.height); }
@@ -270,8 +270,14 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
     public void repaint(long tm) { repaint(tm, 0, 0, width, height); }
     public void repaint(int x, int y, int width, int height) { repaint(0, x, y, width, height); }
     public void repaint(long tm, int x, int y, int width, int height) {
-        // No-op until a host backend is plugged in.
+        long generation = repaintSequence.incrementAndGet();
+        for (Component c = this; c != null; c = c.parent) c.subtreePaintGeneration = generation;
     }
+
+    private static final java.util.concurrent.atomic.AtomicLong repaintSequence = new java.util.concurrent.atomic.AtomicLong();
+    private volatile long subtreePaintGeneration;
+    /** Repaint requests within this tree, consumed by detached Android panel hosts. */
+    public final long subtreePaintGeneration() { return subtreePaintGeneration; }
 
     public void paint(Graphics g) {
         // Default: fill with background if we have one. Subclasses extend.
@@ -314,6 +320,7 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
      * layout managers may have cached sizes since the previous change.
      */
     public void invalidate() {
+        repaint();
         // Bumped even when already invalid: a second change (new text on a label that is
         // still pending layout) must still discard measurements layouts have cached.
         layoutGeneration++;
@@ -369,6 +376,7 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
     }
 
     public boolean imageUpdate(Image img, int infoflags, int x, int y, int w, int h) {
+        if ((infoflags & (SOMEBITS | FRAMEBITS | ALLBITS)) != 0) repaint();
         return (infoflags & (ALLBITS | ABORT)) == 0;
     }
 
