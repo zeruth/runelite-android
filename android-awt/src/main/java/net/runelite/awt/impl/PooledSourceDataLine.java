@@ -7,16 +7,18 @@ import java.util.concurrent.*;
 import javax.sound.sampled.*;
 
 /** Independent active lines; short-lived idle tracks preserve rapid reopen continuity. */
-final class PooledSourceDataLine implements SourceDataLine {
+class PooledSourceDataLine implements SourceDataLine {
     private static final Object POOL_LOCK = new Object();
     private static final List<Slot> IDLE = new ArrayList<>();
     private static final ScheduledExecutorService REAPER = Executors.newSingleThreadScheduledExecutor(r -> {
         Thread thread = new Thread(r, "AudioTrack-retire"); thread.setDaemon(true); return thread;
     });
-    private static final class Slot {
+    static final class Slot {
         final AudioTrack track;
         final AudioFormat format;
         final int bufferSize;
+        Object legacyStartup;
+        volatile boolean unusable;
         volatile long written;
         long wrap, lastHead;
         int calls;
@@ -96,6 +98,12 @@ final class PooledSourceDataLine implements SourceDataLine {
         }
     }
     private static void returnSlot(Slot candidate) {
+        if (candidate.unusable) {
+            final long generation;
+            synchronized (POOL_LOCK) { candidate.idle = true; generation = ++candidate.idleGeneration; }
+            retire(candidate, generation);
+            return;
+        }
         final long generation;
         synchronized(POOL_LOCK) { candidate.idle=true; generation=++candidate.idleGeneration; IDLE.add(candidate); }
         REAPER.schedule(()->retire(candidate,generation),2,TimeUnit.SECONDS);
@@ -116,6 +124,8 @@ final class PooledSourceDataLine implements SourceDataLine {
             if(candidate.calls==0 && candidate.retired && candidate.stopped)candidate.track.release();
         }
     }
+    final Slot borrowLegacy() { return borrow(); }
+    static void releaseLegacy(Slot candidate) { release(candidate); }
     @Override public void open() throws LineUnavailableException { open(format,requestedBuffer); }
     @Override public void open(AudioFormat format) throws LineUnavailableException { open(format,requestedBuffer); }
     @Override public void open(AudioFormat format,int bufferSize) throws LineUnavailableException {

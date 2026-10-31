@@ -13,6 +13,9 @@ public final class AndroidAudioBridge {
         if (format == null) {
             throw new LineUnavailableException("AudioFormat required");
         }
+        if (android.os.Build.VERSION.SDK_INT >= 26 && android.os.Build.VERSION.SDK_INT <= 30) {
+            return new LegacySourceDataLine(format, bufferSize);
+        }
         return new PooledSourceDataLine(format, bufferSize);
     }
 }
