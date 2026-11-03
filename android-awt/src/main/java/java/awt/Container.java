@@ -15,6 +15,10 @@ public class Container extends Component {
     }
 
     public int getComponentCount() { return children.size(); }
+    @Override public void addNotify() {
+        super.addNotify();
+        for (Component child : getComponents()) if (!child.notified) child.addNotify();
+    }
     @Override public void removeNotify() {
         for (Component child : getComponents()) child.removeNotify();
         super.removeNotify();
