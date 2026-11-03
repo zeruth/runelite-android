@@ -3974,37 +3974,37 @@ public final class ItemID
 	public static final int RUNE_PICKAXE = 1275;
 
 	/**
-	 * Bronze sword
+	 * Bronze shortsword
 	 */
 	public static final int BRONZE_SWORD = 1277;
 
 	/**
-	 * Iron sword
+	 * Iron shortsword
 	 */
 	public static final int IRON_SWORD = 1279;
 
 	/**
-	 * Steel sword
+	 * Steel shortsword
 	 */
 	public static final int STEEL_SWORD = 1281;
 
 	/**
-	 * Black sword
+	 * Black shortsword
 	 */
 	public static final int BLACK_SWORD = 1283;
 
 	/**
-	 * Mithril sword
+	 * Mithril shortsword
 	 */
 	public static final int MITHRIL_SWORD = 1285;
 
 	/**
-	 * Adamant sword
+	 * Adamant shortsword
 	 */
 	public static final int ADAMANT_SWORD = 1287;
 
 	/**
-	 * Rune sword
+	 * Rune shortsword
 	 */
 	public static final int RUNE_SWORD = 1289;
 
@@ -20949,7 +20949,7 @@ public final class ItemID
 	public static final int WHITE_MAGIC_STAFF = 6603;
 
 	/**
-	 * White sword
+	 * White shortsword
 	 */
 	public static final int WHITE_SWORD = 6605;
 
@@ -24834,7 +24834,7 @@ public final class ItemID
 	public static final int CERT_POH_BOXING_GLOVES_BLUE = 7674;
 
 	/**
-	 * Wooden sword
+	 * Wooden shortsword
 	 */
 	public static final int POH_WOODEN_SWORD = 7675;
 
@@ -31926,7 +31926,7 @@ public final class ItemID
 	public static final int AIDE_STICK = 9702;
 
 	/**
-	 * Training sword
+	 * Training shortsword
 	 */
 	public static final int AIDE_SHORTSWORD = 9703;
 
@@ -31936,7 +31936,7 @@ public final class ItemID
 	public static final int AIDE_SHIELD = 9704;
 
 	/**
-	 * Training bow
+	 * Training shortbow
 	 */
 	public static final int AIDE_SHORTBOW = 9705;
 
@@ -51610,7 +51610,7 @@ public final class ItemID
 	public static final int KODAI_WAND = 21006;
 
 	/**
-	 * Dragon sword
+	 * Dragon shortsword
 	 */
 	public static final int DRAGON_SHORTSWORD = 21009;
 
@@ -52105,7 +52105,7 @@ public final class ItemID
 	public static final int BR_ELDER_MAUL = 21205;
 
 	/**
-	 * Dragon sword
+	 * Dragon shortsword
 	 */
 	public static final int BR_DRAGON_SWORD = 21206;
 
@@ -71299,7 +71299,7 @@ public final class ItemID
 	public static final int BH_DRAGON_MACE_CORRUPTED = 28027;
 
 	/**
-	 * Dragon sword (cr)
+	 * Dragon shortsword (cr)
 	 */
 	public static final int BH_DRAGON_SHORTSWORD_CORRUPTED = 28029;
 
@@ -90938,6 +90938,122 @@ public final class ItemID
 	public static final int TFA_MIDRAID_SUPPLIES_LEFTOVERS = 34730;
 	public static final int FLETCHING_BOLT_SHAFT_FLIGHTED_ASCENSION = 34731;
 
+	/**
+	 * Candy onion
+	 */
+	public static final int HW26_CANDY_ONION = 34732;
+
+	/**
+	 * Sugar
+	 */
+	public static final int HW26_SUGAR = 34734;
+
+	/**
+	 * Molten sugar
+	 */
+	public static final int HW26_MOLTEN_SUGAR = 34736;
+
+	/**
+	 * Old onion
+	 */
+	public static final int HW26_ONION = 34738;
+
+	/**
+	 * Vampyre monocle
+	 */
+	public static final int HW26_REWARD_HEAD = 34740;
+
+	/**
+	 * Vampyre costume top
+	 */
+	public static final int HW26_REWARD_TOP = 34742;
+
+	/**
+	 * Vampyre costume bottom
+	 */
+	public static final int HW26_REWARD_LEGS = 34744;
+
+	/**
+	 * Vampyre costume cape
+	 */
+	public static final int HW26_REWARD_CAPE = 34746;
+
+	/**
+	 * Antique lamp
+	 */
+	public static final int BKF_LAMP = 34748;
+
+	/**
+	 * Antique lamp
+	 */
+	public static final int DEMON_SLAYER_LAMP = 34749;
+
+	/**
+	 * Antique lamp
+	 */
+	public static final int ERNEST_CHICKEN_LAMP = 34750;
+
+	/**
+	 * Antique lamp
+	 */
+	public static final int MBA_LAMP = 34751;
+
+	/**
+	 * Mudfoot
+	 */
+	public static final int MBA_MUDFOOT_FOLLOWER_OBJ = 34752;
+
+	/**
+	 * Mudfoot
+	 */
+	public static final int MBA_MUDFOOT_FOLLOWER_SPEAR_OBJ = 34753;
+
+	/**
+	 * Antique lamp
+	 */
+	public static final int RANDJ_LAMP = 34754;
+
+	/**
+	 * Antique lamp
+	 */
+	public static final int SOA_LAMP = 34755;
+
+	/**
+	 * Letter
+	 */
+	public static final int WOTW_LETTER_LANDS_END = 34756;
+
+	/**
+	 * Newspaper cutting
+	 */
+	public static final int WOTW_NEWS_LANDS_END = 34757;
+
+	/**
+	 * Bloody knife
+	 */
+	public static final int WOTW_KNIFE_LANDS_END = 34758;
+
+	/**
+	 * Human head
+	 */
+	public static final int WOTW_HEAD_HOSIDIUS = 34759;
+
+	/**
+	 * Letter
+	 */
+	public static final int WOTW_LETTER_HOSIDIUS = 34760;
+
+	/**
+	 * Certificate
+	 */
+	public static final int WOTW_CERTIFICATE_HOSIDIUS = 34761;
+
+	/**
+	 * Amulet of sight
+	 */
+	public static final int AMULET_OF_SIGHT = 34762;
+	public static final int SPINNING_WHEEL_ICON_DUMMY = 34765;
+
 	public static final class Cert
 	{
 		public static final int TWPART1 = 7;
@@ -95669,6 +95785,7 @@ public final class ItemID
 		public static final int OBLIGATOR_UNCHARGED = 34718;
 		public static final int RONDACHE = 34720;
 		public static final int ZORYAS_TOME_UNCHARGED = 34728;
+		public static final int AMULET_OF_SIGHT = 34763;
 	}
 
 	public static final class Placeholder
@@ -105679,6 +105796,15 @@ public final class ItemID
 		public static final int RONDACHE = 34721;
 		public static final int ARCHIVISTS_FOLIO = 34724;
 		public static final int ZORYAS_TOME = 34726;
+		public static final int HW26_CANDY_ONION = 34733;
+		public static final int HW26_SUGAR = 34735;
+		public static final int HW26_MOLTEN_SUGAR = 34737;
+		public static final int HW26_ONION = 34739;
+		public static final int HW26_REWARD_HEAD = 34741;
+		public static final int HW26_REWARD_TOP = 34743;
+		public static final int HW26_REWARD_LEGS = 34745;
+		public static final int HW26_REWARD_CAPE = 34747;
+		public static final int AMULET_OF_SIGHT = 34764;
 	}
 /* This file is automatically generated. Do not edit. */
 }
