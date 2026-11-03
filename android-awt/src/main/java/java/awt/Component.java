@@ -73,6 +73,7 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
     /** Visibility of a detached component tree mounted directly by the Android host. */
     public void setHostShowing(boolean showing) {
         boolean previous = isShowing(); hostShowing = showing;
+        if (showing && !notified) addNotify();
         if (!showing) KeyboardFocusManager.getCurrentKeyboardFocusManager().clearFocusIn(this);
         if (previous != isShowing()) fireHierarchyChanged(this, parent, java.awt.event.HierarchyEvent.SHOWING_CHANGED);
     }
@@ -111,6 +112,8 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
         fireHierarchyChanged(this, p != null ? p : previous,
             java.awt.event.HierarchyEvent.PARENT_CHANGED
             | (showing != isShowing() ? java.awt.event.HierarchyEvent.SHOWING_CHANGED : 0));
+        if (p == null) { if (notified) removeNotify(); }
+        else if (p.notified && !notified) addNotify();
     }
 
     private void fireHierarchyChanged(Component changed, Container changedParent, long flags) {
@@ -239,8 +242,12 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
     public void setEnabled(boolean e) { boolean old = enabled; enabled = e; if (!e) KeyboardFocusManager.getCurrentKeyboardFocusManager().clearFocusIn(this); firePropertyChange("enabled", old, e); }
     public boolean isShowing()    { return visible && (hostShowing || parent != null && parent.isShowing()); }
     public boolean isDisplayable() { return true; }
+    /** Set while this tree is mounted, so subclasses get the same addNotify/removeNotify calls as on the JDK. */
+    boolean notified;
+    /** Android components have no native AWT peer to create; discard layout validity. */
+    public void addNotify() { notified = true; invalidate(); }
     /** Android components have no native AWT peer to dispose; discard layout validity. */
-    public void removeNotify() { invalidate(); }
+    public void removeNotify() { notified = false; invalidate(); }
 
     public Graphics getGraphics() {
         // Host-provided rendering target; none in the headless shadow.

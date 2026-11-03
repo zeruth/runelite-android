@@ -9,6 +9,7 @@ public class JProgressBar extends JComponent implements SwingConstants {
     protected boolean stringPainted;
     protected boolean indeterminate;
     protected String progressString;
+    private boolean borderPainted = true;
 
     private final javax.swing.event.EventListenerList listeners=new javax.swing.event.EventListenerList();
     private final ChangeListener modelListener=e->{javax.swing.event.ChangeEvent event=new javax.swing.event.ChangeEvent(this);for(ChangeListener l:getChangeListeners())l.stateChanged(event);repaint();};
@@ -28,6 +29,8 @@ public class JProgressBar extends JComponent implements SwingConstants {
     public void setMaximum(int n) { model.setMaximum(n); }
     public boolean isStringPainted() { return stringPainted; }
     public void setStringPainted(boolean b) { stringPainted = b; }
+    public boolean isBorderPainted() { return borderPainted; }
+    public void setBorderPainted(boolean b) { borderPainted = b; }
     public String getString() { return progressString; }
     public void setString(String s) { progressString = s; }
     public boolean isIndeterminate() { return indeterminate; }
