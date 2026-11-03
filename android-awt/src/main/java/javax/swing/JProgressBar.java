@@ -30,7 +30,8 @@ public class JProgressBar extends JComponent implements SwingConstants {
     public boolean isStringPainted() { return stringPainted; }
     public void setStringPainted(boolean b) { stringPainted = b; }
     public boolean isBorderPainted() { return borderPainted; }
-    public void setBorderPainted(boolean b) { borderPainted = b; }
+    public void setBorderPainted(boolean b) { boolean old = borderPainted; borderPainted = b; firePropertyChange("borderPainted", old, b); if (old != b) repaint(); }
+    @Override protected void paintBorder(java.awt.Graphics g) { if (borderPainted) super.paintBorder(g); }
     public String getString() { return progressString; }
     public void setString(String s) { progressString = s; }
     public boolean isIndeterminate() { return indeterminate; }

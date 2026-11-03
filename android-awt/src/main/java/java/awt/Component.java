@@ -73,7 +73,7 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
     /** Visibility of a detached component tree mounted directly by the Android host. */
     public void setHostShowing(boolean showing) {
         boolean previous = isShowing(); hostShowing = showing;
-        if (showing && !notified) addNotify();
+        if (showing != notified) { if (showing) addNotify(); else removeNotify(); }
         if (!showing) KeyboardFocusManager.getCurrentKeyboardFocusManager().clearFocusIn(this);
         if (previous != isShowing()) fireHierarchyChanged(this, parent, java.awt.event.HierarchyEvent.SHOWING_CHANGED);
     }
