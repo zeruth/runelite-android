@@ -47,7 +47,8 @@ public class JTextField extends JTextComponent {
         int colW = columns > 0
             ? columns * fm.charWidth('m')
             : Math.max(60, fm.stringWidth(getText() == null ? "" : getText()) + 8);
-        c = new java.awt.Dimension(colW + 4, fm.getHeight() + 4);
+        java.awt.Insets in = getInsets();
+        c = new java.awt.Dimension(colW + 4 + in.left + in.right, fm.getHeight() + 4 + in.top + in.bottom);
         cachedPref = c;
         return new java.awt.Dimension(c);
     }
@@ -66,12 +67,14 @@ public class JTextField extends JTextComponent {
         java.awt.Color saved = g.getColor();
         g.setColor(getForeground());
         g.setFont(getFont());
+        java.awt.Insets in = getInsets();
+        int textWidth = getWidth() - in.left - in.right;
         int x = horizontalAlignment == SwingConstants.CENTER
-            ? (getWidth() - fm.stringWidth(s)) / 2
+            ? in.left + (textWidth - fm.stringWidth(s)) / 2
             : (horizontalAlignment == SwingConstants.RIGHT || horizontalAlignment == SwingConstants.TRAILING
-                ? getWidth() - fm.stringWidth(s) - 4
-                : 4);
-        int baseline = (getHeight() - fm.getHeight()) / 2 + fm.getAscent();
+                ? getWidth() - in.right - fm.stringWidth(s) - 4
+                : in.left + 4);
+        int baseline = in.top + (getHeight() - in.top - in.bottom - fm.getHeight()) / 2 + fm.getAscent();
         g.drawString(s, x, baseline);
         if (saved != null) g.setColor(saved);
     }

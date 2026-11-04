@@ -11,6 +11,22 @@ public abstract class JTextComponent extends JComponent {
 
     protected Document doc;
     protected String text = "";
+    private java.awt.Insets margin = new java.awt.Insets(0, 0, 0, 0);
+
+    // Desktop text UIs install a border that reads the margin. Keep that contract
+    // without adding padding to existing Android controls or to custom borders.
+    private static final class MarginBorder extends javax.swing.border.AbstractBorder implements javax.swing.plaf.UIResource {
+        private static final long serialVersionUID = 1L;
+        @Override public java.awt.Insets getBorderInsets(java.awt.Component component) {
+            return getBorderInsets(component, new java.awt.Insets(0, 0, 0, 0));
+        }
+        @Override public java.awt.Insets getBorderInsets(java.awt.Component component, java.awt.Insets insets) {
+            java.awt.Insets value = ((JTextComponent) component).getMargin();
+            if (value == null) insets.set(0, 0, 0, 0);
+            else insets.set(value.top, value.left, value.bottom, value.right);
+            return insets;
+        }
+    }
     private final javax.swing.event.DocumentListener documentListener = new DocumentRepaintListener();
     private final class DocumentRepaintListener implements javax.swing.event.DocumentListener, java.io.Serializable {
         private static final long serialVersionUID = 1L;
@@ -20,10 +36,20 @@ public abstract class JTextComponent extends JComponent {
     }
 
     public JTextComponent() {
+        setBorder(new MarginBorder());
         this.doc = new PlainDocument();
         this.doc.addDocumentListener(documentListener);
         setCaret(new DefaultCaret());
         setHighlighter(new DefaultHighlighter());
+    }
+
+    public java.awt.Insets getMargin() { return margin; }
+    public void setMargin(java.awt.Insets value) {
+        java.awt.Insets old = margin;
+        margin = value;
+        firePropertyChange("margin", old, value);
+        revalidate();
+        repaint();
     }
 
     public String getText() {
