@@ -140,6 +140,7 @@ class MainActivity : ComponentActivity() {
      */
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
+        net.runelite.mp.ui.bridge.ModifierState.onWindowFocusChanged(hasFocus)
         if (hasFocus) {
             hideSystemUI()
         }
