@@ -197,17 +197,10 @@ private fun PinnedKeyChips(keys: List<String>, maxHeight: androidx.compose.ui.un
         contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 4.dp),
     ) {
         items(keys, key = { it }) { key ->
-            val active = when (key) {
-                "Ctrl" -> ModifierState.controlActive.value
-                "Shift" -> ModifierState.shiftActive.value
-                "Alt" -> ModifierState.altActive.value
-                else -> false
-            }
-            ModifierChip(key, active) {
-                when (key) {
-                    "Ctrl" -> ModifierState.toggleControl()
-                    "Shift" -> ModifierState.toggleShift()
-                    "Alt" -> ModifierState.toggleAlt()
+            val modifier = ModifierState.Key.entries.firstOrNull { it.label == key }
+            ModifierChip(key, modifier != null && ModifierState.isHeld(modifier)) {
+                if (modifier != null) ModifierState.toggle(modifier)
+                else when (key) {
                     "Space" -> KeyDispatch.sendSpace()
                     "Enter" -> KeyDispatch.sendEnter()
                     "↑" -> KeyDispatch.sendKey(KeyEvent.VK_UP)

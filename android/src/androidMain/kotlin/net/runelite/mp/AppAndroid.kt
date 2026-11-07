@@ -1,5 +1,6 @@
 package net.runelite.mp
 
+import net.runelite.mp.ui.bridge.ModifierState
 import android.graphics.BitmapFactory
 import android.graphics.Bitmap
 import android.view.SurfaceView
@@ -560,7 +561,7 @@ private fun GameViewport(modifier: Modifier = Modifier) {
                         // — the desktop equivalent of "alt-right-click overlay to
                         // reset" without forcing the user to hold a perfectly still
                         // long-press through the touch-slop threshold.
-                        val tapButton = if (net.runelite.mp.ui.bridge.ModifierState.altActive.value) BUTTON3 else BUTTON1
+                        val tapButton = if (ModifierState.isHeld(ModifierState.Key.ALT)) BUTTON3 else BUTTON1
                         dispatchClick(down.position, boxSize, tapButton)
                     }
                 }
@@ -1304,7 +1305,7 @@ private class ScrollDragSession(
  *  Sign convention: pinch OUT (fingers apart) → negative rotation = wheel-up = OSRS
  *  zoom in. Pinch IN (fingers together) → positive rotation = wheel-down = zoom out. */
 private class PinchSession(initialA: Offset, initialB: Offset, boxSize: IntSize) {
-    private val editInterface = net.runelite.mp.ui.bridge.ModifierState.altActive.value
+    private val editInterface = ModifierState.isHeld(ModifierState.Key.ALT)
     private val initialDistance = distance(initialA, initialB).coerceAtLeast(1f)
     private val resize = if (editInterface) beginInterfaceResize((initialA + initialB) / 2f, boxSize) else null
     private var lastDistance = distance(initialA, initialB)
@@ -1427,7 +1428,7 @@ private fun beginDrag(downPos: Offset, currentPos: Offset, boxSize: IntSize, hel
     // a BUTTON1 press over the canvas as the start of an overlay drag. If we kept
     // emitting BUTTON2 the camera would rotate and the overlay never moves. Force
     // BUTTON1 over the scene while Alt is held so the drag reaches the overlay path.
-    val altHeld = net.runelite.mp.ui.bridge.ModifierState.altActive.value
+    val altHeld = ModifierState.isHeld(ModifierState.Key.ALT)
     if (canvas != null && !altHeld) {
         val origin = hitTestExact(window, canvas)
         val current = composeToWindow(currentPos, boxSize, window)
@@ -1529,7 +1530,7 @@ private fun fireMouse(target: java.awt.Component, id: Int, x: Int, y: Int, butto
     } else 0
     // Intentionally NOT ORing in ModifierState.modifierMask() here. The OSRS engine
     // resolves shift/alt menu state from its internal pressed-keys array (mutated by
-    // the synthetic KeyEvent fired in ModifierState.dispatchModifier) — NOT from the
+    // the synthetic KeyEvent fired in KeyDispatch.sendGameModifier) — NOT from the
     // MouseEvent.modifiers field. Setting ALT_DOWN_MASK on a MouseEvent actually
     // caused the engine's mouse-handler to ignore clicks (its dispatch path treats
     // alt-modified clicks as a no-op), which broke in-game tapping while the Alt

@@ -35,10 +35,8 @@ object PinnedKeys {
         }
         val next = Settings(keys, config.pinKeysAtBottom())
         handler.post {
-            if ("Ctrl" !in keys && ModifierState.controlActive.value) ModifierState.toggleControl()
-            if ("Shift" !in keys && ModifierState.shiftActive.value) ModifierState.toggleShift()
-            if ("Alt" !in keys && ModifierState.altActive.value) ModifierState.toggleAlt()
             settings.value = next
+            ModifierState.releaseUnpinned(keys)
         }
     }
 }
