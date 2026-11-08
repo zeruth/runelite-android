@@ -1,6 +1,7 @@
 package net.runelite.client.plugins.mobile;
 
 import net.runelite.mp.ui.bridge.PinnedKeys;
+import net.runelite.mp.ui.bridge.ModifierState;
 import com.google.inject.Injector;
 import com.google.inject.Provides;
 import javax.inject.Inject;
@@ -14,6 +15,8 @@ import net.runelite.client.events.ConfigChanged;
 import net.runelite.api.Client;
 import net.runelite.api.ScriptID;
 import net.runelite.api.events.BeforeRender;
+import net.runelite.api.events.FocusChanged;
+import net.runelite.api.events.PostClientTick;
 import net.runelite.api.events.ScriptPostFired;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.api.events.GameStateChanged;
@@ -56,6 +59,7 @@ public class MobilePlugin extends Plugin
 	protected void shutDown()
 	{
 		active = false;
+		ModifierState.INSTANCE.reset();
 		clientThread.invokeLater(() ->
 		{
 			if (!active)
@@ -66,6 +70,18 @@ public class MobilePlugin extends Plugin
 		overlayManager.remove(inventoryOverlay);
 		MobileInventoryOverlay.clear();
 		MobileDisplaySettings.setPortrait(false);
+	}
+
+	@Subscribe
+	public void onPostClientTick(PostClientTick event)
+	{
+		ModifierState.INSTANCE.afterClientTick(client);
+	}
+
+	@Subscribe
+	public void onFocusChanged(FocusChanged event)
+	{
+		ModifierState.INSTANCE.onCanvasFocusChanged(event.isFocused());
 	}
 
 	@Subscribe

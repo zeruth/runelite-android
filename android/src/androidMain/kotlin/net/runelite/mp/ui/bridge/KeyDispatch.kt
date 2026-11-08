@@ -110,6 +110,12 @@ object KeyDispatch {
         sendKey(KeyEvent.VK_BACK_SPACE, '\b')
     }
 
+    fun sendGameModifier(canvas: Canvas, key: Int, pressed: Boolean, modifiers: Int) {
+        val id = if (pressed) KeyEvent.KEY_PRESSED else KeyEvent.KEY_RELEASED
+        deliverToComponent(canvas, KeyEvent(canvas, id, System.currentTimeMillis(), modifiers,
+            key, KeyEvent.CHAR_UNDEFINED, KeyEvent.KEY_LOCATION_LEFT))
+    }
+
     fun sendEnter() {
         sendKey(KeyEvent.VK_ENTER, '\n')
     }
