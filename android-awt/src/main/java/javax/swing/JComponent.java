@@ -19,6 +19,12 @@ public class JComponent extends Container {
 
     protected javax.swing.plaf.ComponentUI ui;
 
+    private transient javax.accessibility.AccessibleContext accessibleContext;
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) accessibleContext = new javax.accessibility.AccessibleContext() {};
+        return accessibleContext;
+    }
+
     private Border border;
     private String toolTipText;
     private boolean doubleBuffered = true;

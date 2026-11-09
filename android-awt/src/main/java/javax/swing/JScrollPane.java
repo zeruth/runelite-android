@@ -16,6 +16,12 @@ public class JScrollPane extends JComponent implements ScrollPaneConstants {
     private JViewport rowHeader;
     private boolean wheelScrollingEnabled=true;
     private final java.util.Map<String,Component> corners=new java.util.HashMap<>();
+    private final java.beans.PropertyChangeListener barUIChanged = event -> {
+        JScrollBar bar = (JScrollBar) event.getSource();
+        if (bar.getUI() != null && bar.getParent() != this) add(bar);
+        else if (bar.getUI() == null && bar.getParent() == this) remove(bar);
+        revalidate(); repaint();
+    };
 
     public JScrollPane() { init(); }
     public JScrollPane(Component view) { init(); setViewportView(view); }
@@ -166,11 +172,37 @@ public class JScrollPane extends JComponent implements ScrollPaneConstants {
         int right=cornerExtent(true),bottom=cornerExtent(false);
         if(verticalScrollBarPolicy==VERTICAL_SCROLLBAR_NEVER)right=0;
         if(horizontalScrollBarPolicy==HORIZONTAL_SCROLLBAR_NEVER)bottom=0;
+        boolean vCustom = verticalScrollBar != null && verticalScrollBar.getUI() != null;
+        boolean hCustom = horizontalScrollBar != null && horizontalScrollBar.getUI() != null;
+        boolean showV = false, showH = false;
+        if (vCustom || hCustom) {
+            Component view = viewport.getView();
+            java.awt.Dimension content = view == null ? new java.awt.Dimension() : view.getPreferredSize();
+            boolean scrollY = !(view instanceof Scrollable) || !((Scrollable) view).getScrollableTracksViewportHeight();
+            boolean scrollX = !(view instanceof Scrollable) || !((Scrollable) view).getScrollableTracksViewportWidth();
+            // Reserving one bar can make the opposite axis overflow.
+            for (int pass = 0; pass < 2; pass++) {
+                showV = vCustom && verticalScrollBarPolicy != VERTICAL_SCROLLBAR_NEVER &&
+                    (verticalScrollBarPolicy == VERTICAL_SCROLLBAR_ALWAYS || scrollY && content.height > height - headerHeight - bottom);
+                if (showV) right = Math.max(right, verticalScrollBar.getPreferredSize().width);
+                showH = hCustom && horizontalScrollBarPolicy != HORIZONTAL_SCROLLBAR_NEVER &&
+                    (horizontalScrollBarPolicy == HORIZONTAL_SCROLLBAR_ALWAYS || scrollX && content.width > width - headerWidth - right);
+                if (showH) bottom = Math.max(bottom, horizontalScrollBar.getPreferredSize().height);
+            }
+        }
         right=Math.min(right,Math.max(0,width-headerWidth));bottom=Math.min(bottom,Math.max(0,height-headerHeight));
         int viewWidth=Math.max(0,width-headerWidth-right),viewHeight=Math.max(0,height-headerHeight-bottom);
         if(columnHeader!=null)columnHeader.setBounds(in.left+headerWidth,in.top,viewWidth,headerHeight);
         if(rowHeader!=null)rowHeader.setBounds(in.left,in.top+headerHeight,headerWidth,viewHeight);
         viewport.setBounds(in.left+headerWidth,in.top+headerHeight,viewWidth,viewHeight);
+        if (vCustom) {
+            verticalScrollBar.setVisible(showV);
+            if (showV) verticalScrollBar.setBounds(in.left + width - right, in.top + headerHeight, right, viewHeight);
+        }
+        if (hCustom) {
+            horizontalScrollBar.setVisible(showH);
+            if (showH) horizontalScrollBar.setBounds(in.left + headerWidth, in.top + height - bottom, viewWidth, bottom);
+        }
         layoutCorner(UPPER_LEFT_CORNER,in.left,in.top,headerWidth,headerHeight);
         layoutCorner(UPPER_RIGHT_CORNER,in.left+width-right,in.top,right,headerHeight);
         layoutCorner(LOWER_LEFT_CORNER,in.left,in.top+height-bottom,headerWidth,bottom);
@@ -237,10 +269,22 @@ public class JScrollPane extends JComponent implements ScrollPaneConstants {
         } else setColumnHeader(null);
     }
     public JScrollBar getVerticalScrollBar() { return verticalScrollBar; }
+    private void detachBar(JScrollBar bar) {
+        if (bar == null) return;
+        bar.removePropertyChangeListener("UI", barUIChanged);
+        if (bar.getParent() == this) remove(bar);
+    }
+    private void attachBar(JScrollBar bar) {
+        if (bar == null) return;
+        bar.addPropertyChangeListener("UI", barUIChanged);
+        if (bar.getUI() != null) add(bar);
+    }
     public void setVerticalScrollBar(JScrollBar sb) {
         if (verticalScrollBar == sb) return;
         if (verticalScrollBar != null) verticalScrollBar.removeAdjustmentListener(verticalListener);
+        detachBar(verticalScrollBar);
         verticalScrollBar = sb;
+        attachBar(sb);
         if (sb != null) sb.addAdjustmentListener(verticalListener);
         syncScrollBarsWithViewport();
     }
@@ -248,7 +292,9 @@ public class JScrollPane extends JComponent implements ScrollPaneConstants {
     public void setHorizontalScrollBar(JScrollBar sb) {
         if (horizontalScrollBar == sb) return;
         if (horizontalScrollBar != null) horizontalScrollBar.removeAdjustmentListener(horizontalListener);
+        detachBar(horizontalScrollBar);
         horizontalScrollBar = sb;
+        attachBar(sb);
         if (sb != null) sb.addAdjustmentListener(horizontalListener);
         syncScrollBarsWithViewport();
     }

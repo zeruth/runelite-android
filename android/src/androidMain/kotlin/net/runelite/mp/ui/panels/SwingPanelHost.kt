@@ -716,10 +716,27 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
             else text
         }.toTypedArray()
         val editable = control.isEditable
+        val popupList = (control.ui as? javax.swing.plaf.basic.BasicComboBoxUI)?.hostPopupList()
+        val selected = control.selectedIndex
+        val normalBg = popupList?.background?.rgb
+        val normalFg = popupList?.foreground?.rgb
+        val selectedBg = popupList?.selectionBackground?.rgb
+        val selectedFg = popupList?.selectionForeground?.rgb
+        val rowHeight = popupList?.fixedCellHeight ?: -1
         post {
             if (!running || serial != mountSerial || generation != comboGeneration) return@post
             inputPopup?.dismiss()
-            val picker = dialogBuilder().setTitle("Select value").setItems(labels) { _, index ->
+            val picker = dialogBuilder().setTitle("Select value")
+            val adapter = object : android.widget.ArrayAdapter<CharSequence>(picker.context, android.R.layout.select_dialog_item, labels) {
+                override fun getView(position: Int, convertView: View?, parent: android.view.ViewGroup): View {
+                    val row = super.getView(position, convertView, parent) as android.widget.TextView
+                    (if (position == selected) selectedBg else normalBg)?.let(row::setBackgroundColor)
+                    (if (position == selected) selectedFg else normalFg)?.let(row::setTextColor)
+                    if (rowHeight > 0) row.minHeight = (rowHeight * sidebarScale()).toInt()
+                    return row
+                }
+            }
+            picker.setAdapter(adapter) { _, index ->
                 SwingUtilities.invokeLater {
                     if (isCurrentMount(serial) && control.isEnabled && generation == comboGeneration)
                         control.selectedItem = items[index]

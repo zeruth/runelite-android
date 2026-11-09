@@ -15,6 +15,11 @@ public class DefaultListCellRenderer extends JLabel implements ListCellRenderer<
     @Override
     public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
         setText(value == null ? "" : value.toString());
+        setFont(list.getFont());
+        setEnabled(list.isEnabled());
+        setOpaque(true);
+        setBackground(isSelected ? list.getSelectionBackground() : list.getBackground());
+        setForeground(isSelected ? list.getSelectionForeground() : list.getForeground());
         return this;
     }
 }

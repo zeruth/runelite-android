@@ -63,7 +63,48 @@ public class JList<E> extends JComponent implements Scrollable {
     }
 
     public ListCellRenderer<? super E> getCellRenderer() { return renderer; }
-    public void setCellRenderer(ListCellRenderer<? super E> r) { this.renderer = r; }
+    private java.awt.Color selectionBackground = new java.awt.Color(0x395777);
+    private java.awt.Color selectionForeground = java.awt.Color.WHITE;
+    public java.awt.Color getSelectionBackground() { return selectionBackground; }
+    public java.awt.Color getSelectionForeground() { return selectionForeground; }
+    public void setSelectionBackground(java.awt.Color color) {
+        java.awt.Color old = selectionBackground;
+        selectionBackground = color;
+        firePropertyChange("selectionBackground", old, color);
+        repaint();
+    }
+    public void setSelectionForeground(java.awt.Color color) {
+        java.awt.Color old = selectionForeground;
+        selectionForeground = color;
+        firePropertyChange("selectionForeground", old, color);
+        repaint();
+    }
+    public void setCellRenderer(ListCellRenderer<? super E> r) {
+        ListCellRenderer<? super E> old = renderer;
+        renderer = r;
+        if (r != old) measurePrototype();
+        firePropertyChange("cellRenderer", old, r);
+        revalidate(); repaint();
+    }
+    private E prototypeCellValue;
+    public E getPrototypeCellValue() { return prototypeCellValue; }
+    public void setPrototypeCellValue(E value) {
+        E old = prototypeCellValue;
+        prototypeCellValue = value;
+        if (value != null && !value.equals(old)) measurePrototype();
+        firePropertyChange("prototypeCellValue", old, value);
+        revalidate(); repaint();
+    }
+    private void measurePrototype() {
+        if (prototypeCellValue == null || renderer == null) return;
+        java.awt.Component cell = renderer.getListCellRendererComponent(this, prototypeCellValue, 0, false, false);
+        java.awt.Font previous = cell.getFont();
+        cell.setFont(getFont());
+        java.awt.Dimension size = cell.getPreferredSize();
+        cell.setFont(previous);
+        fixedCellWidth = size.width;
+        fixedCellHeight = size.height;
+    }
 
     public ListSelectionModel getSelectionModel() { return selectionModel; }
     public void setSelectionModel(ListSelectionModel value) {
