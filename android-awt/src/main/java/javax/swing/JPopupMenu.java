@@ -67,8 +67,9 @@ public class JPopupMenu extends JComponent implements MenuElement {
     }
     public boolean isBorderPainted() { return false; }
     public void setBorderPainted(boolean b) {}
-    public boolean isLightWeightPopupEnabled() { return true; }
-    public void setLightWeightPopupEnabled(boolean enabled) {}
+    private boolean lightWeightPopupEnabled = defaultLightWeightPopupEnabled;
+    public boolean isLightWeightPopupEnabled() { return lightWeightPopupEnabled; }
+    public void setLightWeightPopupEnabled(boolean enabled) { lightWeightPopupEnabled = enabled; }
 
     private static boolean defaultLightWeightPopupEnabled = true;
     public static void setDefaultLightWeightPopupEnabled(boolean aFlag) { defaultLightWeightPopupEnabled = aFlag; }

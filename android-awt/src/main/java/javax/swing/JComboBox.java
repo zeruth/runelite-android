@@ -82,10 +82,16 @@ public class JComboBox<E> extends JComponent implements ListDataListener {
         // Swing takes the model's current selection without firing for it.
         selectedItemReminder = dataModel.getSelectedItem();
         if (editor != null) configureEditor(editor, selectedItemReminder);
+        firePropertyChange("model", old, aModel);
         invalidate();
     }
     public ListCellRenderer<? super E> getRenderer() { return renderer; }
-    public void setRenderer(ListCellRenderer<? super E> r) { this.renderer = r; invalidate(); }
+    public void setRenderer(ListCellRenderer<? super E> r) {
+        ListCellRenderer<? super E> old = renderer;
+        renderer = r;
+        firePropertyChange("renderer", old, r);
+        invalidate(); repaint();
+    }
 
     public boolean isEditable() { return isEditable; }
     public void setEditable(boolean b) {
@@ -225,10 +231,22 @@ public class JComboBox<E> extends JComponent implements ListDataListener {
     private static volatile PopupHandler popupHandler;
     public static void setPopupHandler(PopupHandler handler) { popupHandler = handler; }
     private boolean popupVisible;
+    private boolean lightWeightPopupEnabled = JPopupMenu.getDefaultLightWeightPopupEnabled();
+    public boolean isLightWeightPopupEnabled() { return lightWeightPopupEnabled; }
+    public void setLightWeightPopupEnabled(boolean value) {
+        boolean old = lightWeightPopupEnabled;
+        lightWeightPopupEnabled = value;
+        firePropertyChange("lightWeightPopupEnabled", old, value);
+    }
     private final javax.swing.event.EventListenerList popupListeners = new javax.swing.event.EventListenerList();
     public void showPopup() { setPopupVisible(true); }
     public void hidePopup() { setPopupVisible(false); }
     public void setPopupVisible(boolean visible) {
+        if (visible == isPopupVisible() || (visible && !isEnabled())) return;
+        if (getUI() != null) getUI().setPopupVisible(this, visible);
+        else hostSetPopupVisible(visible);
+    }
+    public void hostSetPopupVisible(boolean visible) {
         if (popupVisible == visible || (visible && !isEnabled())) return;
         popupVisible = visible;
         javax.swing.event.PopupMenuEvent event = new javax.swing.event.PopupMenuEvent(this);
@@ -239,7 +257,7 @@ public class JComboBox<E> extends JComponent implements ListDataListener {
         if (handler != null) handler.show(this, visible);
         firePropertyChange("popupVisible", !visible, visible);
     }
-    public boolean isPopupVisible() { return popupVisible; }
+    public boolean isPopupVisible() { return getUI() == null ? popupVisible : getUI().isPopupVisible(this); }
     public void firePopupMenuCanceled() {
         javax.swing.event.PopupMenuEvent event = new javax.swing.event.PopupMenuEvent(this);
         for (PopupMenuListener listener : getPopupMenuListeners()) listener.popupMenuCanceled(event);
@@ -263,7 +281,12 @@ public class JComboBox<E> extends JComponent implements ListDataListener {
      *  some (quest-helper's DropdownRenderer) read its colours. */
     private transient JList<E> renderList;
 
+    @SuppressWarnings("unchecked")
     private JList<E> renderList() {
+        if (getUI() instanceof javax.swing.plaf.basic.BasicComboBoxUI) {
+            JList<?> popupList = ((javax.swing.plaf.basic.BasicComboBoxUI) getUI()).hostPopupList();
+            if (popupList != null) return (JList<E>) popupList;
+        }
         JList<E> list = renderList;
         if (list == null) renderList = list = new JList<>(dataModel);
         else if (list.getModel() != dataModel) list.setModel(dataModel);
@@ -279,7 +302,7 @@ public class JComboBox<E> extends JComponent implements ListDataListener {
         ListCellRenderer<? super E> r = renderer;
         if (r == null) return null;
         try {
-            return r.getListCellRendererComponent(renderList(), (E) item, index, false, false);
+            return r.getListCellRendererComponent(renderList(), (E) item, index, index >= 0 && index == getSelectedIndex(), false);
         } catch (Throwable t) {
             return null;
         }
@@ -324,17 +347,18 @@ public class JComboBox<E> extends JComponent implements ListDataListener {
      * with the combo's font and colours forced on it, left of the arrow.
      */
     @Override protected void paintComponent(java.awt.Graphics g) {
-        g.setColor(getBackground());
-        g.fillRect(0, 0, getWidth(), getHeight());
+        if (paintDelegate(g)) return;
+        hostPaintValue(g, new java.awt.Rectangle(4, 1, Math.max(0, getWidth() - 20), Math.max(0, getHeight() - 2)));
+    }
+    public void hostPaintValue(java.awt.Graphics g, java.awt.Rectangle bounds) {
         java.awt.Color fg = isEnabled() ? getForeground() : java.awt.Color.GRAY;
         g.setColor(fg);
-        g.drawRect(0, 0, getWidth() - 1, getHeight() - 1);
         g.setFont(getFont());
         java.awt.FontMetrics fm = g.getFontMetrics();
-        int baseline = (getHeight() - fm.getHeight()) / 2 + fm.getAscent();
+        int baseline = bounds.y + (bounds.height - fm.getHeight()) / 2 + fm.getAscent();
         Object selected = getSelectedItem();
         java.awt.Component c = isEditable && editor != null ? editor.getEditorComponent() : rendererComponent(selected, -1);
-        int cellW = Math.max(0, getWidth() - 4 - 16), cellH = Math.max(0, getHeight() - 2);
+        int cellW = bounds.width, cellH = bounds.height;
         boolean painted = false;
         if (c instanceof JComponent && cellW > 0 && cellH > 0) {
             c.setFont(getFont());
@@ -342,7 +366,7 @@ public class JComboBox<E> extends JComponent implements ListDataListener {
             c.setBackground(getBackground());
             c.setBounds(0, 0, cellW, cellH);
             if (c instanceof java.awt.Container) ((java.awt.Container) c).validate();
-            java.awt.Graphics cg = g.create(4, 1, cellW, cellH);
+            java.awt.Graphics cg = g.create(bounds.x, bounds.y, cellW, cellH);
             try {
                 c.paint(cg);
                 painted = true;
@@ -355,15 +379,8 @@ public class JComboBox<E> extends JComponent implements ListDataListener {
             String text = textOf(c, selected);
             if (text != null && !text.isEmpty()) {
                 g.setColor(fg);
-                g.drawString(text, 4, baseline);
+                g.drawString(text, bounds.x, baseline);
             }
-        }
-        if (getUI() instanceof javax.swing.plaf.basic.BasicComboBoxUI) {
-            ((javax.swing.plaf.basic.BasicComboBoxUI) getUI()).paintArrow(g,
-                Math.max(0, getWidth() - 16), 1, 15, Math.max(0, getHeight() - 2));
-        } else {
-            g.setColor(fg);
-            g.drawString("v", Math.max(0, getWidth() - 13), baseline);
         }
     }
 }

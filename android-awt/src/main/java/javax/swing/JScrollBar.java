@@ -38,6 +38,15 @@ public class JScrollBar extends JComponent implements SwingConstants {
     }
 
     public int getOrientation() { return orientation; }
+    @Override public javax.swing.plaf.ScrollBarUI getUI() { return (javax.swing.plaf.ScrollBarUI) ui; }
+    public void setUI(javax.swing.plaf.ScrollBarUI delegate) { super.setUI(delegate); }
+    @Override public java.awt.Dimension getPreferredSize() {
+        if (!isPreferredSizeSet() && ui != null) {
+            java.awt.Dimension size = ui.getPreferredSize(this);
+            if (size != null) return size;
+        }
+        return super.getPreferredSize();
+    }
     public void setOrientation(int orientation) { this.orientation = orientation; invalidate(); }
     public BoundedRangeModel getModel() { return model; }
     public void setModel(BoundedRangeModel newModel) {
