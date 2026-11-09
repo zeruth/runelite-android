@@ -3,6 +3,8 @@ package net.runelite.mp
 import net.runelite.mp.ui.bridge.ModifierState
 import android.graphics.BitmapFactory
 import android.graphics.Bitmap
+import net.runelite.mp.input.PhysicalMouseView
+import net.runelite.mp.input.isPhysicalMouse
 import android.view.SurfaceView
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -42,9 +44,6 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
-import androidx.compose.ui.input.pointer.isPrimaryPressed
-import androidx.compose.ui.input.pointer.isSecondaryPressed
-import androidx.compose.ui.input.pointer.isTertiaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.ContentScale
@@ -190,6 +189,7 @@ private fun GameViewport(modifier: Modifier = Modifier) {
     var bitmap: Bitmap? by remember { mutableStateOf(null) }
     var imageBitmap: ImageBitmap? by remember { mutableStateOf(null) }
     var boxSize by remember { mutableStateOf(IntSize.Zero) }
+    val mouse = remember { MouseBridge() }
     // Canvas rect in window-space; null until the first frame after the AWT Canvas attaches
     // to a Window. The Compose SurfaceView host re-maps this through ContentScale.Fit each
     // recomposition to track resizes and the canvas being moved around inside the frame.
@@ -385,7 +385,6 @@ private fun GameViewport(modifier: Modifier = Modifier) {
             // camera drags. Touchpad pinch and two-finger swipe become wheel notches, as a
             // desktop trackpad's zoom and scroll do.
             .pointerInput(Unit) {
-                val mouse = MouseBridge()
                 val pinch = TouchpadPinch()
                 val swipe = TouchpadSwipe()
                 awaitPointerEventScope {
@@ -403,7 +402,11 @@ private fun GameViewport(modifier: Modifier = Modifier) {
                                 val wheelY = event.motionEvent?.let {
                                     -it.getAxisValue(android.view.MotionEvent.AXIS_VSCROLL)
                                 } ?: change.scrollDelta.y
-                                mouse.handle(event, change.position, wheelY, boxSize)
+                                if (event.type == PointerEventType.Scroll || event.type == PointerEventType.Enter ||
+                                    event.type == PointerEventType.Exit || event.type == PointerEventType.Move && !change.pressed)
+                                    mouse.pointer(event.type, change.position, wheelY, boxSize)
+                                // The native mouse view receives the raw touch and generic button streams.
+                                continue
                             }
                             PointerKind.TouchpadPinch -> pinch.update(event, boxSize)
                             PointerKind.TouchpadSwipe -> swipe.update(event, boxSize)
@@ -618,6 +621,17 @@ private fun GameViewport(modifier: Modifier = Modifier) {
         // Compose splash overlays everything until the AWT splash dismisses. Replaces the
         // tiny shadow JFrame with a full-screen branded splash so the user sees the actual
         // boot stages on a phone-readable canvas.
+        AndroidView(
+            factory = { context ->
+                object : PhysicalMouseView(context) {
+                    override fun onMouseInput(id: Int, button: Int, modifiers: Int, x: Float, y: Float,
+                                              time: Long, device: Int, canceled: Boolean) {
+                        mouse.button(id, button, Offset(x, y), IntSize(width, height), canceled)
+                    }
+                }
+            },
+            modifier = Modifier.matchParentSize(),
+        )
         ComposeSplash()
     }
 }
@@ -958,8 +972,7 @@ private fun pointerKind(event: PointerEvent): PointerKind {
             android.view.MotionEvent.CLASSIFICATION_TWO_FINGER_SWIPE -> return PointerKind.TouchpadSwipe
         }
     }
-    if (me.isFromSource(android.view.InputDevice.SOURCE_MOUSE)) return PointerKind.Mouse
-    if (me.pointerCount > 0 && me.getToolType(0) == android.view.MotionEvent.TOOL_TYPE_MOUSE) return PointerKind.Mouse
+    if (isPhysicalMouse(me)) return PointerKind.Mouse
     return PointerKind.Touch
 }
 
@@ -1567,7 +1580,6 @@ private fun downMaskFor(button: Int): Int = when (button) {
  */
 private class MouseBridge {
     private var held = 0
-    private var swallowed = 0
     private var grab: java.awt.Component? = null
     private var hover: java.awt.Component? = null
     private var pressX = 0
@@ -1583,32 +1595,34 @@ private class MouseBridge {
     private var lastPressX = 0
     private var lastPressY = 0
 
-    fun handle(event: PointerEvent, position: Offset, scrollY: Float, boxSize: IntSize) {
+    fun pointer(type: PointerEventType, position: Offset, scrollY: Float, boxSize: IntSize) {
         val window = java.awt.Window.primaryFrame() ?: return
-        if (event.type == PointerEventType.Exit && grab == null) {
-            setHover(null, 0, 0)
+        if (type == PointerEventType.Exit) {
+            if (grab == null) setHover(null, 0, 0)
             return
         }
-        val buttons = event.buttons
-        var now = (if (buttons.isPrimaryPressed) java.awt.event.InputEvent.BUTTON1_DOWN_MASK else 0) or
-            (if (buttons.isTertiaryPressed) java.awt.event.InputEvent.BUTTON2_DOWN_MASK else 0) or
-            (if (buttons.isSecondaryPressed) java.awt.event.InputEvent.BUTTON3_DOWN_MASK else 0)
-        // Some mice/touchpads report a press with an empty button state; that's a left click.
-        if (now == 0 && event.type == PointerEventType.Press) now = java.awt.event.InputEvent.BUTTON1_DOWN_MASK
-        if (event.changes.none { it.pressed }) now = 0
-
         val pos = composeToWindow(position, boxSize, window, clamp = grab != null)
-        if (pos == null) {
-            // Over the letterbox: nothing to hover, and there's no grab to keep feeding.
-            // Buttons pressed out here never reach the game, even if dragged onto it —
-            // the same as pressing outside a desktop window.
-            swallowed = (swallowed or now) and held.inv()
-            setHover(null, 0, 0)
-            return
-        }
-        swallowed = swallowed and now
+        if (pos == null) { setHover(null, 0, 0); return }
         val (wx, wy) = pos
+        move(window, wx, wy)
+        if (type == PointerEventType.Scroll && scrollY != 0f) scroll(window, wx, wy, scrollY)
+    }
 
+    fun button(id: Int, button: Int, position: Offset, boxSize: IntSize, canceled: Boolean) {
+        val window = java.awt.Window.primaryFrame() ?: return
+        val (wx, wy) = composeToWindow(position, boxSize, window, clamp = grab != null) ?: return
+        if (!canceled) move(window, wx, wy)
+        val mask = downMaskFor(button)
+        when (id) {
+            java.awt.event.MouseEvent.MOUSE_PRESSED -> press(window, button, mask, wx, wy)
+            java.awt.event.MouseEvent.MOUSE_RELEASED -> if (held and mask != 0) {
+                if (canceled) dragged = true
+                release(window, button, mask, wx, wy)
+            }
+        }
+    }
+
+    private fun move(window: java.awt.Window, wx: Int, wy: Int) {
         // Movement first, under the old button state — a release event's position is the
         // drag's last position, and a press event's is where the press happens.
         if (wx != lastX || wy != lastY) {
@@ -1631,18 +1645,6 @@ private class MouseBridge {
             }
         }
 
-        for (button in intArrayOf(BUTTON1, BUTTON2, BUTTON3)) {
-            val mask = downMaskFor(button)
-            if ((now and mask) != 0 && (held and mask) == 0 && (swallowed and mask) == 0) {
-                press(window, button, mask, wx, wy)
-            }
-        }
-        for (button in intArrayOf(BUTTON1, BUTTON2, BUTTON3)) {
-            val mask = downMaskFor(button)
-            if ((now and mask) == 0 && (held and mask) != 0) release(window, button, mask, wx, wy)
-        }
-
-        if (event.type == PointerEventType.Scroll && scrollY != 0f) scroll(window, wx, wy, scrollY)
     }
 
     private fun press(window: java.awt.Window, button: Int, mask: Int, wx: Int, wy: Int) {
