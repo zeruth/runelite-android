@@ -21,6 +21,7 @@ import net.runelite.client.config.ConfigManager
 import net.runelite.client.plugins.mobile.MobileConfig
 import net.runelite.client.ui.PluginPanel
 import net.runelite.client.util.SwingUtil
+import net.runelite.mp.input.PhysicalMouseView
 import net.runelite.mp.ui.bridge.NavBarBridge
 import net.runelite.mp.ui.bridge.RuneLiteAccess
 import java.awt.Component
@@ -45,7 +46,7 @@ internal fun PluginPanelHost(key: String)
     }
 }
 
-internal class SwingPanelView(context: Context, private val panelKey: String, private val hostedRoot: JComponent? = null) : View(context)
+internal class SwingPanelView(context: Context, private val panelKey: String, private val hostedRoot: JComponent? = null) : PhysicalMouseView(context)
 {
     private var panel: PluginPanel? = null // AWT thread only
     private var root: JComponent? = null
@@ -66,7 +67,8 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
     private var lastY = 0f
     private var dragged = false
     private var longPressed = false
-    private var secondaryPress = false
+    private class MousePress(val x: Float, val y: Float, val time: Long, val target: Component, var moved: Boolean = false)
+    private val mousePresses = mutableMapOf<Int, MousePress>() // Swing thread
     private val clicks = net.runelite.mp.input.PanelClickSequence() // EDT only
     private var touchActive = false
     private var touchMount = -1L
@@ -232,6 +234,7 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
     private fun mountPanel(next: PluginPanel?, generation: Long) {
         if (next === panel && generation == mountedGeneration) return
         clicks.reset()
+        mousePresses.clear()
         swingPopup?.isVisible = false
         swingPopup = null
         gesture = null
@@ -252,6 +255,7 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
 
     private fun clearAndroidState(serial: Long) {
         if (serial != mountSerial) return
+        cancelMouse()
         removeCallbacks(longPress)
         removeCallbacks(hoverTip); removeCallbacks(hoverExit)
         removeCallbacks(dismissTip); dismissTip.run()
@@ -306,6 +310,63 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
         return true
     }
 
+    override fun onMouseInput(id: Int, button: Int, modifiers: Int, x: Float, y: Float,
+                              time: Long, device: Int, canceled: Boolean) {
+        if (!running || width == 0) return
+        val serial = mountSerial
+        val scale = logicalWidth.toFloat() / width
+        val sx = (x * scale).toInt()
+        val sy = (y * scale).toInt()
+        val tolerance = ViewConfiguration.get(context).scaledTouchSlop.toFloat()
+        if (id == MouseEvent.MOUSE_PRESSED) {
+            interacted()
+            stopFling()
+            removeCallbacks(hoverExit)
+            removeCallbacks(hoverTip)
+        }
+        SwingUtilities.invokeLater {
+            if (!isCurrentMount(serial)) return@invokeLater
+            val base = root ?: return@invokeLater
+            when (id) {
+                MouseEvent.MOUSE_PRESSED -> {
+                    val target = mousePresses.values.firstOrNull()?.target ?: sink(base, hit(base, sx, sy))
+                    if (button != MouseEvent.BUTTON1) clicks.reset()
+                    JPopupMenu.takeShownPopupMenu()?.isVisible = false
+                    mousePresses[button] = MousePress(x, y, time, target)
+                    hover(target, sx, sy)
+                    send(target, id, sx, sy, modifiers, 1, button, button == MouseEvent.BUTTON3)
+                }
+                MouseEvent.MOUSE_DRAGGED -> {
+                    for (press in mousePresses.values) {
+                        if (kotlin.math.abs(x - press.x) > tolerance || kotlin.math.abs(y - press.y) > tolerance)
+                            press.moved = true
+                    }
+                    mousePresses.values.firstOrNull { it.moved }?.let { send(it.target, id, sx, sy, modifiers) }
+                }
+                MouseEvent.MOUSE_RELEASED -> {
+                    val press = mousePresses.remove(button) ?: return@invokeLater
+                    val clicked = !canceled && !press.moved && kotlin.math.abs(x - press.x) <= tolerance &&
+                            kotlin.math.abs(y - press.y) <= tolerance && sink(base, hit(base, sx, sy)) === press.target
+                    val mouse = MotionEvent.TOOL_TYPE_MOUSE
+                    val count = if (clicked && button == MouseEvent.BUTTON1)
+                        clicks.click(press.target, press.time, time, x.toDouble(), y.toDouble(), device, mouse,
+                            ViewConfiguration.getDoubleTapTimeout().toLong(), tolerance.toDouble()) else 1
+                    send(press.target, id, sx, sy, modifiers, count, button)
+                    if (clicked) {
+                        send(press.target, MouseEvent.MOUSE_CLICKED, sx, sy, modifiers, count, button)
+                        when (button) {
+                            MouseEvent.BUTTON1 -> {
+                                tap(sx, sy, press.time, time, x, y, device, mouse, tolerance)
+                                JPopupMenu.takeShownPopupMenu()?.let { showPopupMenu(it, serial) }
+                            }
+                            MouseEvent.BUTTON3 -> contextMenu(sx, sy, false)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     override fun onTouchEvent(event: MotionEvent): Boolean {
         if (!running) return false
         val scale = logicalWidth.toFloat() / width.coerceAtLeast(1)
@@ -316,7 +377,6 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
                 velocity?.recycle(); velocity = VelocityTracker.obtain().also { it.addMovement(event) }
                 interacted()
                 downX = event.x; downY = event.y; lastY = event.y; dragged = false; longPressed = false; touchActive = true; touchMount = mountSerial
-                secondaryPress = event.buttonState and MotionEvent.BUTTON_SECONDARY != 0
                 val tool = event.getToolType(0)
                 if (tool != MotionEvent.TOOL_TYPE_MOUSE)
                     postDelayed(longPress, ViewConfiguration.getLongPressTimeout().toLong())
@@ -327,14 +387,13 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
                 val x = (event.x * scale).toInt(); val y = (event.y * scale).toInt()
                 dragX = x; dragY = y
                 val serial = touchMount
-                val secondary = secondaryPress
                 SwingUtilities.invokeLater {
                     try {
                         if (isCurrentMount(serial)) {
                             JPopupMenu.takeShownPopupMenu()?.isVisible = false
                             if (tool != MotionEvent.TOOL_TYPE_MOUSE) hover(null)
                             // A mouse drag never scrolls on desktop, so any drag handler takes it.
-                            if (!secondary) press(x, y, tool, tool == MotionEvent.TOOL_TYPE_MOUSE)
+                            press(x, y, tool, false)
                         }
                     } catch (t: Throwable) {
                         android.util.Log.e("SwingPanelHost", "Panel press failed: $panelKey", t)
@@ -349,7 +408,7 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
                     dragged = true
                     removeCallbacks(longPress)
                 }
-                if (dragged && !secondaryPress) {
+                if (dragged) {
                     dragX = (event.x * scale).toInt(); dragY = (event.y * scale).toInt()
                     if (dragQueued.compareAndSet(false, true)) {
                         val x = (downX * scale).toInt(); val y = (downY * scale).toInt()
@@ -367,7 +426,7 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
                 // "step" (3 units, ~48px) per 12px of travel: 4x the finger, in visible jumps.
                 val delta = (lastY - event.y) * scale
                 lastY = event.y
-                if (dragged && !longPressed && !secondaryPress && delta != 0f) {
+                if (dragged && !longPressed && delta != 0f) {
                     scrollBy((downX * scale).toInt(), (downY * scale).toInt(), delta, touchMount)
                 }
             }
@@ -378,12 +437,12 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
                 velocity?.let { tracker ->
                     tracker.addMovement(event)
                     tracker.computeCurrentVelocity(1000)
-                    if (currentTouch && dragged && !longPressed && !secondaryPress)
+                    if (currentTouch && dragged && !longPressed)
                         fling((downX * scale).toInt(), (downY * scale).toInt(), -tracker.yVelocity, serial)
                     tracker.recycle()
                 }
                 velocity = null
-                val held = currentTouch && (longPressed || secondaryPress) && !dragged
+                val held = currentTouch && longPressed && !dragged
                 val clicked = currentTouch && !dragged && !longPressed
                 touchActive = false
                 if (currentTouch) {
@@ -975,16 +1034,15 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
         }
         target = sink(base, target)
         val local = SwingUtilities.convertPoint(base, x, y, target)
-        val count = clicks.click(target, pressedAt, releasedAt, px.toDouble(), py.toDouble(), device, tool,
-            ViewConfiguration.getDoubleTapTimeout().toLong(), tolerance.toDouble())
-        // A finger enters, taps and leaves, so hover styling ends as "pointer gone";
-        // a mouse keeps its tracked hover state.
         val mouse = tool == MotionEvent.TOOL_TYPE_MOUSE
-        if (mouse) hover(target, x, y) else send(target, MouseEvent.MOUSE_ENTERED, x, y)
-        // Deliver the first click immediately; only the second gets clickCount=2.
-        for (id in intArrayOf(MouseEvent.MOUSE_PRESSED, MouseEvent.MOUSE_RELEASED, MouseEvent.MOUSE_CLICKED)) {
-            send(target, id, x, y, if (id == MouseEvent.MOUSE_PRESSED) InputEvent.BUTTON1_DOWN_MASK else 0,
-                count, MouseEvent.BUTTON1)
+        if (!mouse) {
+            val count = clicks.click(target, pressedAt, releasedAt, px.toDouble(), py.toDouble(), device, tool,
+                ViewConfiguration.getDoubleTapTimeout().toLong(), tolerance.toDouble())
+            send(target, MouseEvent.MOUSE_ENTERED, x, y)
+            for (id in intArrayOf(MouseEvent.MOUSE_PRESSED, MouseEvent.MOUSE_RELEASED, MouseEvent.MOUSE_CLICKED)) {
+                send(target, id, x, y, if (id == MouseEvent.MOUSE_PRESSED) InputEvent.BUTTON1_DOWN_MASK else 0,
+                    count, MouseEvent.BUTTON1)
+            }
         }
         if (target is AbstractButton && target.isEnabled) target.doClick()
         if (target is JTabbedPane) {
@@ -1014,15 +1072,17 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
             if (node === base) break
             node = node.parent
         }
-        val receiver = sink(base, deepest)
-        val recipient = if (isMouseSink(receiver)) receiver else owner ?: deepest
-        JPopupMenu.takeShownPopupMenu()
-        if (touch) send(recipient, MouseEvent.MOUSE_ENTERED, x, y)
-        for (id in intArrayOf(MouseEvent.MOUSE_PRESSED, MouseEvent.MOUSE_RELEASED, MouseEvent.MOUSE_CLICKED)) {
-            send(recipient, id, x, y, if (id == MouseEvent.MOUSE_PRESSED) InputEvent.BUTTON3_DOWN_MASK else 0,
-                1, MouseEvent.BUTTON3, id == MouseEvent.MOUSE_PRESSED)
+        if (touch) {
+            val receiver = sink(base, deepest)
+            val recipient = if (isMouseSink(receiver)) receiver else owner ?: deepest
+            JPopupMenu.takeShownPopupMenu()
+            send(recipient, MouseEvent.MOUSE_ENTERED, x, y)
+            for (id in intArrayOf(MouseEvent.MOUSE_PRESSED, MouseEvent.MOUSE_RELEASED, MouseEvent.MOUSE_CLICKED)) {
+                send(recipient, id, x, y, if (id == MouseEvent.MOUSE_PRESSED) InputEvent.BUTTON3_DOWN_MASK else 0,
+                    1, MouseEvent.BUTTON3, id == MouseEvent.MOUSE_PRESSED)
+            }
+            send(recipient, MouseEvent.MOUSE_EXITED, x, y)
         }
-        if (touch) send(recipient, MouseEvent.MOUSE_EXITED, x, y)
         val shown = JPopupMenu.takeShownPopupMenu()
         val menu = shown ?: owner?.componentPopupMenu
         if (menu == null) { if (touch) toolTip(x, y, true); return }
