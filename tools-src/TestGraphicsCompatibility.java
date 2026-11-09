@@ -2,6 +2,7 @@ import java.awt.*;
 import java.awt.color.ColorSpace;
 import java.awt.font.FontRenderContext;
 import java.awt.font.TextAttribute;
+import java.awt.font.TextLayout;
 import java.awt.geom.*;
 import java.awt.image.*;
 import java.io.*;
@@ -24,7 +25,51 @@ public final class TestGraphicsCompatibility {
     private static void color(int actual, int expected, int tolerance) { require(colorDistance(actual, expected) <= tolerance, Integer.toHexString(actual) + " != " + Integer.toHexString(expected)); }
     private static int nonempty(BufferedImage image) { int count = 0; for (int pixel : image.getRGB(0, 0, image.getWidth(), image.getHeight(), null, 0, image.getWidth())) if ((pixel >>> 24) != 0) count++; return count; }
     private static Path2D triangle() { Path2D path = new Path2D.Double(); path.moveTo(0, 0); path.lineTo(10, 0); path.lineTo(0, 10); path.closePath(); return path; }
+    /** The numbered Kephri overlay strokes and fills a baseline-relative glyph outline. */
+    public static void checkTextLayoutOutline() {
+        BufferedImage image = new BufferedImage(96, 96, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = image.createGraphics();
+        try {
+            Font font = new Font("SansSerif", Font.BOLD, 36);
+            TextLayout text = new TextLayout("8", font, g.getFontRenderContext());
+            Shape shape = text.getOutline(null);
+            Rectangle2D original = shape.getBounds2D();
+            Shape placed = text.getOutline(AffineTransform.getTranslateInstance(16, 52));
+            Rectangle2D bounds = placed.getBounds2D();
+            if (original.getY() >= 0 || Math.abs(bounds.getX() - original.getX() - 16) > 0.01 ||
+                Math.abs(bounds.getY() - original.getY() - 52) > 0.01)
+                throw new AssertionError("Outline origin or placement");
+            g.setStroke(new java.awt.BasicStroke(3));
+            g.setColor(Color.BLACK);
+            g.draw(placed);
+            g.setColor(Color.WHITE);
+            g.fill(placed);
+            int black = 0, white = 0;
+            for (int y = 0; y < image.getHeight(); y++)
+                for (int x = 0; x < image.getWidth(); x++) {
+                    int pixel = image.getRGB(x, y);
+                    if (pixel == Color.BLACK.getRGB()) black++;
+                    if (pixel == Color.WHITE.getRGB()) white++;
+                }
+            if (black < 10 || white < 10) throw new AssertionError("Missing label stroke or fill");
+            boolean inside = false;
+            int bands = 0;
+            double x = bounds.getCenterX();
+            for (double y = bounds.getMinY(); y <= bounds.getMaxY(); y += 0.25) {
+                boolean filled = placed.contains(x, y);
+                if (filled && !inside) bands++;
+                inside = filled;
+            }
+            if (bands != 3) throw new AssertionError("Expected two holes in the eight: " + bands);
+            if (!new TextLayout(" ", font, g.getFontRenderContext()).getOutline(null).getBounds2D().isEmpty())
+                throw new AssertionError("Whitespace has visible ink");
+        } finally {
+            g.dispose();
+        }
+    }
+
     public static void main(String[] args) throws Exception {
+        check("text-layout-outline", TestGraphicsCompatibility::checkTextLayoutOutline);
         check("transform-composition", () -> {
             Graphics2D g = image(20, 20).createGraphics(); g.translate(3, 4); g.rotate(Math.PI / 2); g.shear(.25, .5); g.transform(AffineTransform.getScaleInstance(2, 3));
             AffineTransform expected = new AffineTransform(); expected.translate(3, 4); expected.rotate(Math.PI / 2); expected.shear(.25, .5); expected.scale(2, 3);

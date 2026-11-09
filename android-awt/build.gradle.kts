@@ -79,6 +79,7 @@ val injectedJars = rootProject.fileTree("data") {
     include("runelite-*-injected-*-clean.jar")
 }
 dependencies {
+    implementation("androidx.graphics:graphics-path:1.0.1")
     compileOnly(injectedJars)
 }
 
