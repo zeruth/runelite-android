@@ -371,3 +371,4 @@
 # Name obfuscation and dead-code removal are unaffected.
 # ----------------------------------------------------------------------------
 -dontoptimize
+-keep class org.sqlite.** { *; }

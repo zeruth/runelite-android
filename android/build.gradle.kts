@@ -111,6 +111,33 @@ if (androidSdkAvailable) {
         isTransitive = false
     }
     dependencies.add(h2Runtime.name, "com.h2database:h2:2.1.212")
+    val sqliteJdbc = "org.xerial:sqlite-jdbc:3.53.4.0"
+    val sqliteNatives = configurations.create("sqliteAndroidNatives") {
+        isCanBeConsumed = false
+        isTransitive = false
+    }
+    dependencies.add(sqliteNatives.name, "$sqliteJdbc:natives-android@jar")
+    val unpackSqlite = tasks.register<Sync>("unpackSqliteAndroidNatives") {
+        from(provider { zipTree(sqliteNatives.singleFile) })
+        include("org/sqlite/native/Linux-Android/*/libsqlitejdbc.so")
+        includeEmptyDirs = false
+        eachFile {
+            val arch = relativePath.segments[4]
+            val abi = when (arch) {
+                "aarch64" -> "arm64-v8a"
+                "arm" -> "armeabi-v7a"
+                else -> arch
+            }
+            path = "$abi/$name"
+        }
+        into(layout.buildDirectory.dir("generated/sqliteJni"))
+    }
+    extensions.configure<com.android.build.api.dsl.ApplicationExtension> {
+        sourceSets.named("main") { jniLibs.srcDir(layout.buildDirectory.dir("generated/sqliteJni").get().asFile) }
+    }
+    tasks.matching { it.name.startsWith("merge") && it.name.endsWith("JniLibFolders") }.configureEach {
+        dependsOn(unpackSqlite)
+    }
     val androidH2 = tasks.register<Jar>("androidH2") {
         archiveFileName.set("h2-android.jar")
         destinationDirectory.set(layout.buildDirectory.dir("android-h2"))
@@ -173,6 +200,7 @@ if (androidSdkAvailable) {
         // dex on the device. Pure Java; kept whole in proguard-rules.pro.
         "implementation"("com.android.tools:r8:9.5.28")
         "implementation"(files(androidH2.flatMap { it.archiveFile }))
+        "implementation"("$sqliteJdbc:without-natives@jar")
         // ASM for ClientPreparer's transforms over the downloaded injected client.
         "implementation"("org.ow2.asm:asm:9.8")
         "implementation"("org.ow2.asm:asm-commons:9.8")
