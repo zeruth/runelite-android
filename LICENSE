@@ -1,7 +1,12 @@
 BSD 2-Clause License
 
 Copyright (c) 2016-2017, Adam <Adam@sigterm.info>
+Copyright (c) 2026, Tyler Bochard (the Android port: android, android-awt, android-hd)
 All rights reserved.
+
+Files under android-awt that are ported from OpenJDK are instead licensed under
+the GNU General Public License version 2 with the Classpath Exception; they
+carry the OpenJDK header, and android-awt/LICENSE has the text and the details.
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are met:

@@ -23,7 +23,10 @@ one class.
 
 - The OpenJDK license header, unchanged. Ported files are GPLv2 + Classpath Exception; the header
   is what says so. Files written from scratch (Android backends under `net.runelite.awt.impl`, stubs
-  that share nothing but a name) carry no OpenJDK header.
+  that share nothing but a name) carry the project's BSD 2-Clause header instead; `python
+  tools-src/check-license-headers.py` fails on a file that has neither, and `--fix` stamps the project
+  header on files that have no header at all. The two headers, and what each means for the APK,
+  are described in `android-awt/LICENSE`.
 - Every `public` and `protected` signature of the original, including constants, nested classes,
   `serialVersionUID` and `Serializable`/`Cloneable` declarations. Hub plugins are compiled against
   the real JDK; a missing or narrowed member is a `NoSuchMethodError` on a phone, found by whoever
