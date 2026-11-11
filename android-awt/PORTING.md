@@ -46,7 +46,7 @@ one class.
   `sun.font` peers and to native code; the shadow delegates to `net.runelite.awt.impl` instead
   (`BufferedImageGraphics2D` for the raster pipeline, `AwtFontRegistry` for fonts,
   `AndroidClip`/`PooledSourceDataLine` for audio, `Headless*` for the graphics device, `Stroker`/
-  `PolyClip`/`Contours` for geometry). A `sun.*` class is ported itself only when outside code
+  `Contours` for geometry, the ported `sun.awt.geom` for `Area`). A `sun.*` class is ported itself only when outside code
   references it by name (the surface report and the hub scanner say which); otherwise its logic moves
   into the backend or into the class that used it.
 - Native methods. There is no `libawt`; a `native` method either becomes pure Java, or becomes a call

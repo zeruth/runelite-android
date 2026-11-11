@@ -37,7 +37,7 @@ package net.runelite.awt.impl;
  * pieces — one quad per segment, a join polygon per vertex, caps at open ends — all with
  * the same orientation. Filled in a single non-zero pass their union is exactly the
  * stroked area, so a translucent outline blends once even where pieces overlap (corners).
- * Pieces are written with negative shoelace area, the same convention as PolyClip, so
+ * Pieces are all written with negative shoelace area, so
  * {@code new Area(stroke.createStrokedShape(s))} sees a consistent winding too.
  */
 public final class Stroker {
