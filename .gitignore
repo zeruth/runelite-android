@@ -71,6 +71,10 @@ client-inspector/javac.*.args
 # shaderc static libraries built from the NDK by :android:buildShaderc
 android/.shaderc/
 
+# OpenJDK reference checkouts (tools-src/fetch-jdk-reference.py); see third-party/JDK-REFERENCE.md
+/third-party/jdk8u/
+/third-party/jdk17u/
+
 # Rhipper Agent roadmap and per-project state (local orchestration, not source)
 /rhipper.md
 /rhipper.context.md
