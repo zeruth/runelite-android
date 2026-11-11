@@ -1,0 +1,26 @@
+{
+    "_comment": "Desktop-only classes/members referenced by the injected client, runelite-api and runelite-client that android-awt does not shadow yet. Regenerate with -PupdateBaseline=true; the gate fails on anything missing that is not listed here.",
+    "missing": [
+        "field java/awt/datatransfer/DataFlavor imageFlavor:Ljava/awt/datatransfer/DataFlavor;",
+        "method java/awt/Component contains(II)Z",
+        "method java/awt/Desktop requestForeground(Z)V",
+        "method java/awt/Desktop setQuitStrategy(Ljava/awt/desktop/QuitStrategy;)V",
+        "method java/awt/Frame setState(I)V",
+        "method java/awt/Taskbar requestWindowUserAttention(Ljava/awt/Window;)V",
+        "method java/awt/Toolkit addAWTEventListener(Ljava/awt/event/AWTEventListener;J)V",
+        "method java/awt/Toolkit getScreenInsets(Ljava/awt/GraphicsConfiguration;)Ljava/awt/Insets;",
+        "method java/awt/Toolkit removeAWTEventListener(Ljava/awt/event/AWTEventListener;)V",
+        "method java/awt/TrayIcon setImageAutoSize(Z)V",
+        "method java/awt/dnd/DragSource getDragThreshold()I",
+        "method java/awt/geom/AffineTransform rotate(DD)V",
+        "method javax/swing/JDialog setDefaultLookAndFeelDecorated(Z)V",
+        "method javax/swing/JFileChooser setFileHidingEnabled(Z)V",
+        "method javax/swing/JFrame move(II)V",
+        "method javax/swing/JFrame reshape(IIII)V",
+        "method javax/swing/JFrame resize(II)V",
+        "method javax/swing/JFrame setDefaultLookAndFeelDecorated(Z)V",
+        "method javax/swing/JTree getLastSelectedPathComponent()Ljava/lang/Object;",
+        "method javax/swing/JTree setExpandsSelectedPaths(Z)V",
+        "method javax/swing/SwingUtilities windowForComponent(Ljava/awt/Component;)Ljava/awt/Window;"
+    ]
+}

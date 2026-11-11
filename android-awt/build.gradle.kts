@@ -2,6 +2,7 @@ import com.nishtahir.CargoBuildTask
 import org.objectweb.asm.ClassReader
 import org.objectweb.asm.ClassVisitor
 import org.objectweb.asm.FieldVisitor
+import org.objectweb.asm.Handle
 import org.objectweb.asm.MethodVisitor
 import org.objectweb.asm.Opcodes
 import org.objectweb.asm.Type
@@ -169,11 +170,27 @@ tasks.matching { it.name.matches(Regex("merge.*JniLibFolders")) }.configureEach 
     }
 }
 
+// The three jars whose desktop-only references define the surface this module must
+// shadow: the injected client exactly as ClientPreparer downloads it on the device, the
+// runelite-api included build and the sibling runelite-client project. Resolving them
+// through Gradle (rather than data/) is what lets CI run the gate on a bare checkout.
+val surfaceScanJars: Configuration = configurations.create("surfaceScanJars") {
+    isCanBeConsumed = false
+    isTransitive = false
+    attributes.attribute(Usage.USAGE_ATTRIBUTE, objects.named(Usage::class.java, Usage.JAVA_RUNTIME))
+}
+dependencies {
+    surfaceScanJars("net.runelite:injected-client:${project.version}")
+    surfaceScanJars("net.runelite:runelite-api:${project.version}")
+    surfaceScanJars(project(":client"))
+}
+
 // Bytecode-scan the injected RuneLite jar for every java.awt.* reference, then diff
 // against the shadow classes present in this module. Output is the surface we still need
 // to implement (or stub) — drives this module's incremental porting.
 //
-// Defaults to the newest .../data/*-injected-*-clean.jar if -PinjectedJar isn't passed.
+// Defaults to the newest .../data/*-injected-*-clean.jar if -PinjectedJar isn't passed,
+// and to the published injected-client artifact when data/ has none.
 tasks.register("awtSurfaceReport") {
     group = "verification"
     description = "List desktop-only classes the injected RuneLite jar + runelite-api + runelite-client reference but this module does not yet shadow."
@@ -182,6 +199,8 @@ tasks.register("awtSurfaceReport") {
     val javaRoot = layout.projectDirectory.dir("src/main/java").asFile
     val showMembers = (findProperty("members") as? String)?.toBoolean() == true
     val classFilter = (findProperty("classFilter") as? String)
+    val resolvedJars = surfaceScanJars
+    inputs.files(resolvedJars)
 
     doLast {
         val sources = mutableListOf<File>()
@@ -194,33 +213,16 @@ tasks.register("awtSurfaceReport") {
             val candidates = (dataDir.listFiles { f -> f.name.matches(Regex("runelite-.*-injected-.*-clean\\.jar")) } ?: emptyArray())
                 .sortedByDescending { it.lastModified() }
             if (candidates.isNotEmpty()) sources.add(candidates.first())
+            else resolvedJars.files.filter { it.name.startsWith("injected-client-") }.forEach(sources::add)
         }
 
         // 2. runelite-api + runelite-client jars (built from this repo). Android-awt
         //    eventually shims runelite-client, so its AWT/Swing/javax surface counts.
-        rootProject.file("runelite-api/build/libs").listFiles { f ->
-            f.name.matches(Regex("runelite-api-[\\d.\\-A-Za-z]+\\.jar")) && !f.name.contains("javadoc") && !f.name.contains("sources")
-        }?.firstOrNull()?.let(sources::add)
-        rootProject.file("runelite-client/build/libs").listFiles { f ->
-            f.name.matches(Regex("client-[\\d.\\-A-Za-z]+\\.jar")) && !f.name.contains("javadoc") && !f.name.contains("sources") && !f.name.contains("shaded")
-        }?.firstOrNull()?.let(sources::add)
+        resolvedJars.files.filterNot { it.name.startsWith("injected-client-") }.forEach(sources::add)
 
         require(sources.isNotEmpty()) { "No source jars found to scan." }
 
-        val collector = AwtRefCollector()
-        for (src in sources) {
-            JarFile(src).use { jf ->
-                jf.stream()
-                    .filter { !it.isDirectory && it.name.endsWith(".class") }
-                    .forEach { entry ->
-                        jf.getInputStream(entry).use { stream ->
-                            val cr = ClassReader(stream)
-                            cr.accept(collector, ClassReader.SKIP_DEBUG or ClassReader.SKIP_FRAMES)
-                        }
-                    }
-            }
-        }
-        val jar = sources.first()
+        val collector = scanSurfaceSources(sources)
 
         val present = sortedSetOf<String>().apply {
             if (javaRoot.isDirectory) {
@@ -278,12 +280,176 @@ tasks.register("awtSurfaceReport") {
     }
 }
 
+// The failing form of the report: every desktop-only class *and member* the three jars
+// reference must exist in the compiled shadow tree, or be listed in surface-baseline.json.
+// The baseline is the known gap, committed so it can only shrink: entries it lists that
+// are now present are printed so the file can be trimmed, and -PupdateBaseline=true
+// rewrites it from the current scan.
+val surfaceBaselineFile = layout.projectDirectory.file("surface-baseline.json").asFile
+
+tasks.register("awtSurfaceCheck") {
+    group = "verification"
+    description = "Fail when the injected client, runelite-api or runelite-client reference a desktop-only class or member this module does not shadow and surface-baseline.json does not list."
+    val shadowCompile = tasks.named<JavaCompile>("compileDebugJavaWithJavac")
+    dependsOn(shadowCompile)
+    val shadowClassesDir = shadowCompile.flatMap { it.destinationDirectory }
+    val resolvedJars = surfaceScanJars
+    inputs.files(resolvedJars)
+    val updateBaseline = (findProperty("updateBaseline") as? String)?.toBoolean() == true
+    val baselineFile = surfaceBaselineFile
+
+    doLast {
+        val sources = resolvedJars.files.toList()
+        require(sources.size == 3) {
+            "Expected the injected client, runelite-api and runelite-client jars, got $sources"
+        }
+        val collector = scanSurfaceSources(sources)
+        val shadow = ShadowIndex(shadowClassesDir.get().asFile)
+
+        val missing = sortedSetOf<String>()
+        for (cls in collector.classes) {
+            if (!shadow.hasClass(cls)) missing.add("class $cls")
+        }
+        for (ref in collector.members.toSet()) {
+            // A missing class is already reported once; its members would only repeat it.
+            if (!shadow.hasClass(ref.owner)) continue
+            if (shadow.hasMember(ref)) continue
+            val sep = if (ref.kind == "FIELD") ":" else ""
+            missing.add("${ref.kind.lowercase()} ${ref.owner} ${ref.name}$sep${ref.descriptor}")
+        }
+
+        if (updateBaseline) {
+            baselineFile.writeText(groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(
+                mapOf(
+                    "_comment" to "Desktop-only classes/members referenced by the injected client, runelite-api and runelite-client that android-awt does not shadow yet. Regenerate with -PupdateBaseline=true; the gate fails on anything missing that is not listed here.",
+                    "missing" to missing.toList(),
+                )
+            )) + "\n")
+            logger.lifecycle("wrote ${missing.size} baseline entries to ${baselineFile}")
+            return@doLast
+        }
+
+        require(baselineFile.isFile) {
+            "${baselineFile} does not exist; generate it with -PupdateBaseline=true"
+        }
+        @Suppress("UNCHECKED_CAST")
+        val baseline = ((groovy.json.JsonSlurper().parse(baselineFile) as Map<String, Any?>)["missing"] as List<String>).toSortedSet()
+
+        val newGaps = missing - baseline
+        val fixed = baseline - missing
+        println("== AWT surface check ==")
+        println("Source jars:")
+        sources.forEach { println("  ${it.absolutePath}") }
+        println("Referenced: ${collector.classes.size} classes, ${collector.members.toSet().size} members")
+        println("Missing:    ${missing.size} (baseline lists ${baseline.size})")
+        if (fixed.isNotEmpty()) {
+            println()
+            println("-- Baseline entries now present (remove them from ${baselineFile.name}) --")
+            fixed.forEach { println("  $it") }
+        }
+        if (newGaps.isNotEmpty()) {
+            println()
+            println("-- Missing and not in baseline --")
+            newGaps.forEach { println("  $it") }
+            throw GradleException(
+                "${newGaps.size} desktop-only class(es)/member(s) are referenced but not shadowed and not in " +
+                    "${baselineFile.name}. Port them, or run with -PupdateBaseline=true if the gap is accepted."
+            )
+        }
+    }
+}
+
+private fun scanSurfaceSources(sources: Iterable<File>): AwtRefCollector {
+    val collector = AwtRefCollector()
+    for (src in sources) {
+        JarFile(src).use { jf ->
+            jf.stream()
+                .filter { !it.isDirectory && it.name.endsWith(".class") }
+                .forEach { entry ->
+                    jf.getInputStream(entry).use { stream ->
+                        val cr = ClassReader(stream)
+                        cr.accept(collector, ClassReader.SKIP_DEBUG or ClassReader.SKIP_FRAMES)
+                    }
+                }
+        }
+    }
+    return collector
+}
+
+private class ShadowClass(val superName: String?, val interfaces: List<String>) {
+    val fields = HashSet<String>()
+    val methods = HashSet<String>()
+}
+
+// Member lookup over the compiled shadow classes, following superclasses and interfaces
+// the way the JVM resolves a field or method reference. Ancestors outside the shadow
+// tree (Object, Serializable, EventListener, ...) are read from the Gradle JVM itself:
+// the desktop prefixes are the only thing this module owns, and those ancestors exist
+// on Android as well.
+private class ShadowIndex(classesDir: File) {
+    private val classes = HashMap<String, ShadowClass>()
+    private val external = HashMap<String, ShadowClass?>()
+
+    init {
+        classesDir.walkTopDown().filter { it.isFile && it.extension == "class" }.forEach { f ->
+            f.inputStream().use { index(ClassReader(it)) }
+        }
+    }
+
+    private fun index(cr: ClassReader): ShadowClass {
+        val sc = ShadowClass(cr.superName, cr.interfaces.toList())
+        cr.accept(object : ClassVisitor(Opcodes.ASM9) {
+            override fun visitField(access: Int, name: String?, descriptor: String?, signature: String?, value: Any?): FieldVisitor? {
+                sc.fields.add("$name:$descriptor"); return null
+            }
+            override fun visitMethod(access: Int, name: String?, descriptor: String?, signature: String?, exceptions: Array<out String>?): MethodVisitor? {
+                sc.methods.add("$name$descriptor"); return null
+            }
+        }, ClassReader.SKIP_CODE or ClassReader.SKIP_DEBUG or ClassReader.SKIP_FRAMES)
+        classes[cr.className] = sc
+        return sc
+    }
+
+    fun hasClass(internalName: String): Boolean = internalName in classes
+
+    private fun lookup(internalName: String): ShadowClass? {
+        classes[internalName]?.let { return it }
+        if (isDesktopOnly(internalName)) return null
+        return external.getOrPut(internalName) {
+            ClassLoader.getSystemResourceAsStream("$internalName.class")?.use { index(ClassReader(it)) }
+        }
+    }
+
+    fun hasMember(ref: AwtMemberRef): Boolean {
+        // Constructors and static initializers are never inherited.
+        if (ref.name.startsWith("<")) return classes[ref.owner]?.methods?.contains(ref.name + ref.descriptor) == true
+        val key = if (ref.kind == "FIELD") "${ref.name}:${ref.descriptor}" else ref.name + ref.descriptor
+        val seen = HashSet<String>()
+        fun search(name: String?): Boolean {
+            if (name == null || !seen.add(name)) return false
+            // An ancestor we cannot read (not shadowed, not in this JVM) cannot be checked;
+            // its own absence is what the class-level gap reports.
+            val sc = lookup(name) ?: return !isDesktopOnly(name)
+            val declared = if (ref.kind == "FIELD") sc.fields else sc.methods
+            if (key in declared) return true
+            if (search(sc.superName)) return true
+            return sc.interfaces.any { search(it) }
+        }
+        return search(ref.owner)
+    }
+}
+
 private data class AwtMemberRef(val owner: String, val kind: String, val name: String, val descriptor: String)
 
 private val DESKTOP_PREFIXES = listOf(
     "java/applet/",
     "java/awt/",
+    "java/awt/im/",
     "java/beans/",
+    "java/lang/management/",
+    "java/net/http/",
+    "javax/accessibility/",
+    "javax/management/",
     "javax/sound/",
     "javax/imageio/",
     "javax/swing/",
@@ -293,6 +459,8 @@ private val DESKTOP_PREFIXES = listOf(
     "sun/java2d/",
     "com/sun/awt/",
     "com/sun/imageio/",
+    "com/sun/management/",
+    "com/sun/net/httpserver/",
 )
 
 private fun isDesktopOnly(internalName: String?): Boolean {
@@ -355,6 +523,22 @@ private class AwtRefCollector : ClassVisitor(Opcodes.ASM9) {
             }
             override fun visitLdcInsn(value: Any?) {
                 if (value is Type) recordType(value.descriptor)
+            }
+            // Method references (Color::getRed) reach desktop members only through the
+            // bootstrap handle; the body never names the owner in a method insn.
+            override fun visitInvokeDynamicInsn(name: String?, descriptor: String?, bsm: Handle?, vararg bsmArgs: Any?) {
+                recordType(descriptor)
+                for (arg in bsmArgs) {
+                    when (arg) {
+                        is Type -> recordType(arg.descriptor)
+                        is Handle -> {
+                            record(arg.owner); recordType(arg.desc)
+                            val kind = if (arg.tag == Opcodes.H_GETFIELD || arg.tag == Opcodes.H_PUTFIELD ||
+                                arg.tag == Opcodes.H_GETSTATIC || arg.tag == Opcodes.H_PUTSTATIC) "FIELD" else "METHOD"
+                            recordMember(kind, arg.owner, arg.name, arg.desc)
+                        }
+                    }
+                }
             }
             override fun visitMultiANewArrayInsn(descriptor: String?, numDimensions: Int) {
                 recordType(descriptor)

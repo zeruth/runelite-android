@@ -19,4 +19,5 @@ export ORG_GRADLE_PROJECT_glslangPath="$GLSLANG_DIR/bin/glslangValidator"
 python3 tools-src/test-swing-contracts.py
 python3 tools-src/test-swing-dialog-contracts.py
 python3 tools-src/run-runtime-contracts.py
+./gradlew --build-cache ':android-awt:awtSurfaceCheck'
 ./gradlew --build-cache ':android:verifyReleasePluginApi'
