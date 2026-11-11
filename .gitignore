@@ -70,3 +70,9 @@ client-inspector/javac.*.args
 
 # shaderc static libraries built from the NDK by :android:buildShaderc
 android/.shaderc/
+
+# Rhipper Agent roadmap and per-project state (local orchestration, not source)
+/rhipper.md
+/rhipper.context.md
+/rhipper.toml
+/var/
