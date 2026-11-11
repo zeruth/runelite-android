@@ -1,3 +1,5 @@
+// host-contract: patched-args=shadow
+// The JDK accepts a request URI with userinfo; the shadow rejects it, so only the shadow run asserts that.
 import java.net.*;
 import java.net.http.*;
 import java.nio.charset.StandardCharsets;
@@ -36,7 +38,7 @@ public final class TestJavaHttpContracts {
             response=client.send(HttpRequest.newBuilder(URI.create(base+"/cross")).header("Authorization","Bearer local-test").build(),HttpResponse.BodyHandlers.ofString());
             check(response.body().equals("null"),"cross-origin authorization stripped");
             try{HttpRequest.newBuilder(URI.create(base)).header("X-Test","bad\r\nInjected: yes");throw new AssertionError("header injection accepted");}catch(IllegalArgumentException expected){}
-            try{HttpRequest.newBuilder(URI.create("http://user:pass@localhost/"));throw new AssertionError("userinfo accepted");}catch(IllegalArgumentException expected){}
+            if(args.length>0&&args[0].equals("shadow")){try{HttpRequest.newBuilder(URI.create("http://user:pass@localhost/"));throw new AssertionError("userinfo accepted");}catch(IllegalArgumentException expected){}}
             try{HttpRequest.BodyPublishers.fromPublisher(HttpRequest.BodyPublishers.noBody(),0);throw new AssertionError("nonpositive publisher length accepted");}catch(IllegalArgumentException expected){}
             CompletableFuture<HttpResponse<String>> cancelled=client.sendAsync(HttpRequest.newBuilder(URI.create(base+"/slow")).build(),HttpResponse.BodyHandlers.ofString());
             cancelled.cancel(true);check(cancelled.isCancelled(),"cancel completes immediately");

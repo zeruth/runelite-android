@@ -147,12 +147,21 @@ The Java-side fallbacks in `BufferedImageGraphics2D` stay; they are what the hos
 - `:android-awt:awtSurfaceReport` no longer lists the class (and `-Pmembers=true -PclassFilter=<Class>`
   lists no missing members).
 - A behavioural contract goes in `tools-src/Test<Area>Contracts.java`: a `main` that exercises the
-  ported behaviour with plain assertions, run twice by its `.py` driver, once on the host JDK and once
-  with `--patch-module java.desktop=<compiled shadow sources>`. Add the ported file (and what it
-  pulls in) to the driver's source list (`names` in `test-swing-contracts.py`, the copy list in
-  `run-runtime-contracts.py`); the test must pass on both runs, so a contract can only assert what
-  the real JDK also does. Headless-only behaviour (`AudioTrack`, clipboard, focus) is not provable
-  on the host and is stated as device-verified in the report.
+  ported behaviour with plain assertions, with `// host-contract` as its first line. `python
+  tools-src/run-awt-contracts.py` (`--only Test<Area>Contracts` while iterating, `--list` to see what
+  it compiles, `--java-home` for a JDK other than `JAVA_HOME`) runs it twice, on the plain host JDK and
+  with the shadow patched over it, and both runs must pass, so a contract can only assert what the
+  real JDK also does. There is no source list to maintain: the runner compiles every shadow source
+  that reaches nothing from `android.*` or the Kotlin JNI facade (transitively, where the host JDK has
+  no class to fall back on), drops what javac rejects against the JDK's own classes, and patches every
+  compiled class whose JDK twin can be replaced without a JDK class that is still loaded calling a
+  member the shadow lacks; `--list` names each compile-only class with the member and caller that
+  demoted it, which is also the cheapest parity hint for the next card. Header options when a test
+  needs them: `runs=patched` when it reaches shadow-only classes, `patched-args=shadow` to guard a
+  check that asserts a documented divergence from the JDK, `fixture=keystore` for a throw-away TLS
+  keystore. The old drivers (`test-swing-contracts.py`, `test-swing-dialog-contracts.py`,
+  `run-runtime-contracts.py`) are wrappers over the runner. Headless-only behaviour (`AudioTrack`,
+  clipboard, focus) is not provable on the host and is stated as device-verified in the report.
 - `cargo test` in `android-awt/rust` when the change touched the crate.
 - Anything that needs an APK on a phone is verified by the person; the report says so.
 

@@ -1,3 +1,4 @@
+// host-contract: runs=patched
 import javax.management.*;
 public final class TestManagementContracts {
     public static final class Counter {

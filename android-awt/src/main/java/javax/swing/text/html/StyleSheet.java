@@ -2,6 +2,7 @@ package javax.swing.text.html;
 import java.io.*;
 import java.net.URL;
 import java.util.*;
+import java.util.Map; // the JDK's package-private javax.swing.text.html.Map would win over the wildcard on a host compile
 import java.util.regex.*;
 import javax.swing.text.*;
 /** Rule storage for the lightweight text renderer; no scripts or browser execution. */

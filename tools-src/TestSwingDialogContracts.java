@@ -1,3 +1,4 @@
+// host-contract: patched-args=bridge
 import java.awt.Color;
 import java.io.File;
 import java.util.concurrent.atomic.AtomicInteger;
