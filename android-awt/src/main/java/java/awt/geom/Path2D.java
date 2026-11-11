@@ -183,8 +183,10 @@ public abstract class Path2D implements Shape, Cloneable, java.io.Serializable
     public final Shape createTransformedShape(AffineTransform at){Path2D p=(Path2D)clone();if(at!=null)p.transform(at);return p;}
     public static boolean contains(PathIterator it,double x,double y){return PathGeometry.contains(it,x,y);}
     public static boolean contains(PathIterator it,Point2D p){return contains(it,p.getX(),p.getY());}
-    public static boolean contains(PathIterator it,double x,double y,double w,double h){Path2D p=new Double(it.getWindingRule());p.append(it,false);return p.contains(x,y,w,h);}
-    public static boolean intersects(PathIterator it,double x,double y,double w,double h){Path2D p=new Double(it.getWindingRule());p.append(it,false);return p.intersects(x,y,w,h);}
+    public static boolean contains(PathIterator it,Rectangle2D r){return contains(it,r.getX(),r.getY(),r.getWidth(),r.getHeight());}
+    public static boolean intersects(PathIterator it,Rectangle2D r){return intersects(it,r.getX(),r.getY(),r.getWidth(),r.getHeight());}
+    public static boolean contains(PathIterator it,double x,double y,double w,double h){return PathGeometry.rectangle(it,x,y,w,h,true);}
+    public static boolean intersects(PathIterator it,double x,double y,double w,double h){return PathGeometry.rectangle(it,x,y,w,h,false);}
 
     @Override
     public PathIterator getPathIterator(AffineTransform at) {
