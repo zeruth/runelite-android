@@ -68,9 +68,16 @@ one class.
 - Define a class `android.jar` already owns. `java.beans.PropertyChangeSupport`, `java.util.*`,
   `java.nio.*`, `javax.xml.*`, `java.util.concurrent.Flow`, `java.lang.ProcessHandle` on API 26+
   ... whatever exists on the device wins at class loading, so a shadow copy is dead code at best
-  and a bootclasspath duplicate-class failure at worst. `port-jdk-class.py` checks each import
-  against the SDK's `android.jar`; a class that is not in it and not already in the shadow tree
-  is a dependency the card has to port or cut.
+  and a bootclasspath duplicate-class failure at worst. `:android-awt:shadowOwnershipCheck` diffs
+  the compiled shadow tree against the compile SDK's `android.jar` and fails on any overlap; it
+  also prints what `android.jar` owns in each desktop package the shadow tree populates. Today
+  that is, in `java.beans`: `PropertyChangeEvent`, `PropertyChangeListener`,
+  `PropertyChangeListenerProxy`, `PropertyChangeSupport`, `IndexedPropertyChangeEvent` (a
+  `java.beans` card ports everything else in the package, `Introspector`, `PropertyDescriptor`,
+  `ConstructorProperties`, ..., and uses those five from Android); in `java.awt.font`:
+  `TextAttribute`, `NumericShaper`. The surface report and gate count these as present.
+  `port-jdk-class.py` checks each import against the SDK's `android.jar`; a class that is not in
+  it and not already in the shadow tree is a dependency the card has to port or cut.
 - Reference anything outside: Android-available JDK classes, other shadow classes, `android.*`,
   and `net.runelite.awt.*`. Lint runs with `error InvalidPackage` and `checkDependencies = true`.
 - Rename, relocate or drop a shadow class or member. `consumer-rules.pro` keeps `java.awt.**`,
@@ -149,6 +156,8 @@ The Java-side fallbacks in `BufferedImageGraphics2D` stay; they are what the hos
   forbidden packages).
 - `:android-awt:awtSurfaceReport` no longer lists the class (and `-Pmembers=true -PclassFilter=<Class>`
   lists no missing members).
+- `:android-awt:shadowOwnershipCheck` still reports `duplicates: 0` (the new class is not one
+  `android.jar` already defines).
 - A behavioural contract goes in `tools-src/Test<Area>Contracts.java`: a `main` that exercises the
   ported behaviour with plain assertions, with `// host-contract` as its first line. `python
   tools-src/run-awt-contracts.py` (`--only Test<Area>Contracts` while iterating, `--list` to see what

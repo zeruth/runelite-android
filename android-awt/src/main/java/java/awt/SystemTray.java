@@ -37,7 +37,7 @@ public class SystemTray {
 
     public static boolean isSupported() { return false; }
     public static SystemTray getSystemTray() {
-        throw new UnsupportedOperationException("System tray is not supported on Android");
+        throw net.runelite.awt.AwtUnsupported.fail("java.awt.SystemTray.getSystemTray()");
     }
 
     public Dimension getTrayIconSize() { return new Dimension(0, 0); }

@@ -34,10 +34,11 @@ import java.awt.geom.Rectangle2D;
 import java.io.Serializable;
 
 /**
- * Stub FontMetrics — measurements are estimated from font size assuming a fixed-width
+ * FontMetrics whose base measurements are estimated from font size assuming a fixed-width
  * 0.6em glyph. Wire to Android Paint.measureText for accuracy once a Typeface is
  * available on the rendering path.
  */
+@net.runelite.awt.ShadowStub("base-class metrics are a fixed-width 0.6em estimate; only the Typeface-backed subclass measures real glyphs")
 public abstract class FontMetrics implements Serializable {
     private static final long serialVersionUID = 1681126225205050147L;
 

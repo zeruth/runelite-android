@@ -30,6 +30,8 @@
  */
 package java.lang.management;
 
+import net.runelite.awt.AwtUnsupported;
+
 public class ManagementFactory {
     private ManagementFactory() {}
 
@@ -101,7 +103,7 @@ public class ManagementFactory {
         @Override public String getClassPath() { return System.getProperty("java.class.path", ""); }
         @Override public String getLibraryPath() { return System.getProperty("java.library.path", ""); }
         @Override public boolean isBootClassPathSupported() { return false; }
-        @Override public String getBootClassPath() { throw new UnsupportedOperationException(); }
+        @Override public String getBootClassPath() { throw AwtUnsupported.fail("java.lang.management.RuntimeMXBean.getBootClassPath()", "isBootClassPathSupported() is false on ART"); }
         @Override public java.util.List<String> getInputArguments() { return java.util.Collections.emptyList(); }
         @Override public long getUptime() { return (System.nanoTime() - START_NANOS) / 1_000_000; }
         @Override public long getStartTime() { return START_TIME; }
@@ -136,7 +138,7 @@ public class ManagementFactory {
         }
         @Override public int getThreadCount() { return snapshot().size(); }
         @Override public int getPeakThreadCount() { snapshot(); return peak; }
-        @Override public long getTotalStartedThreadCount() { throw new UnsupportedOperationException("ART does not expose total started thread count"); }
+        @Override public long getTotalStartedThreadCount() { throw AwtUnsupported.fail("java.lang.management.ThreadMXBean.getTotalStartedThreadCount()", "ART does not expose it"); }
         @Override public int getDaemonThreadCount() { int count = 0; for (Thread thread : snapshot()) if (thread.isDaemon()) count++; return count; }
         @Override public long[] getAllThreadIds() { return snapshot().stream().mapToLong(Thread::getId).toArray(); }
         @Override public long getCurrentThreadCpuTime() { return android.os.Debug.threadCpuTimeNanos(); }
@@ -157,9 +159,9 @@ public class ManagementFactory {
     }
 
     private static final class StubClassLoadingMXBean implements ClassLoadingMXBean {
-        @Override public long getTotalLoadedClassCount() { throw new UnsupportedOperationException("ART does not expose total loaded class count"); }
+        @Override public long getTotalLoadedClassCount() { throw AwtUnsupported.fail("java.lang.management.ClassLoadingMXBean.getTotalLoadedClassCount()", "ART does not expose it"); }
         @Override public int getLoadedClassCount() { return android.os.Debug.getLoadedClassCount(); }
-        @Override public long getUnloadedClassCount() { throw new UnsupportedOperationException("ART does not expose unloaded class count"); }
+        @Override public long getUnloadedClassCount() { throw AwtUnsupported.fail("java.lang.management.ClassLoadingMXBean.getUnloadedClassCount()", "ART does not expose it"); }
         @Override public boolean isVerbose() { return false; }
         @Override public void setVerbose(boolean value) {}
     }

@@ -32,6 +32,7 @@ package java.awt.image;
 
 import java.awt.Transparency;
 import java.awt.color.ColorSpace;
+import net.runelite.awt.AwtUnsupported;
 
 public abstract class ColorModel implements Transparency {
     protected int pixel_bits;
@@ -88,7 +89,7 @@ public abstract class ColorModel implements Transparency {
     public Object getDataElements(int rgb,Object pixel){int[] p=pixel instanceof int[]?(int[])pixel:new int[1];p[0]=rgb;return p;}
     public int getRGB(Object pixel){if(pixel instanceof int[])return getRGB(((int[])pixel)[0]);if(pixel instanceof byte[])return getRGB(((byte[])pixel)[0]&255);if(pixel instanceof short[])return getRGB(((short[])pixel)[0]&65535);throw new IllegalArgumentException("pixel data");}
     public boolean isCompatibleRaster(Raster raster) {
-        throw new UnsupportedOperationException("Color model must implement raster compatibility");
+        throw AwtUnsupported.fail("java.awt.image.ColorModel.isCompatibleRaster(Raster)", "only subclasses answer");
     }
 
     public WritableRaster createCompatibleWritableRaster(int w, int h) {
@@ -97,7 +98,7 @@ public abstract class ColorModel implements Transparency {
     }
 
     public SampleModel createCompatibleSampleModel(int w, int h) {
-        throw new UnsupportedOperationException("Subclasses must override createCompatibleSampleModel");
+        throw AwtUnsupported.fail("java.awt.image.ColorModel.createCompatibleSampleModel(int, int)", "only subclasses answer");
     }
     public ColorModel coerceData(WritableRaster raster, boolean premultiplied) {
         if (!hasAlpha() || isAlphaPremultiplied() == premultiplied) return this;
@@ -106,7 +107,7 @@ public abstract class ColorModel implements Transparency {
             DirectColorModel direct = (DirectColorModel)this;
             target = new DirectColorModel(colorSpace, pixel_bits, direct.getRedMask(), direct.getGreenMask(), direct.getBlueMask(), direct.getAlphaMask(), premultiplied, transferType);
         } else if (this instanceof ComponentColorModel) target = new ComponentColorModel(colorSpace, componentSizes, true, premultiplied, transparency, transferType);
-        else throw new UnsupportedOperationException("Color model does not support alpha coercion");
+        else throw AwtUnsupported.fail("java.awt.image.ColorModel.coerceData(WritableRaster, boolean)", "only DirectColorModel and ComponentColorModel coerce alpha");
         Object pixel = null;
         for (int y = raster.getMinY(); y < raster.getMinY() + raster.getHeight(); y++) for (int x = raster.getMinX(); x < raster.getMinX() + raster.getWidth(); x++) {
             pixel = raster.getDataElements(x, y, pixel);

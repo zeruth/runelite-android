@@ -80,7 +80,7 @@ public abstract class HttpClient {
         public Builder version(Version version){this.version=Objects.requireNonNull(version);return this;}
         public Builder priority(int priority){if(priority<1||priority>256)throw new IllegalArgumentException("Priority outside 1..256");return this;}
         public Builder proxy(ProxySelector proxy){this.proxy=Objects.requireNonNull(proxy);return this;}
-        public Builder authenticator(Authenticator authenticator){Objects.requireNonNull(authenticator);throw new UnsupportedOperationException("Per-client authenticators are unavailable in Android HttpURLConnection; set an Authorization request header");}
+        public Builder authenticator(Authenticator authenticator){Objects.requireNonNull(authenticator);throw net.runelite.awt.AwtUnsupported.fail("java.net.http.HttpClient.Builder.authenticator(Authenticator)","HttpURLConnection has no per-client authenticator; set an Authorization request header");}
         public HttpClient build(){return new UrlClient(this);}
     }
     private static SSLParameters copy(SSLParameters source) {
@@ -147,7 +147,7 @@ public abstract class HttpClient {
                 if(cookies!=null)for(Map.Entry<String,List<String>> header:cookies.get(uri,Collections.unmodifiableMap(sentHeaders)).entrySet())for(String value:header.getValue())connection.addRequestProperty(header.getKey(),value);
                 if(request.expectContinue())connection.setRequestProperty("Expect","100-continue");
                 boolean readMethod = method.equals("GET") || method.equals("HEAD");
-                if (readMethod && body != null && body.contentLength() != 0) throw new UnsupportedOperationException("HttpURLConnection cannot preserve GET/HEAD bodies");
+                if (readMethod && body != null && body.contentLength() != 0) throw net.runelite.awt.AwtUnsupported.fail("java.net.http.HttpClient.send(HttpRequest, BodyHandler)", "HttpURLConnection cannot send a GET/HEAD body");
                 if(body!=null&&!readMethod){
                     connection.setDoOutput(true);if(body.contentLength()>=0)connection.setFixedLengthStreamingMode(body.contentLength());else connection.setChunkedStreamingMode(8192);
                     try(OutputStream output=connection.getOutputStream()){publish(body,output);}

@@ -49,7 +49,7 @@ public abstract class Image {
         return UndefinedProperty;
     }
 
-    public java.awt.image.ImageProducer getSource(){throw new UnsupportedOperationException("image producer unavailable");}
+    public java.awt.image.ImageProducer getSource(){throw net.runelite.awt.AwtUnsupported.fail("java.awt.Image.getSource()", "only BufferedImage produces pixels");}
 
     public Image getScaledInstance(int width, int height, int hints) {
         java.awt.image.ProducerImage image=new java.awt.image.ProducerImage(getSource());

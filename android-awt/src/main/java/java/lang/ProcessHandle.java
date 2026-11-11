@@ -108,6 +108,7 @@ public interface ProcessHandle extends Comparable<ProcessHandle> {
         @Override public int hashCode() { return Long.hashCode(id); }
     }
 
+    @net.runelite.awt.ShadowStub("every Info field is empty: a sandboxed app reads no command line, start time or user from /proc")
     final class StubInfo implements Info {
         @Override public Optional<String> command() { return Optional.empty(); }
         @Override public Optional<String> commandLine() { return Optional.empty(); }

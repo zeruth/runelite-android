@@ -263,8 +263,12 @@ def assign_modules(sources, tool, build):
                 if dep.startswith("net.runelite.awt."):
                     votes[source.module] = votes.get(source.module, 0) + 1
     home = max(votes, key=lambda m: (votes[m], m == "java.desktop")) if votes else "java.desktop"
+    # The convention classes (AwtUnsupported, @ShadowStub) are reached from every module; in the
+    # backend's module they would make it a dependency of the modules it implements (a cycle the
+    # compile order cannot satisfy), so they patch java.base, which every module reads and which
+    # compiles first.
     for source in backend:
-        source.module = home
+        source.module = home if source.name.startswith("net.runelite.awt.impl.") else "java.base"
     return in_jdk
 
 
@@ -282,7 +286,7 @@ def exclude_transitively(sources, in_jdk, stage):
                     break
 
 
-def read_flags(modules):
+def read_flags(modules, members=()):
     # Android has no module graph: a shadow class may reach another shadow module freely
     # (java.awt.datatransfer.Clipboard posts to java.awt.EventQueue), so every patched module reads the
     # others.  javac resolves only the graph rooted at the patched module (java.datatransfer does not
@@ -290,8 +294,15 @@ def read_flags(modules):
     flags = ["--add-modules", ",".join(sorted(modules))] if modules else []
     for module in sorted(modules):
         others = sorted(set(modules) - {module})
-        if others:
+        if others and module != "java.base":  # java.base is read by everything and reads nothing
             flags += ["--add-reads", f"{module}={','.join(others)}"]
+    # The module's own packages (net.runelite.awt.AwtUnsupported, @ShadowStub, the backend) land in
+    # one patched module but are called from every other one, so they are exported to the rest.
+    exported = sorted({(m.module, m.package) for m in members if m.name.startswith("net.runelite.") and m.module in modules})
+    for module, package in exported:
+        others = sorted(set(modules) - {module})
+        if others:
+            flags += ["--add-exports", f"{module}/{package}={','.join(others)}"]
     return flags
 
 
@@ -314,7 +325,7 @@ def module_order(groups, sources):
 def compile_once(groups, sources, tool, root):
     """Compile every module patch; return the class dirs, or the sources javac rejected with its reason."""
     patches, rejected = {}, {}
-    reads = read_flags(groups)
+    reads = read_flags(groups, [member for members in groups.values() for member in members])
     for module in module_order(groups, sources):
         source_dir, class_dir = root / "source" / module, root / "classes" / module
         for folder in (source_dir, class_dir):
@@ -532,7 +543,7 @@ def drop_in_check(sources, in_jdk, patches, tests_dir, loaded, tool, build):
 
 
 def module_flags(patches, sources):
-    flags = read_flags(patches)
+    flags = read_flags(patches, [s for s in sources.values() if not s.blocked("runtime")])
     for module, class_dir in patches.items():
         flags += ["--patch-module", f"{module}={class_dir}"]
     exported = {(s.module, s.package) for s in sources.values() if not s.blocked("runtime") and s.name.startswith("net.runelite.")}

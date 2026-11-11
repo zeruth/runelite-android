@@ -47,7 +47,7 @@ public class Taskbar {
 
     public static boolean isTaskbarSupported() { return false; }
     public static Taskbar getTaskbar() {
-        throw new UnsupportedOperationException("Taskbar is not supported on Android");
+        throw net.runelite.awt.AwtUnsupported.fail("java.awt.Taskbar.getTaskbar()");
     }
 
     public boolean isSupported(Feature feature) { return false; }

@@ -50,7 +50,7 @@ public final class ImageIO {
     }
 
     public static void setUseCache(boolean useCache) {
-        // BitmapFactory doesn't expose a disk-cache toggle; no-op.
+        net.runelite.awt.AwtUnsupported.noop("javax.imageio.ImageIO.setUseCache(boolean)", "BitmapFactory has no disk-cache toggle");
     }
 
     public static boolean getUseCache() {

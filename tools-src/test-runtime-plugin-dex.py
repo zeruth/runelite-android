@@ -9,6 +9,30 @@ import subprocess
 import zipfile
 
 
+SHADOW_SOURCES = Path(__file__).resolve().parent.parent / "android-awt" / "src" / "main" / "java"
+SHADOW_ROOTS = ("java", "javax", "sun", "com/sun")
+
+
+def check_host_api(host_api):
+    """Every top-level shadow class android-awt compiles must be in host-api.jar, the library
+    the on-device D8 resolves hub plugins against; a class missing there dexes into a call the
+    APK cannot link. Inner classes follow their outer source file, so sources are the oracle."""
+    with zipfile.ZipFile(host_api) as archive:
+        classes = {name for name in archive.namelist() if name.endswith(".class")}
+    missing = []
+    for source in sorted(SHADOW_SOURCES.rglob("*.java")):
+        relative = source.relative_to(SHADOW_SOURCES).as_posix()
+        if relative.startswith(tuple(root + "/" for root in SHADOW_ROOTS)) and source.stem != "package-info":
+            if relative[:-len(".java")] + ".class" not in classes:
+                missing.append(relative)
+    outside = sorted(name for name in classes if not name.startswith(tuple(root + "/" for root in SHADOW_ROOTS)))
+    print(f"[host-api.jar] {len(classes)} classes; missing shadow classes: {len(missing)}; outside the shadow: {len(outside)}")
+    for name in missing + outside:
+        print("  " + name)
+    if missing or outside:
+        raise SystemExit("host-api.jar does not match the shadow surface")
+
+
 def main():
     parser = argparse.ArgumentParser()
     for name in ("java-home", "sdk", "r8", "apk", "output"):
@@ -46,6 +70,7 @@ def main():
             if hashlib.sha256(data).hexdigest() != manifest["sha256." + name]:
                 raise SystemExit("Compiler asset hash mismatch: " + name)
             (out / name).write_bytes(data)
+    check_host_api(out / "host-api.jar")
     (out / "apk-sha256.txt").write_text(hashlib.sha256(args.apk.read_bytes()).hexdigest() + "\n")
     classes = out / "classes"
     classes.mkdir(exist_ok=True)

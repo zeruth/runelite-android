@@ -35,12 +35,13 @@ import java.awt.Shape;
 import java.io.Serializable;
 
 /**
- * Stub of {@link java.awt.geom.Line2D}. Quest-helper's DirectionArrow constructs
+ * Partial {@link java.awt.geom.Line2D}. Quest-helper's DirectionArrow constructs
  * {@code Line2D.Double(x1, y1, x2, y2)} and reads {@code line.x1/y1/x2/y2} to draw
- * minimap and world arrows. We don't implement actual path iteration / hit testing —
+ * minimap and world arrows. Hit testing is reduced to the bounding box —
  * the host's Graphics2D draws straight lines via {@code draw(Shape)} → drawLine on
  * the {x1,y1,x2,y2} fields.
  */
+@net.runelite.awt.ShadowStub("intersects() tests the bounding box, not the segment; relativeCCW, ptSegDist, ptLineDist, intersectsLine and linesIntersect are not ported")
 public abstract class Line2D implements Shape, Cloneable {
     protected Line2D() {}
 

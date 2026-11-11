@@ -290,6 +290,12 @@
 # name even though R8 sees no caller — the android-awt shadow JDK surface above all (only the
 # client touched much of it), plus the runtime its transforms rewrite calls into (kept above:
 # net.runelite.mp.util, runelite.desugar).
+#
+# The shadow surface itself is kept package by package by android-awt's consumer rules, derived
+# from the `shadowPackages` list in android-awt/build.gradle.kts, and :android:
+# checkReleaseShadowMapping (part of assembleRelease) fails when the mapping file shows a shadow
+# class renamed or dropped. The wider java.** / javax.** lines here are for everything else hub
+# plugins resolve by name from the APK (javax.inject, javax.annotation, ...).
 -keep class java.** { *; }
 -keep class javax.** { *; }
 -keep class sun.** { *; }

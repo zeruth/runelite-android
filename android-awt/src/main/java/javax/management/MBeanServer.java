@@ -31,9 +31,10 @@
 package javax.management;
 
 /**
- * Stub of {@code javax.management.MBeanServer}. Android has no JMX; methods accept calls
- * but record nothing.
+ * The in-process subset of {@code javax.management.MBeanServer}. Android has no JMX agent;
+ * {@code net.runelite.awt.impl.StubMBeanServer} keeps the registered beans in a map.
  */
+@net.runelite.awt.ShadowStub("registration, attributes, invoke and queries only: no MBeanInfo, notifications, class-loader repository or deserialization")
 public interface MBeanServer {
     ObjectInstance registerMBean(Object obj, ObjectName name) throws Exception;
     void unregisterMBean(ObjectName name) throws Exception;

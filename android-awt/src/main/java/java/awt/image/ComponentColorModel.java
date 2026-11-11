@@ -57,7 +57,7 @@ public class ComponentColorModel extends ColorModel {
         if (transferType == DataBuffer.TYPE_BYTE) return new byte[getNumComponents()];
         if (transferType == DataBuffer.TYPE_USHORT) return new short[getNumComponents()];
         if (transferType == DataBuffer.TYPE_INT) return new int[getNumComponents()];
-        throw new UnsupportedOperationException("Floating point color components");
+        throw net.runelite.awt.AwtUnsupported.fail("java.awt.image.ComponentColorModel", "TYPE_FLOAT and TYPE_DOUBLE transfer types");
     }
     private double max(int component) { return Math.pow(2, sizes[component]) - 1; }
     @Override public int getRGB(Object data) {

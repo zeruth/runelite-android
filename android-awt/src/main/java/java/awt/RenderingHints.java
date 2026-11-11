@@ -36,10 +36,11 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Stub RenderingHints. RuneLite reads/writes the map but our Graphics2D ignores the
+ * RenderingHints as a plain map. RuneLite reads/writes the map but our Graphics2D ignores the
  * values — anti-aliasing/interpolation hints are applied at the Rust drawing layer based
  * on built-in heuristics, not these flags. Provided for API compatibility.
  */
+@net.runelite.awt.ShadowStub("stored but ignored: the Rust rasterizer chooses anti-aliasing and interpolation itself, and Key.isCompatibleValue accepts anything")
 public class RenderingHints implements Map<Object, Object>, Cloneable {
     public static class Key {
         private final int privateKey;

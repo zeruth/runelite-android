@@ -32,6 +32,7 @@ package java.awt;
 
 import java.io.IOException;
 import java.net.URI;
+import net.runelite.awt.AwtUnsupported;
 
 public class Desktop {
     public enum Action {
@@ -68,14 +69,14 @@ public class Desktop {
     }
 
     public void open(java.io.File file) throws IOException {
-        throw new UnsupportedOperationException("Desktop.open not implemented in headless shadow");
+        throw AwtUnsupported.fail("java.awt.Desktop.open(File)");
     }
 
     public void edit(java.io.File file) throws IOException {
-        throw new UnsupportedOperationException("Desktop.edit not implemented in headless shadow");
+        throw AwtUnsupported.fail("java.awt.Desktop.edit(File)");
     }
 
     public void mail(URI uri) throws IOException {
-        throw new UnsupportedOperationException("Desktop.mail not implemented in headless shadow");
+        throw AwtUnsupported.fail("java.awt.Desktop.mail(URI)");
     }
 }

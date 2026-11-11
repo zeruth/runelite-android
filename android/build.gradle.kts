@@ -251,12 +251,36 @@ if (androidSdkAvailable) {
         project(":android-awt").tasks.named<JavaCompile>("compileReleaseJavaWithJavac")
             .get().destinationDirectory.get().asFile
     }
+    // The shadow surface is whatever android-awt's package list says it is (its consumer keep
+    // rules come from the same list): host-api.jar carries exactly those classes, and the
+    // release mapping check below proves R8 kept each by name. Resolved lazily, :android-awt
+    // is configured after this project.
+    val shadowPackages = provider {
+        @Suppress("UNCHECKED_CAST")
+        (project(":android-awt").extra["shadowPackages"] as List<String>)
+    }
+    val shadowClasses = provider {
+        @Suppress("UNCHECKED_CAST")
+        (project(":android-awt").extra["shadowClasses"] as List<String>)
+    }
+    // Internal names (java/awt/Color, java/lang/ProcessHandle$Info) of the compiled shadow
+    // classes, sorted for a reproducible jar.
+    fun shadowClassNames(root: File): List<String> {
+        val packagePrefixes = shadowPackages.get().map { it.replace('.', '/') + "/" }
+        val classNames = shadowClasses.get().map { it.replace('.', '/') }
+        return root.walkTopDown().filter { it.isFile && it.extension == "class" }
+            .map { it.relativeTo(root).invariantSeparatorsPath.removeSuffix(".class") }
+            .filter { name -> packagePrefixes.any(name::startsWith) || classNames.any { name == it || name.startsWith("$it$") } }
+            .toList().sorted()
+    }
     val generatedAssets = layout.buildDirectory.dir("generated/runtime-desugar-assets")
     val prepareRuntimeDesugarAssets = tasks.register("prepareRuntimeDesugarAssets") {
         dependsOn(":android-awt:compileReleaseJavaWithJavac")
         inputs.files(runtimeDesugarConfiguration, bootApi)
         inputs.dir(hostApi)
         inputs.property("coreLibraryVersion", coreLibraryVersion)
+        inputs.property("shadowPackages", shadowPackages)
+        inputs.property("shadowClasses", shadowClasses)
         outputs.dir(generatedAssets)
         doLast {
             val out = generatedAssets.get().dir("runtime-dex").asFile.apply { mkdirs() }
@@ -283,13 +307,14 @@ if (androidSdkAvailable) {
                         }
                 }
             }
+            // The shadow surface only: hub plugins link against JDK names, never the backend
+            // under net.runelite.awt, and no shadow class extends a backend type.
             java.util.zip.ZipOutputStream(out.resolve("host-api.jar").outputStream()).use { target ->
-                hostApi.get().walkTopDown().filter { it.isFile && it.extension == "class" }
-                    .sortedBy { it.relativeTo(hostApi.get()).invariantSeparatorsPath }.forEach { file ->
-                        target.putNextEntry(java.util.zip.ZipEntry(file.relativeTo(hostApi.get()).invariantSeparatorsPath).apply { time = 0 })
-                        file.inputStream().use { it.copyTo(target) }
-                        target.closeEntry()
-                    }
+                for (name in shadowClassNames(hostApi.get())) {
+                    target.putNextEntry(java.util.zip.ZipEntry("$name.class").apply { time = 0 })
+                    hostApi.get().resolve("$name.class").inputStream().use { it.copyTo(target) }
+                    target.closeEntry()
+                }
             }
             fun sha256(file: File) = MessageDigest.getInstance("SHA-256").digest(file.readBytes())
                 .joinToString("") { "%02x".format(it.toInt() and 0xff) }
@@ -311,6 +336,51 @@ if (androidSdkAvailable) {
             name.contains("lint", ignoreCase = true)) {
             dependsOn(prepareRuntimeDesugarAssets)
         }
+    }
+
+    // The downloaded client and hub plugins link against the shadow surface after R8 has run,
+    // so a renamed or stripped shadow class is a release-only NoClassDefFoundError. The keep
+    // rules say R8 may not touch it; this reads the mapping file to prove it did not. R8 lists
+    // every class it emitted as `original -> emitted:`, kept classes as identity lines.
+    val checkReleaseShadowMapping = tasks.register("checkReleaseShadowMapping") {
+        group = "verification"
+        description = "Fail when the release R8 mapping renames or drops a shadow JDK class."
+        // With core-library desugaring on, outputs/mapping/release/mapping.txt is written by
+        // the L8 step (R8's mapping plus the desugared library's), not by minifyReleaseWithR8.
+        dependsOn("minifyReleaseWithR8", "l8DexDesugarLibRelease",
+            ":android-awt:compileReleaseJavaWithJavac", ":android-awt:shadowKeepRulesCheck")
+        val mapping = layout.buildDirectory.file("outputs/mapping/release/mapping.txt")
+        inputs.file(mapping)
+        inputs.dir(hostApi)
+        inputs.property("shadowPackages", shadowPackages)
+        inputs.property("shadowClasses", shadowClasses)
+        doLast {
+            val emitted = HashMap<String, String>()
+            mapping.get().asFile.useLines { lines ->
+                lines.filter { !it.startsWith(" ") && !it.startsWith("#") && it.endsWith(":") }
+                    .forEach { line ->
+                        val arrow = line.indexOf(" -> ")
+                        if (arrow > 0) emitted[line.substring(0, arrow)] = line.substring(arrow + 4, line.length - 1)
+                    }
+            }
+            val shadow = shadowClassNames(hostApi.get()).map { it.replace('/', '.') }
+            val renamed = shadow.filter { emitted[it]?.let { to -> to != it } == true }
+            val missing = shadow.filterNot { it in emitted }
+            println("== Release shadow mapping check ==")
+            println("mapping: ${mapping.get().asFile}")
+            println("Shadow classes: ${shadow.size}; renamed: ${renamed.size}; missing: ${missing.size}")
+            renamed.forEach { println("  renamed: $it -> ${emitted[it]}") }
+            missing.forEach { println("  missing: $it") }
+            if (renamed.isNotEmpty() || missing.isNotEmpty()) {
+                throw GradleException(
+                    "release R8 renamed ${renamed.size} and dropped ${missing.size} shadow class(es); the android-awt " +
+                        "consumer keep rules no longer cover the shadow list, or an app rule overrides them."
+                )
+            }
+        }
+    }
+    tasks.configureEach {
+        if (name == "assembleRelease") dependsOn(checkReleaseShadowMapping)
     }
 }
 

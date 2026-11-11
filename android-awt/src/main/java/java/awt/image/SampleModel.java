@@ -93,7 +93,7 @@ public abstract class SampleModel {
             case DataBuffer.TYPE_BYTE: return new byte[count];
             case DataBuffer.TYPE_USHORT: case DataBuffer.TYPE_SHORT: return new short[count];
             case DataBuffer.TYPE_INT: return new int[count];
-            default: throw new UnsupportedOperationException("Floating point transfer arrays");
+            default: throw net.runelite.awt.AwtUnsupported.fail("java.awt.image.SampleModel.getDataElements(int, int, Object, DataBuffer)", "TYPE_FLOAT and TYPE_DOUBLE transfer types");
         }
     }
     static int transferGet(Object array, int i) {
@@ -106,5 +106,5 @@ public abstract class SampleModel {
         else if (array instanceof short[]) ((short[]) array)[i] = (short) value;
         else ((int[]) array)[i] = value;
     }
-    public SampleModel createSubsetSampleModel(int[] bands) { throw new UnsupportedOperationException("Sample model cannot select bands"); }
+    public SampleModel createSubsetSampleModel(int[] bands) { throw net.runelite.awt.AwtUnsupported.fail("java.awt.image.SampleModel.createSubsetSampleModel(int[])"); }
 }

@@ -11,15 +11,26 @@
 # into these classes by their canonical JDK names. Renaming any of them — even
 # private members of public classes — risks breaking a reflection lookup or a
 # Class.forName call inside the obfuscated client jar. Keep the entire surface.
+#
+# This block is the `shadowPackages` / `shadowClasses` list in build.gradle.kts,
+# one line per entry: :android-awt:shadowKeepRulesCheck fails when they differ or
+# when a compiled shadow class falls outside the list, and :android:
+# checkReleaseShadowMapping proves the release mapping kept every class by name.
+# Edit the list first, then mirror it here.
 # ----------------------------------------------------------------------------
+-keep class java.applet.** { *; }
 -keep class java.awt.** { *; }
-# Android supplies JavaBeans callbacks; keep their shadow declarations compatible.
 -keep class java.beans.** { *; }
--keep class javax.swing.** { *; }
--keep class javax.sound.** { *; }
+-keep class java.lang.management.** { *; }
+-keep class java.net.http.** { *; }
+-keep class javax.accessibility.** { *; }
 -keep class javax.imageio.** { *; }
+-keep class javax.management.** { *; }
+-keep class javax.sound.** { *; }
+-keep class javax.swing.** { *; }
 -keep class sun.** { *; }
 -keep class com.sun.** { *; }
+-keep class java.lang.ProcessHandle** { *; }
 
 # ----------------------------------------------------------------------------
 # JNI bridges. The Rust crate (`runelite-awt-native`) registers its entry points

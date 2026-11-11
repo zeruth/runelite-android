@@ -201,6 +201,8 @@ tasks.register("awtSurfaceReport") {
     val classFilter = (findProperty("classFilter") as? String)
     val resolvedJars = surfaceScanJars
     inputs.files(resolvedJars)
+    val bootClasspath = provider { android.bootClasspath }
+    inputs.files(bootClasspath)
 
     doLast {
         val sources = mutableListOf<File>()
@@ -224,7 +226,10 @@ tasks.register("awtSurfaceReport") {
 
         val collector = scanSurfaceSources(sources)
 
+        // Shadow sources plus what android.jar owns in the desktop packages (the device
+        // loads those from the boot class path; shadowOwnershipCheck forbids a copy).
         val present = sortedSetOf<String>().apply {
+            addAll(bootOwnedClasses(androidJarOf(bootClasspath.get())).keys)
             if (javaRoot.isDirectory) {
                 javaRoot.walkTopDown()
                     .filter { it.isFile && it.extension == "java" }
@@ -297,6 +302,8 @@ tasks.register("awtSurfaceCheck") {
     inputs.files(resolvedJars)
     val updateBaseline = (findProperty("updateBaseline") as? String)?.toBoolean() == true
     val baselineFile = surfaceBaselineFile
+    val bootClasspath = provider { android.bootClasspath }
+    inputs.files(bootClasspath)
 
     doLast {
         val sources = resolvedJars.files.toList()
@@ -304,7 +311,7 @@ tasks.register("awtSurfaceCheck") {
             "Expected the injected client, runelite-api and runelite-client jars, got $sources"
         }
         val collector = scanSurfaceSources(sources)
-        val shadow = ShadowIndex(shadowClassesDir.get().asFile)
+        val shadow = ShadowIndex(shadowClassesDir.get().asFile, bootOwnedClasses(androidJarOf(bootClasspath.get())))
 
         val missing = sortedSetOf<String>()
         for (cls in collector.classes) {
@@ -359,6 +366,240 @@ tasks.register("awtSurfaceCheck") {
     }
 }
 
+// The stub ledger: every @ShadowStub and every AwtUnsupported.fail/noop call site in the
+// compiled shadow tree, grouped by package, with a total the porting cards drive to zero.
+// Read from class files rather than sources so an annotation or call that javac dropped
+// (dead code, a constant-folded branch) does not count.
+tasks.register("stubReport") {
+    group = "verification"
+    description = "List every @ShadowStub and AwtUnsupported.fail/noop call site in the compiled shadow classes, by package."
+    val shadowCompile = tasks.named<JavaCompile>("compileDebugJavaWithJavac")
+    dependsOn(shadowCompile)
+    val shadowClassesDir = shadowCompile.flatMap { it.destinationDirectory }
+
+    doLast {
+        val byPackage = sortedMapOf<String, MutableSet<String>>()
+        var annotations = 0
+        var fails = 0
+        var noops = 0
+        shadowClassesDir.get().asFile.walkTopDown()
+            .filter { it.isFile && it.extension == "class" }
+            .forEach { file ->
+                val visitor = StubCollector()
+                file.inputStream().use { ClassReader(it).accept(visitor, ClassReader.SKIP_FRAMES) }
+                visitor.entries.forEach { (kind, line) ->
+                    when (kind) {
+                        "@ShadowStub" -> annotations++
+                        "fail" -> fails++
+                        else -> noops++
+                    }
+                    byPackage.getOrPut(visitor.pkg) { sortedSetOf() }.add(line)
+                }
+            }
+        println("== Shadow stub report ==")
+        byPackage.forEach { (pkg, lines) ->
+            println()
+            println(pkg)
+            lines.forEach { println("  $it") }
+        }
+        println()
+        println("stubs: ${annotations + fails + noops} (@ShadowStub: $annotations, AwtUnsupported.fail: $fails, AwtUnsupported.noop: $noops)")
+    }
+}
+
+// Ownership audit: a shadow class whose name android.jar also defines is dead code at best
+// (the boot class path wins at load time) and a D8 duplicate-class failure at worst, so the
+// compiled shadow tree is diffed against the compile SDK's android.jar and any overlap fails.
+// For every shadow package android.jar also populates, the task prints what android.jar
+// owns there, which is the list a porting card consults before adding to that package.
+private val SHADOW_PREFIXES = listOf("java/", "javax/", "sun/", "com/sun/")
+
+// The shadow surface as one list, consumed by three things that must agree: the keep rules in
+// consumer-rules.pro (shadowKeepRulesCheck fails when they drift), the library jar the on-device
+// D8 links hub plugins against (:android:prepareRuntimeDesugarAssets packages exactly these
+// classes into host-api.jar) and :android:checkReleaseShadowMapping, which proves release R8
+// left each of them in place by name. Entries are packages; a class is listed on its own only
+// where it fills a JDK 9+ gap in a package android.jar owns (java.lang.ProcessHandle, kept with
+// its inner classes). java.beans is split: android.jar owns PropertyChangeEvent/Listener/
+// ListenerProxy/Support and IndexedPropertyChangeEvent (shadowOwnershipCheck fails on any
+// overlap), the shadow supplies the rest.
+val shadowPackages = listOf(
+    "java.applet", "java.awt", "java.beans", "java.lang.management", "java.net.http",
+    "javax.accessibility", "javax.imageio", "javax.management", "javax.sound", "javax.swing",
+    "sun", "com.sun",
+)
+val shadowClasses = listOf("java.lang.ProcessHandle")
+extra["shadowPackages"] = shadowPackages
+extra["shadowClasses"] = shadowClasses
+
+// The keep line each entry expands to; `**` after a class name matches its inner classes too.
+private fun shadowKeepLines(packages: List<String>, classes: List<String>): List<String> =
+    packages.map { "-keep class $it.** { *; }" } + classes.map { "-keep class $it** { *; }" }
+
+tasks.register("shadowKeepRulesCheck") {
+    group = "verification"
+    description = "Fail when consumer-rules.pro and the compiled shadow tree disagree with the shadow package list."
+    val shadowCompile = tasks.named<JavaCompile>("compileDebugJavaWithJavac")
+    dependsOn(shadowCompile)
+    val shadowClassesDir = shadowCompile.flatMap { it.destinationDirectory }
+    val rulesFile = layout.projectDirectory.file("consumer-rules.pro")
+    inputs.file(rulesFile)
+    inputs.property("shadowPackages", shadowPackages)
+    inputs.property("shadowClasses", shadowClasses)
+
+    doLast {
+        val expected = shadowKeepLines(shadowPackages, shadowClasses)
+        val keepLines = rulesFile.asFile.readLines().map { it.trim() }
+            .filter { line -> line.startsWith("-keep class ") && SHADOW_PREFIXES.any { line.removePrefix("-keep class ").replace('.', '/').startsWith(it) } }
+        val missingRules = expected.filterNot { it in keepLines }
+        val strayRules = keepLines.filterNot { it in expected }
+
+        val packagePrefixes = shadowPackages.map { it.replace('.', '/') + "/" }
+        val classNames = shadowClasses.map { it.replace('.', '/') }
+        val root = shadowClassesDir.get().asFile
+        val unlisted = root.walkTopDown()
+            .filter { it.isFile && it.extension == "class" }
+            .map { it.relativeTo(root).invariantSeparatorsPath.removeSuffix(".class") }
+            .filter { name -> SHADOW_PREFIXES.any(name::startsWith) }
+            .filterNot { name -> packagePrefixes.any(name::startsWith) || classNames.any { name == it || name.startsWith("$it$") } }
+            .toSortedSet()
+
+        println("== Shadow keep rules check ==")
+        println("Listed: ${shadowPackages.size} package(s), ${shadowClasses.size} class(es); consumer-rules.pro keeps ${keepLines.size} shadow pattern(s)")
+        if (missingRules.isNotEmpty() || strayRules.isNotEmpty()) {
+            missingRules.forEach { println("  missing from consumer-rules.pro: $it") }
+            strayRules.forEach { println("  not in the shadow list: $it") }
+            throw GradleException(
+                "consumer-rules.pro drifted from the shadow list in build.gradle.kts; the shadow keep block must be exactly:\n" +
+                    expected.joinToString("\n")
+            )
+        }
+        if (unlisted.isNotEmpty()) {
+            println("-- Compiled shadow classes outside the listed packages --")
+            unlisted.forEach { println("  ${it.replace('/', '.')}") }
+            throw GradleException(
+                "${unlisted.size} shadow class(es) fall outside the shadow list in build.gradle.kts; add their package " +
+                    "to shadowPackages (and the keep line to consumer-rules.pro) so R8 and host-api.jar cover them."
+            )
+        }
+        println("drift: 0")
+    }
+}
+
+tasks.register("shadowOwnershipCheck") {
+    group = "verification"
+    description = "Fail when a compiled shadow class (java.*, javax.*, sun.*, com.sun.*) also exists in the compile SDK's android.jar."
+    val shadowCompile = tasks.named<JavaCompile>("compileDebugJavaWithJavac")
+    dependsOn(shadowCompile)
+    val shadowClassesDir = shadowCompile.flatMap { it.destinationDirectory }
+    val bootClasspath = provider { android.bootClasspath }
+    inputs.files(bootClasspath)
+
+    doLast {
+        val androidJar = androidJarOf(bootClasspath.get())
+        val bootClasses = JarFile(androidJar).use { jar ->
+            jar.entries().asSequence()
+                .map { it.name }
+                .filter { it.endsWith(".class") && SHADOW_PREFIXES.any(it::startsWith) }
+                .map { it.removeSuffix(".class") }
+                .toHashSet()
+        }
+        val root = shadowClassesDir.get().asFile
+        val shadowClasses = root.walkTopDown()
+            .filter { it.isFile && it.extension == "class" }
+            .map { it.relativeTo(root).invariantSeparatorsPath.removeSuffix(".class") }
+            .filter { name -> SHADOW_PREFIXES.any(name::startsWith) }
+            .toSortedSet()
+        val duplicates = shadowClasses.filter { it in bootClasses }
+
+        // The listing is for porting cards: what they may not add to the desktop-only packages.
+        // Packages shadowed for a single API-level gap (java.lang.ProcessHandle) are left out,
+        // android.jar owning nearly all of java.lang says nothing useful.
+        val shadowPackages = shadowClasses.map { it.substringBeforeLast('/') }.toSortedSet()
+        val bootOwnedByPackage = bootClasses
+            .filter { isDesktopOnly(it) && it.substringBeforeLast('/') in shadowPackages }
+            .groupBy { it.substringBeforeLast('/') }
+            .toSortedMap()
+
+        println("== Shadow ownership check ==")
+        println("android.jar: $androidJar")
+        println("Shadow classes: ${shadowClasses.size} in ${shadowPackages.size} packages")
+        bootOwnedByPackage.forEach { (pkg, owned) ->
+            println()
+            println("android.jar owns in ${pkg.replace('/', '.')} (do not shadow):")
+            owned.sorted().forEach { println("  ${it.substringAfterLast('/')}") }
+        }
+        println()
+        if (duplicates.isNotEmpty()) {
+            println("-- Shadow classes android.jar already owns --")
+            duplicates.forEach { println("  ${it.replace('/', '.')}") }
+            throw GradleException(
+                "${duplicates.size} shadow class(es) are also defined by android.jar; the boot copy wins " +
+                    "at load time, so delete the shadow file(s) and use the Android class instead."
+            )
+        }
+        println("duplicates: 0")
+    }
+}
+
+// Collects (kind, "<class or member>  <kind> <stub member> (<detail>)") per class.
+private class StubCollector : ClassVisitor(Opcodes.ASM9) {
+    val entries = mutableListOf<Pair<String, String>>()
+    var pkg = ""
+    private var owner = ""
+
+    override fun visit(version: Int, access: Int, name: String?, signature: String?, superName: String?, interfaces: Array<out String>?) {
+        owner = (name ?: "?").replace('/', '.')
+        pkg = owner.substringBeforeLast('.', "")
+    }
+
+    override fun visitAnnotation(descriptor: String?, visible: Boolean): org.objectweb.asm.AnnotationVisitor? =
+        stubAnnotation(descriptor, owner)
+
+    override fun visitMethod(access: Int, name: String?, descriptor: String?, signature: String?, exceptions: Array<out String>?): MethodVisitor {
+        val method = "$owner.$name$descriptor"
+        return object : MethodVisitor(Opcodes.ASM9) {
+            // The member name is the string constant pushed right before the call; a
+            // non-constant argument shows as "?".
+            private val strings = ArrayDeque<String>()
+
+            override fun visitAnnotation(descriptor: String?, visible: Boolean): org.objectweb.asm.AnnotationVisitor? =
+                stubAnnotation(descriptor, method)
+
+            override fun visitLdcInsn(value: Any?) {
+                if (value is String) {
+                    strings.addLast(value)
+                    while (strings.size > 2) strings.removeFirst()
+                }
+            }
+
+            override fun visitMethodInsn(opcode: Int, owner: String?, name: String?, descriptor: String?, isInterface: Boolean) {
+                if (owner == STUB_HELPER && (name == "fail" || name == "noop")) {
+                    val arity = Type.getArgumentTypes(descriptor).size
+                    val args = strings.toList().takeLast(arity).let { List(arity - it.size) { "?" } + it }
+                    val detail = if (arity > 1) " (${args[1]})" else ""
+                    entries.add(name to "$method  $name ${args[0]}$detail")
+                }
+                strings.clear()
+            }
+        }
+    }
+
+    private fun stubAnnotation(descriptor: String?, target: String): org.objectweb.asm.AnnotationVisitor? {
+        if (descriptor != STUB_ANNOTATION) return null
+        return object : org.objectweb.asm.AnnotationVisitor(Opcodes.ASM9) {
+            override fun visit(name: String?, value: Any?) {
+                entries.add("@ShadowStub" to "$target  @ShadowStub \"$value\"")
+            }
+        }
+    }
+
+    companion object {
+        const val STUB_HELPER = "net/runelite/awt/AwtUnsupported"
+        const val STUB_ANNOTATION = "Lnet/runelite/awt/ShadowStub;"
+    }
+}
+
 private fun scanSurfaceSources(sources: Iterable<File>): AwtRefCollector {
     val collector = AwtRefCollector()
     for (src in sources) {
@@ -381,13 +622,46 @@ private class ShadowClass(val superName: String?, val interfaces: List<String>) 
     val methods = HashSet<String>()
 }
 
-// Member lookup over the compiled shadow classes, following superclasses and interfaces
-// the way the JVM resolves a field or method reference. Ancestors outside the shadow
-// tree (Object, Serializable, EventListener, ...) are read from the Gradle JVM itself:
-// the desktop prefixes are the only thing this module owns, and those ancestors exist
-// on Android as well.
-private class ShadowIndex(classesDir: File) {
-    private val classes = HashMap<String, ShadowClass>()
+private fun readShadowClass(cr: ClassReader): ShadowClass {
+    val sc = ShadowClass(cr.superName, cr.interfaces.toList())
+    cr.accept(object : ClassVisitor(Opcodes.ASM9) {
+        override fun visitField(access: Int, name: String?, descriptor: String?, signature: String?, value: Any?): FieldVisitor? {
+            sc.fields.add("$name:$descriptor"); return null
+        }
+        override fun visitMethod(access: Int, name: String?, descriptor: String?, signature: String?, exceptions: Array<out String>?): MethodVisitor? {
+            sc.methods.add("$name$descriptor"); return null
+        }
+    }, ClassReader.SKIP_CODE or ClassReader.SKIP_DEBUG or ClassReader.SKIP_FRAMES)
+    return sc
+}
+
+// The desktop-prefix classes the compile SDK's android.jar defines itself (java.beans.
+// PropertyChange*, java.awt.font.TextAttribute, ...). The device loads these from the boot
+// class path, so the surface tooling counts them as present and the ownership check
+// forbids shadowing them.
+private fun bootOwnedClasses(androidJar: File): Map<String, ShadowClass> {
+    val owned = HashMap<String, ShadowClass>()
+    JarFile(androidJar).use { jar ->
+        jar.entries().asSequence()
+            .filter { !it.isDirectory && it.name.endsWith(".class") && isDesktopOnly(it.name) }
+            .forEach { entry ->
+                jar.getInputStream(entry).use { owned[entry.name.removeSuffix(".class")] = readShadowClass(ClassReader(it)) }
+            }
+    }
+    return owned
+}
+
+private fun androidJarOf(bootClasspath: List<File>): File =
+    bootClasspath.firstOrNull { it.name == "android.jar" }
+        ?: throw GradleException("no android.jar on the AGP boot class path: $bootClasspath")
+
+// Member lookup over the compiled shadow classes plus the android.jar-owned ones, following
+// superclasses and interfaces the way the JVM resolves a field or method reference.
+// Ancestors outside the shadow tree (Object, Serializable, EventListener, ...) are read
+// from the Gradle JVM itself: the desktop prefixes are the only thing this module owns,
+// and those ancestors exist on Android as well.
+private class ShadowIndex(classesDir: File, bootOwned: Map<String, ShadowClass>) {
+    private val classes = HashMap<String, ShadowClass>(bootOwned)
     private val external = HashMap<String, ShadowClass?>()
 
     init {
@@ -397,15 +671,7 @@ private class ShadowIndex(classesDir: File) {
     }
 
     private fun index(cr: ClassReader): ShadowClass {
-        val sc = ShadowClass(cr.superName, cr.interfaces.toList())
-        cr.accept(object : ClassVisitor(Opcodes.ASM9) {
-            override fun visitField(access: Int, name: String?, descriptor: String?, signature: String?, value: Any?): FieldVisitor? {
-                sc.fields.add("$name:$descriptor"); return null
-            }
-            override fun visitMethod(access: Int, name: String?, descriptor: String?, signature: String?, exceptions: Array<out String>?): MethodVisitor? {
-                sc.methods.add("$name$descriptor"); return null
-            }
-        }, ClassReader.SKIP_CODE or ClassReader.SKIP_DEBUG or ClassReader.SKIP_FRAMES)
+        val sc = readShadowClass(cr)
         classes[cr.className] = sc
         return sc
     }

@@ -28,10 +28,22 @@
  * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-package java.beans;
+package net.runelite.awt;
 
-import java.util.EventListener;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 
-public interface PropertyChangeListener extends EventListener {
-    void propertyChange(PropertyChangeEvent evt);
+/**
+ * Marks a shadow class or member that is deliberately partial: it answers, but not the way
+ * the desktop JDK would (an estimate, a fixed sentinel, an ignored input). {@link #value()}
+ * says what is missing and why. Retained in the class file only, where the
+ * {@code :android-awt:stubReport} task reads it; a member that cannot answer at all uses
+ * {@link AwtUnsupported} instead.
+ */
+@Retention(RetentionPolicy.CLASS)
+@Target({ElementType.TYPE, ElementType.METHOD, ElementType.CONSTRUCTOR, ElementType.FIELD})
+public @interface ShadowStub {
+    String value();
 }

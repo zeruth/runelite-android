@@ -31,9 +31,10 @@
 package com.sun.management;
 
 /**
- * Extended Operating System MXBean stub. Used by RuneLite for diagnostics; we return -1
+ * Extended Operating System MXBean. Used by RuneLite for diagnostics; we return -1
  * (the JDK's "not available" sentinel) everywhere.
  */
+@net.runelite.awt.ShadowStub("every extended counter is -1, the JDK's unavailable sentinel; Android exposes none of them to an app")
 public interface OperatingSystemMXBean extends java.lang.management.OperatingSystemMXBean {
     default long getCommittedVirtualMemorySize() { return -1L; }
     default long getTotalSwapSpaceSize() { return -1L; }
