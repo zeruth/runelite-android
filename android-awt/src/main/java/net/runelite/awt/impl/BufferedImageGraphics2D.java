@@ -450,7 +450,7 @@ public class BufferedImageGraphics2D extends Graphics2D {
         if (it == null) return null;
         Contours c = CONTOUR_SCRATCH.get()[0];
         c.reset();
-        c.appendFlattened(it, transform, deviceScale, 0.25);
+        c.appendFlattened(it, transform, deviceScale, Contours.JDK_FLATNESS);
         return ClipRegion.rasterize(c, c.isEvenOdd(), bx0, by0, bx1, by1);
     }
 
@@ -717,7 +717,7 @@ public class BufferedImageGraphics2D extends Graphics2D {
         }
         Contours c = CONTOUR_SCRATCH.get()[0];
         c.reset();
-        c.appendFlattened(it, transform, deviceScale, 0.25);
+        c.appendFlattened(it, transform, deviceScale, Contours.JDK_FLATNESS);
         strokeDevice(c);
     }
 
@@ -1129,7 +1129,7 @@ public class BufferedImageGraphics2D extends Graphics2D {
         syncTarget();
         Contours c = CONTOUR_SCRATCH.get()[0];
         c.reset();
-        c.appendFlattened(it, transform, deviceScale, 0.25);
+        c.appendFlattened(it, transform, deviceScale, Contours.JDK_FLATNESS);
         if (renderingHints.get(RenderingHints.KEY_STROKE_CONTROL) != RenderingHints.VALUE_STROKE_PURE) normalize(c);
         fillContours(c, c.isEvenOdd());
     }

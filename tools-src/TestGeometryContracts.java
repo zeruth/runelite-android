@@ -220,10 +220,182 @@ public final class TestGeometryContracts {
         qf.setCurve(new double[] {9, 1.5, 2, 3, 4, 5}, 0);
         check("quad float setCurve from an array", qf.getP1().equals(new Point2D.Float(9f, 1.5f)) && near(qf.getCtrlPt().getX(), 2));
 
+        pathCases();
         randomInputs();
 
         System.out.println(total + " checks, " + failures + " failures");
         if (failures > 0) System.exit(1);
+    }
+
+    // ---- #17: Path2D / GeneralPath / Polygon / RectangularShape ----
+
+    private static Object roundTrip(Object o) {
+        try {
+            java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+            new java.io.ObjectOutputStream(bytes).writeObject(o);
+            return new java.io.ObjectInputStream(new java.io.ByteArrayInputStream(bytes.toByteArray())).readObject();
+        } catch (Exception e) {
+            return e;
+        }
+    }
+
+    private static void pathCases() {
+        // --- append(PathIterator, connect) ---
+        Path2D line = new Path2D.Double();
+        line.moveTo(0, 0); line.lineTo(10, 0);
+        line.append(new Rectangle2D.Double(20, 0, 5, 5).getPathIterator(null), true);
+        List<double[]> joined = flatten(line.getPathIterator(null));
+        // RectIterator emits four lineTos (the last back to the start) and a close.
+        check("append with connect turns the first moveTo into a lineTo", joined.size() == 8 && count(joined, PathIterator.SEG_MOVETO) == 1
+            && (int) joined.get(2)[0] == PathIterator.SEG_LINETO && near(joined.get(2)[1], 20) && near(joined.get(2)[2], 0)
+            && count(joined, PathIterator.SEG_CLOSE) == 1);
+        Path2D tail = new Path2D.Double();
+        tail.moveTo(10, 0); tail.lineTo(10, 10);
+        Path2D same = new Path2D.Double();
+        same.moveTo(0, 0); same.lineTo(10, 0);
+        same.append(tail, true);
+        List<double[]> fused = flatten(same.getPathIterator(null));
+        check("append with connect drops a moveTo onto the current point", fused.size() == 3 && count(fused, PathIterator.SEG_MOVETO) == 1
+            && near(fused.get(2)[1], 10) && near(fused.get(2)[2], 10));
+        Path2D fresh = new Path2D.Float();
+        fresh.append(tail, true);
+        List<double[]> onEmpty = flatten(fresh.getPathIterator(null));
+        check("append with connect onto an empty path keeps the moveTo", onEmpty.size() == 2 && (int) onEmpty.get(0)[0] == PathIterator.SEG_MOVETO);
+        Path2D apart = new Path2D.Double();
+        apart.moveTo(0, 0); apart.lineTo(10, 0); apart.append(tail, false);
+        check("append without connect keeps the moveTo", count(flatten(apart.getPathIterator(null)), PathIterator.SEG_MOVETO) == 2);
+        Path2D closed = new Path2D.Double();
+        closed.moveTo(0, 0); closed.lineTo(10, 0); closed.lineTo(0, 10); closed.closePath(); closed.closePath();
+        boolean oneClose = count(flatten(closed.getPathIterator(null)), PathIterator.SEG_CLOSE) == 1 && closed.getCurrentPoint().equals(new Point2D.Double(0, 0));
+        closed.append(tail, true);
+        List<double[]> after = flatten(closed.getPathIterator(null));
+        check("a repeated closePath is collapsed and append with connect after a close continues with a lineTo", oneClose
+            && count(after, PathIterator.SEG_MOVETO) == 1 && after.size() == 6 && (int) after.get(4)[0] == PathIterator.SEG_LINETO
+            && closed.getCurrentPoint().equals(new Point2D.Double(10, 10)));
+        boolean needsMove = false;
+        try { new Path2D.Double().lineTo(1, 1); } catch (IllegalPathStateException e) { needsMove = true; }
+        boolean negative = false;
+        try { new Path2D.Double(Path2D.WIND_NON_ZERO, -1); } catch (NegativeArraySizeException e) { negative = true; }
+        boolean badRule = false;
+        try { new Path2D.Float(7); } catch (IllegalArgumentException e) { badRule = true; }
+        check("lineTo without a moveTo, a negative capacity and an unknown winding rule are rejected", needsMove && negative && badRule
+            && new Path2D.Double().getCurrentPoint() == null);
+
+        // --- transform / createTransformedShape / clone ---
+        Path2D tri = new Path2D.Double();
+        tri.moveTo(0, 0); tri.lineTo(10, 0); tri.lineTo(0, 10); tri.closePath();
+        Path2D moved = (Path2D) tri.clone();
+        moved.transform(AffineTransform.getTranslateInstance(1, 2));
+        check("transform moves every coordinate and the bounds", sameRect(moved.getBounds2D(), 1, 2, 10, 10)
+            && moved.getBounds().equals(new java.awt.Rectangle(1, 2, 10, 10)) && moved.contains(2, 3) && !moved.contains(0.5, 0.5)
+            && sameRect(tri.getBounds2D(), 0, 0, 10, 10));
+        java.awt.Shape scaled = tri.createTransformedShape(AffineTransform.getScaleInstance(2, 2));
+        java.awt.Shape scaledF = new Path2D.Float(tri).createTransformedShape(AffineTransform.getScaleInstance(2, 2));
+        check("createTransformedShape clones at the source precision and leaves the source alone", scaled instanceof Path2D.Double
+            && scaledF instanceof Path2D.Float && sameRect(scaled.getBounds2D(), 0, 0, 20, 20) && sameRect(scaledF.getBounds2D(), 0, 0, 20, 20)
+            && sameRect(tri.getBounds2D(), 0, 0, 10, 10) && tri.createTransformedShape(null) instanceof Path2D.Double);
+        GeneralPath gp = new GeneralPath(tri);
+        check("GeneralPath is a Path2D.Float whose clone is a GeneralPath", gp instanceof Path2D.Float && gp.clone() instanceof GeneralPath
+            && new Path2D.Float(tri).clone().getClass() == Path2D.Float.class && tri.clone().getClass() == Path2D.Double.class
+            && gp.getWindingRule() == tri.getWindingRule() && sameRect(gp.getBounds2D(), 0, 0, 10, 10));
+        check("Path2D(Shape) copies the shape's winding rule",
+            new Path2D.Double(new java.awt.Polygon(new int[] {0, 10, 0}, new int[] {0, 0, 10}, 3)).getWindingRule() == Path2D.WIND_EVEN_ODD
+            && new GeneralPath(new Path2D.Double(Path2D.WIND_EVEN_ODD)).getWindingRule() == Path2D.WIND_EVEN_ODD
+            && new Path2D.Float(tri, AffineTransform.getTranslateInstance(3, 0)).getBounds2D().getX() == 3);
+
+        // --- precision and bounds ---
+        Path2D.Float fp = new Path2D.Float();
+        fp.moveTo(0.1, 0.2); fp.lineTo(1.1, 0);
+        double[] fc0 = new double[6];
+        fp.getPathIterator(null).currentSegment(fc0);
+        check("Path2D.Float stores float coordinates", fc0[0] == (double) 0.1f && fc0[1] == (double) 0.2f
+            && fp.getCurrentPoint().getX() == (double) 1.1f && fp.getCurrentPoint() instanceof Point2D.Float);
+        Path2D poly = new Path2D.Double();
+        poly.moveTo(1.5, -2); poly.lineTo(7.25, 3); poly.lineTo(-3, 8.5); poly.closePath();
+        check("getBounds2D of a polyline path is the exact coordinate range", sameRect(poly.getBounds2D(), -3, -2, 10.25, 10.5)
+            && poly.getBounds().equals(new java.awt.Rectangle(-3, -2, 11, 11)) && new Path2D.Double().getBounds2D().isEmpty()
+            && new Path2D.Float().getBounds().isEmpty());
+        Path2D arch = new Path2D.Double();
+        arch.moveTo(0, 0); arch.quadTo(5, 10, 10, 0); arch.closePath();
+        Rectangle2D ab = arch.getBounds2D();
+        check("curved path bounds span the end points and lie within the control hull",
+            ab.getX() == 0 && ab.getY() == 0 && ab.getWidth() == 10 && ab.getHeight() >= 5 && ab.getHeight() <= 10);
+        float[] fcs = new float[6];
+        PathIterator tpi = tri.getPathIterator(AffineTransform.getTranslateInstance(1, 1));
+        tpi.next();
+        check("path iterator applies the transform to float and double coordinates", tpi.currentSegment(fcs) == PathIterator.SEG_LINETO && fcs[0] == 11f && fcs[1] == 1f
+            && tpi.currentSegment(fc0) == PathIterator.SEG_LINETO && fc0[0] == 11 && fc0[1] == 1);
+
+        // --- contains / intersects statics ---
+        check("static contains/intersects with an empty rectangle are false",
+            !Path2D.contains(tri.getPathIterator(null), new Rectangle2D.Double(1, 1, 0, 2))
+            && !Path2D.intersects(tri.getPathIterator(null), new Rectangle2D.Double(1, 1, 2, 0))
+            && Path2D.contains(tri.getPathIterator(null), new Point2D.Double(1, 1))
+            && Path2D.intersects(tri.getPathIterator(null), new Rectangle2D.Double(-1, -1, 3, 3))
+            && tri.contains(new Rectangle2D.Double(1, 1, 2, 2)) && tri.intersects(new Rectangle2D.Double(-1, -1, 3, 3))
+            && !tri.contains(new Rectangle2D.Double(5, 5, 2, 2)) && !tri.contains(new Rectangle2D.Double(1, 1, 0, 0)));
+
+        // --- trimToSize ---
+        Path2D big = new Path2D.Double(Path2D.WIND_NON_ZERO, 100);
+        big.moveTo(0, 0); big.lineTo(5, 5); big.quadTo(1, 2, 3, 4);
+        List<double[]> before = flatten(big.getPathIterator(null));
+        big.trimToSize();
+        List<double[]> afterTrim = flatten(big.getPathIterator(null));
+        boolean sameSegs = before.size() == afterTrim.size();
+        for (int i = 0; sameSegs && i < before.size(); i++) sameSegs &= Arrays.equals(before.get(i), afterTrim.get(i));
+        big.lineTo(9, 9);
+        Path2D bigF = new Path2D.Float(Path2D.WIND_EVEN_ODD, 50);
+        bigF.moveTo(0, 0); bigF.lineTo(5, 5); bigF.trimToSize(); bigF.lineTo(9, 9);
+        check("trimToSize keeps the segments and the path can still grow", sameSegs && big.getCurrentPoint().equals(new Point2D.Double(9, 9))
+            && sameRect(big.getBounds2D(), 0, 0, 9, 9) && flatten(bigF.getPathIterator(null)).size() == 3 && bigF.getCurrentPoint().getX() == 9);
+
+        // --- serialization ---
+        Object wire = roundTrip(tri);
+        Object wireGp = roundTrip(gp);
+        Object wirePg = roundTrip(new java.awt.Polygon(new int[] {0, 10, 0}, new int[] {0, 0, 10}, 3));
+        check("Path2D, GeneralPath and Polygon survive a serialization round trip", wire instanceof Path2D.Double && sameRect(((Path2D) wire).getBounds2D(), 0, 0, 10, 10)
+            && ((Path2D) wire).contains(1, 1) && wireGp instanceof GeneralPath && ((Path2D) wireGp).contains(1, 1)
+            && wirePg instanceof java.awt.Polygon && ((java.awt.Polygon) wirePg).npoints == 3 && ((java.awt.Polygon) wirePg).contains(1, 1));
+
+        // --- Polygon ---
+        java.awt.Polygon pg = new java.awt.Polygon();
+        pg.addPoint(0, 0); pg.addPoint(10, 0); pg.addPoint(0, 10);
+        boolean grows = pg.npoints == 3 && pg.getBounds().equals(new java.awt.Rectangle(0, 0, 10, 10)) && pg.getBounds2D().equals(new java.awt.Rectangle(0, 0, 10, 10));
+        pg.addPoint(0, 0); pg.addPoint(2, 12);
+        check("Polygon grows past its initial capacity and tracks its bounds", grows && pg.npoints == 5 && pg.xpoints[4] == 2
+            && pg.getBounds().equals(new java.awt.Rectangle(0, 0, 10, 12)));
+        java.awt.Polygon tp = new java.awt.Polygon(new int[] {0, 10, 0}, new int[] {0, 0, 10}, 3);
+        check("Polygon contains tests the interior, not the bounding box", tp.contains(2, 2) && tp.contains(new java.awt.Point(2, 2)) && tp.contains(2.5, 2.5)
+            && tp.contains(new Point2D.Double(1, 1)) && tp.inside(3, 3) && !tp.contains(8, 8) && !tp.contains(-1, 1) && !tp.contains(11, 0));
+        check("Polygon intersects and contains rectangles against the edges", tp.intersects(1, 1, 2, 2) && tp.intersects(new Rectangle2D.Double(4, 4, 4, 4))
+            && !tp.intersects(8, 8, 1, 1) && !tp.intersects(new Rectangle2D.Double(1, 1, 0, 0))
+            && tp.contains(1, 1, 2, 2) && tp.contains(new Rectangle2D.Double(1, 1, 2, 2)) && !tp.contains(4, 4, 4, 4) && !tp.contains(-1, -1, 3, 3));
+        tp.translate(5, 5);
+        check("Polygon translate moves points and bounds", tp.xpoints[1] == 15 && tp.getBounds().equals(new java.awt.Rectangle(5, 5, 10, 10)) && tp.contains(7, 7) && !tp.contains(2, 2));
+        tp.reset();
+        check("Polygon reset empties it", tp.npoints == 0 && tp.getBounds().isEmpty() && !tp.contains(7, 7) && !tp.intersects(0, 0, 100, 100) && tp.getPathIterator(null).isDone());
+        java.awt.Polygon sq = new java.awt.Polygon(new int[] {0, 4, 4, 0}, new int[] {0, 0, 4, 4}, 4);
+        List<double[]> psegs = flatten(sq.getPathIterator(AffineTransform.getTranslateInstance(1, 1)));
+        check("Polygon path is a moveTo, lineTos and a close, even-odd, transformed", psegs.size() == 5 && (int) psegs.get(0)[0] == PathIterator.SEG_MOVETO
+            && near(psegs.get(0)[1], 1) && (int) psegs.get(3)[0] == PathIterator.SEG_LINETO && near(psegs.get(3)[2], 5) && (int) psegs.get(4)[0] == PathIterator.SEG_CLOSE
+            && sq.getPathIterator(null).getWindingRule() == PathIterator.WIND_EVEN_ODD && flatten(sq.getPathIterator(null, 0.5)).size() == 5);
+        boolean tooMany = false, negPts = false;
+        try { new java.awt.Polygon(new int[2], new int[2], 3); } catch (IndexOutOfBoundsException e) { tooMany = true; }
+        try { new java.awt.Polygon(new int[2], new int[2], -1); } catch (NegativeArraySizeException e) { negPts = true; }
+        check("Polygon constructor rejects npoints beyond the arrays or negative", tooMany && negPts);
+
+        // --- RectangularShape ---
+        Ellipse2D el = new Ellipse2D.Double(0.5, 0.5, 2, 2);
+        check("RectangularShape.getBounds is the floor/ceil frame", el.getBounds().equals(new java.awt.Rectangle(0, 0, 3, 3)) && sameRect(el.getFrame(), 0.5, 0.5, 2, 2)
+            && near(el.getCenterX(), 1.5) && near(el.getMaxY(), 2.5) && near(el.getMinX(), 0.5) && el.contains(new Point2D.Double(1.5, 1.5)));
+        el.setFrameFromDiagonal(new Point2D.Double(5, 6), new Point2D.Double(1, 2));
+        boolean diag = sameRect(el.getFrame(), 1, 2, 4, 4);
+        el.setFrameFromCenter(new Point2D.Double(0, 0), new Point2D.Double(-2, 3));
+        boolean centre = sameRect(el.getFrame(), -2, -3, 4, 6);
+        el.setFrame(new Point2D.Double(1, 1), new java.awt.Dimension(2, 3));
+        check("RectangularShape setFrameFromDiagonal/Center/Point+Dimension and clone", diag && centre && sameRect(el.getFrame(), 1, 1, 2, 3) && !el.isEmpty()
+            && flatten(el.getPathIterator(null, 0.1)).size() > 8 && ((RectangularShape) el.clone()).getFrame().equals(el.getFrame())
+            && el.intersects(new Rectangle2D.Double(0, 0, 2, 2)) && !el.contains(new Rectangle2D.Double(0, 0, 2, 2)));
     }
 
     // ---- #64: Line2D, Rectangle2D, Arc2D, Ellipse2D, AffineTransform, Point2D, Dimension2D on random inputs ----

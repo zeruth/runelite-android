@@ -166,11 +166,19 @@ public final class Contours {
     // ---------------------------------------------------------------------------------
 
     /**
+     * Device-space chord tolerance of the JDK's software fill, clip and thin-stroke loops:
+     * ShapeSpanIterator.c subdivides a curve until every control point is within
+     * {@code sqrt(MAX_FLAT_SQ) = 1.0} px of its chord. Fills, clips and thin draws pass this
+     * so curves come out with the same segment count as on desktop.
+     */
+    public static final double JDK_FLATNESS = 1.0;
+
+    /**
      * Append {@code it}'s path, with quadratic / cubic segments subdivided until within
-     * {@code flatness} of the true curve. Our shadow shapes emit curves verbatim even from
-     * {@code getPathIterator(at, flatness)}, so everything that wants polygons goes through
-     * here. Coordinates are optionally mapped by {@code at} and then scaled by
-     * {@code scale} (the graphics deviceScale).
+     * {@code flatness} of the true curve. The backend flattens itself rather than asking
+     * {@code getPathIterator(at, flatness)} so the tolerance is applied in device space,
+     * after {@code at} and {@code scale} (the graphics deviceScale), which is where the
+     * JDK's software loops measure it too (ShapeSpanIterator.c, MAX_FLAT_SQ).
      */
     public void appendFlattened(PathIterator it, AffineTransform at, double scale, double flatness) {
         if (it == null) return;
