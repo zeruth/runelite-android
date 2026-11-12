@@ -1768,6 +1768,8 @@ public class BufferedImageGraphics2D extends Graphics2D {
     }
     private static BufferedImage buffered(java.awt.Image source){
         if(source instanceof BufferedImage)return (BufferedImage)source;
+        // The live raster, not getSnapshot(): stretched mode blits a volatile image every frame.
+        if(source instanceof BufferedBackedVolatileImage)return ((BufferedBackedVolatileImage)source).backing();
         if(source instanceof java.awt.image.VolatileImage)return ((java.awt.image.VolatileImage)source).getSnapshot();
         if(source instanceof java.awt.image.ProducerImage)return ((java.awt.image.ProducerImage)source).getBufferedImage();
         return source==null?null:new java.awt.image.ProducerImage(source.getSource()).getBufferedImage();
