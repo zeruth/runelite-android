@@ -1047,6 +1047,9 @@ public class TransferHandler implements Serializable {
 
         void cleanup(boolean forDrop) {
             setComponentDropLocation(null, forDrop);
+            if (component instanceof JComponent) {
+                ((JComponent) component).dndDone();
+            }
             component = null;
         }
     }
