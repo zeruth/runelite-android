@@ -88,6 +88,42 @@ public class IndexColorModel extends ColorModel {
         if (out == null) out = transferType == DataBuffer.TYPE_BYTE ? new byte[1] : new short[1];
         SampleModel.transferSet(out, 0, best); return out;
     }
+    /**
+     * Returns a new <code>BufferedImage</code> of TYPE_INT_ARGB or
+     * TYPE_INT_RGB that has a <code>Raster</code> with pixel data
+     * computed by expanding the indices in the source <code>Raster</code>
+     * using the color/alpha component arrays of this <code>ColorModel</code>.
+     * Only the lower <em>n</em> bits of each index value in the source
+     * <code>Raster</code>, as specified in the
+     * <a href="#index_values">class description</a> above, are used to
+     * compute the color/alpha values in the returned image.
+     * If <code>forceARGB</code> is <code>true</code>, a TYPE_INT_ARGB image is
+     * returned regardless of whether or not this <code>ColorModel</code>
+     * has an alpha component array or a transparent pixel.
+     * @param raster the specified <code>Raster</code>
+     * @param forceARGB if <code>true</code>, the returned
+     *     <code>BufferedImage</code> is TYPE_INT_ARGB; otherwise it is
+     *     TYPE_INT_RGB
+     * @return a <code>BufferedImage</code> created with the specified
+     *     <code>Raster</code>
+     * @throws IllegalArgumentException if the raster argument is not
+     *           compatible with this IndexColorModel
+     */
+    public BufferedImage convertToIntDiscrete(Raster raster, boolean forceARGB) {
+        if (!isCompatibleRaster(raster)) {
+            throw new IllegalArgumentException("This raster is not compatible" + "with this IndexColorModel.");
+        }
+        // Desktop also has a 25-bit BITMASK variant; the shadow's packed-int pipeline
+        // only knows 8-bit alpha, so any transparency expands to full ARGB.
+        boolean opaque = !forceARGB && getTransparency() == Transparency.OPAQUE;
+        int w = raster.getWidth(), h = raster.getHeight();
+        BufferedImage out = new BufferedImage(w, h, opaque ? BufferedImage.TYPE_INT_RGB : BufferedImage.TYPE_INT_ARGB);
+        int rX = raster.getMinX(), rY = raster.getMinY();
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) out.setRGB(x, y, getRGB(raster.getSample(rX + x, rY + y, 0)));
+        }
+        return out;
+    }
     @Override public SampleModel createCompatibleSampleModel(int w, int h) { return new PixelInterleavedSampleModel(transferType, w, h, 1, w, new int[]{0}); }
     @Override public boolean isCompatibleRaster(Raster raster) { return raster.getTransferType() == transferType && raster.getNumBands() == 1 && raster.getSampleModel().getSampleSize(0) >= pixel_bits; }
 }
