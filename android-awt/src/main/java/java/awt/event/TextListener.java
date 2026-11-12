@@ -32,6 +32,11 @@ package java.awt.event;
 
 import java.util.EventListener;
 
+/**
+ * The listener interface for receiving text events from a
+ * {@link java.awt.TextComponent}.
+ */
 public interface TextListener extends EventListener {
+    /** Invoked when the value of the text has changed. */
     void textValueChanged(TextEvent e);
 }

@@ -52,8 +52,9 @@ import java.util.Properties;
  * {@link net.runelite.awt.impl.HostToolkit}, which feeds in the host window state (insets, lock keys,
  * desktop properties, the beeper).
  *
- * <p>Fixed values, because Android has no equivalent: {@link #getBestCursorSize} is 0&times;0 and
- * {@link #getMaximumCursorColors} is 0 (no pointer cursor images), {@link #getSystemSelection} is
+ * <p>Fixed values: {@link #getBestCursorSize} returns the size asked for and
+ * {@link #getMaximumCursorColors} is 0xFFFFFF (custom cursors become ARGB PointerIcon bitmaps of
+ * any size); because Android has no equivalent, {@link #getSystemSelection} is
  * {@code null} (no primary selection), {@link #getPrintJob} returns {@code null} as if the user
  * cancelled the dialog, {@link #sync} is a no-op (frames are presented by the host view),
  * {@link #isFrameStateSupported} accepts the Windows toolkit's states (NORMAL, ICONIFIED,
@@ -215,6 +216,32 @@ public abstract class Toolkit {
     public Image createImage(byte[] data, int off, int len) {
         if (data == null) return null;
         return decode(() -> javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(data, off, len)));
+    }
+
+    /** Creates a cursor from an image; the host maps it to a bitmap
+     *  PointerIcon for mice and styluses. Not headless-checked: the shadow
+     *  GraphicsEnvironment always reports headless, and CustomCursorPlugin
+     *  must start. The hotspot check is sun.awt.CustomCursor's. */
+    public Cursor createCustomCursor(Image cursor, Point hotSpot, String name)
+        throws IndexOutOfBoundsException, HeadlessException {
+        int width = cursor.getWidth(null);
+        int height = cursor.getHeight(null);
+        // A not-yet-loaded image reports -1; its size is unknown, as is the hotspot's validity.
+        if (width >= 0 && height >= 0
+                && (hotSpot.x >= width || hotSpot.y >= height || hotSpot.x < 0 || hotSpot.y < 0)) {
+            throw new IndexOutOfBoundsException("invalid hotSpot");
+        }
+        return new net.runelite.awt.impl.ImageCursor(cursor, hotSpot, name);
+    }
+
+    /** Returns the size asked for: PointerIcon takes a bitmap of any size. */
+    public Dimension getBestCursorSize(int preferredWidth, int preferredHeight) throws HeadlessException {
+        return new Dimension(preferredWidth, preferredHeight);
+    }
+
+    /** Custom cursor bitmaps are full ARGB on Android. */
+    public int getMaximumCursorColors() throws HeadlessException {
+        return 0xFFFFFF;
     }
 
     /**
@@ -420,30 +447,6 @@ public abstract class Toolkit {
         }
         int flags = ((java.awt.image.ProducerImage) image).check(observer);
         return (width == 0 || height == 0) ? flags | ImageObserver.ALLBITS : flags;
-    }
-
-    /**
-     * The cursor carries the name and the CUSTOM_CURSOR type, as the JDK's; Android shows no pointer
-     * image for it. The hotspot is checked as the JDK checks it.
-     */
-    public Cursor createCustomCursor(Image cursor, Point hotSpot, String name) {
-        int width = cursor == null ? -1 : cursor.getWidth(null);
-        int height = cursor == null ? -1 : cursor.getHeight(null);
-        if (hotSpot != null && width > 0 && height > 0
-                && (hotSpot.x < 0 || hotSpot.x >= width || hotSpot.y < 0 || hotSpot.y >= height)) {
-            throw new IndexOutOfBoundsException("invalid hotSpot");
-        }
-        return new Cursor(name);
-    }
-
-    /** 0&times;0: the JDK's value for a toolkit without custom cursor images. */
-    public Dimension getBestCursorSize(int preferredWidth, int preferredHeight) {
-        return new Dimension(0, 0);
-    }
-
-    /** 0: the JDK's value for a toolkit without custom cursor images. */
-    public int getMaximumCursorColors() {
-        return 0;
     }
 
     /** Deliberate no-op: there is no window system command buffer; the host view presents every frame. */

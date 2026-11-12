@@ -172,8 +172,8 @@ public final class TestToolkitContracts {
         check(toolkit.getSystemSelection() == null, "no system selection on Android");
         expect(NullPointerException.class, "print job without a frame", () -> toolkit.getPrintJob(null, "job", null));
 
-        // Cursors: fixed sizes, named custom cursors, JDK hotspot check.
-        check(toolkit.getBestCursorSize(32, 32).equals(new Dimension(0, 0)) && toolkit.getMaximumCursorColors() == 0, "cursor limits");
+        // Cursors: any size, full ARGB (PointerIcon bitmaps), named custom cursors, JDK hotspot check.
+        check(toolkit.getBestCursorSize(32, 32).equals(new Dimension(32, 32)) && toolkit.getMaximumCursorColors() == 0xFFFFFF, "cursor limits");
         Image cursorImage = new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB);
         Cursor cursor = toolkit.createCustomCursor(cursorImage, new Point(3, 4), "pointer");
         check(cursor.getType() == Cursor.CUSTOM_CURSOR && "pointer".equals(cursor.getName()), "custom cursor");
