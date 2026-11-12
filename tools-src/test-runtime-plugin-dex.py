@@ -5,6 +5,7 @@ import hashlib
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import zipfile
 
@@ -25,6 +26,49 @@ def gradle_jar(group, artifact):
     if not jars:
         raise SystemExit(f"{group}:{artifact} is not in the Gradle cache; pass --{artifact} or build the app once")
     return jars[-1]
+
+
+def default_java_home():
+    """JAVA_HOME, else the JDK whose javac is on PATH."""
+    if os.environ.get("JAVA_HOME"):
+        return Path(os.environ["JAVA_HOME"])
+    javac = shutil.which("javac")
+    if not javac:
+        raise SystemExit("No JDK: pass --java-home or set JAVA_HOME")
+    return Path(javac).resolve().parent.parent
+
+
+def default_sdk():
+    """ANDROID_HOME / ANDROID_SDK_ROOT, else sdk.dir from local.properties (read only)."""
+    for name in ("ANDROID_HOME", "ANDROID_SDK_ROOT"):
+        if os.environ.get(name):
+            return Path(os.environ[name])
+    properties = REPO / "local.properties"
+    if properties.is_file():
+        for line in properties.read_text(encoding="utf-8").splitlines():
+            if line.startswith("sdk.dir="):
+                return Path(line[len("sdk.dir="):].replace("\\:", ":").replace("\\\\", "\\"))
+    return None
+
+
+def default_apk():
+    """The newest APK the app's debug or release assembly left behind."""
+    apks = [apk for kind in ("debug", "release")
+            for apk in (REPO / "android" / "build" / "outputs" / "apk" / kind).glob("*.apk")]
+    return max(apks, key=lambda apk: apk.stat().st_mtime) if apks else None
+
+
+def default_serial(adb):
+    """The first attached, booted emulator; the probe never targets a phone."""
+    try:
+        listing = subprocess.run([str(adb), "devices"], capture_output=True, text=True, timeout=30).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    for line in listing.splitlines():
+        parts = line.split()
+        if len(parts) == 2 and parts[1] == "device" and re.fullmatch(r"emulator-\d+", parts[0]):
+            return parts[0]
+    return None
 
 
 def check_host_api(host_api):
@@ -48,30 +92,51 @@ def check_host_api(host_api):
 
 
 def main():
+    # Every input has a default, so the bare command runs: the host retargeting fixture always,
+    # the APK/D8/emulator half whenever an APK, D8 and a booted emulator are found. A missing
+    # device input is reported as SKIP; --require-device turns that into a failure.
     parser = argparse.ArgumentParser()
-    for name in ("java-home", "output"):
-        parser.add_argument("--" + name, type=Path, required=True)
-    for name in ("sdk", "r8", "apk"):
-        parser.add_argument("--" + name, type=Path)
-    parser.add_argument("--serial")
+    parser.add_argument("--java-home", type=Path, help="JDK 11+ (default: JAVA_HOME, else javac on PATH)")
+    parser.add_argument("--output", type=Path, default=REPO / "build" / "runtime-plugin-dex")
+    parser.add_argument("--sdk", type=Path, help="Android SDK (default: ANDROID_HOME, else local.properties)")
+    parser.add_argument("--r8", type=Path, help="R8/D8 jar (default: Gradle cache)")
+    parser.add_argument("--apk", type=Path, help="app APK (default: newest under android/build/outputs/apk)")
+    parser.add_argument("--serial", help="emulator serial (default: the first booted emulator)")
     parser.add_argument("--asm", type=Path, help="ASM jar for the host retargeter (default: Gradle cache)")
     parser.add_argument("--asm-commons", type=Path, help="ASM commons jar (default: Gradle cache)")
     parser.add_argument("--host-only", action="store_true",
                         help="run only the host retargeting fixture (no APK, D8 or emulator)")
+    parser.add_argument("--require-device", action="store_true",
+                        help="fail instead of skipping when the APK, D8 or emulator cannot be found")
     args = parser.parse_args()
     asm = args.asm or gradle_jar("org.ow2.asm", "asm")
     asm_commons = args.asm_commons or gradle_jar("org.ow2.asm", "asm-commons")
+    suffix = ".exe" if os.name == "nt" else ""
+    java_home = args.java_home or default_java_home()
+    java = java_home / "bin"
+    skip_device = None
     if not args.host_only:
-        absent = [name for name in ("sdk", "r8", "apk", "serial") if getattr(args, name) is None]
+        sdk = args.sdk or default_sdk()
+        adb = sdk / "platform-tools" / ("adb" + suffix) if sdk else None
+        if args.r8 is None:
+            try:
+                args.r8 = gradle_jar("com.android.tools", "r8")
+            except SystemExit:
+                pass
+        args.apk = args.apk or default_apk()
+        if args.serial is None and adb is not None and adb.is_file():
+            args.serial = default_serial(adb)
+        absent = [name for name, value in (("sdk", adb if adb is not None and adb.is_file() else None),
+                                           ("r8", args.r8), ("apk", args.apk), ("serial", args.serial))
+                  if value is None]
         if absent:
-            parser.error("--" + ", --".join(absent) + " required unless --host-only")
-        if not re.fullmatch(r"emulator-\d+", args.serial):
+            skip_device = "no " + ", no ".join(absent) + " found"
+            if args.require_device:
+                parser.error(skip_device + "; pass --" + ", --".join(absent))
+        elif not re.fullmatch(r"emulator-\d+", args.serial):
             raise SystemExit("This probe only targets an emulator.")
     out = args.output.resolve()
     out.mkdir(parents=True, exist_ok=True)
-    suffix = ".exe" if os.name == "nt" else ""
-    java = args.java_home / "bin"
-    adb = args.sdk / "platform-tools" / ("adb" + suffix) if args.sdk else None
     logs = []
 
     def run(label, *command, expected_failure=False):
@@ -108,6 +173,12 @@ def main():
     if "PASS:" not in result:
         raise SystemExit("Missing retarget success marker")
     if args.host_only:
+        return
+    if skip_device:
+        message = f"SKIP: APK/D8/emulator half ({skip_device}); host retargeting fixture passed\n"
+        print(message, end="", flush=True)
+        logs.append(message)
+        (out / "results.log").write_text("\n".join(logs), encoding="utf-8")
         return
 
     with zipfile.ZipFile(args.apk) as archive:
