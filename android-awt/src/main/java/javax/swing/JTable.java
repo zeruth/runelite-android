@@ -103,8 +103,8 @@ public class JTable extends JComponent implements javax.swing.event.TableModelLi
             selectionModel.setAnchorSelectionIndex(visibleModelIndex(modelAnchor));
             if(selectionModel instanceof DefaultListSelectionModel)((DefaultListSelectionModel)selectionModel).moveLeadSelectionIndex(visibleModelIndex(modelLead));
         }finally{selectionModel.setValueIsAdjusting(adjusting);restoringSelection=false;}
-        // A row the filter hid is deselected for good, as on the JDK; it must not come back selected.
-        rememberSelection();
+        // The model rows are kept, not re-read from the view: like the JDK's SortManager.modelSelection,
+        // a row the filter hid comes back selected when it returns, until the user changes the selection.
     }
     private void relocateEditor(){
         if(cellEditor==null)return;
