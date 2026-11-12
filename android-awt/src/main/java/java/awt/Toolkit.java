@@ -180,12 +180,28 @@ public abstract class Toolkit {
 
     public boolean isFrameStateSupported(int state) { return state == Frame.NORMAL; }
 
+    /**
+     * As SunToolkit: a zero-sized request, or an image that is not producer-backed
+     * (BufferedImage, VolatileImage), is ready; a produced image starts production and
+     * reports ALLBITS, notifying {@code observer} of ERROR|ABORT when it failed.
+     */
     public boolean prepareImage(Image image, int width, int height, ImageObserver observer) {
-        return true;
+        if (width == 0 || height == 0) {
+            return true;
+        }
+        if (!(image instanceof java.awt.image.ProducerImage)) {
+            return true;
+        }
+        return ((java.awt.image.ProducerImage) image).prepare(observer);
     }
 
+    /** As SunToolkit: the ImageObserver flags of a produced image, ALLBITS for any other. */
     public int checkImage(Image image, int width, int height, ImageObserver observer) {
-        return ImageObserver.ALLBITS;
+        if (!(image instanceof java.awt.image.ProducerImage)) {
+            return ImageObserver.ALLBITS;
+        }
+        int flags = ((java.awt.image.ProducerImage) image).check(observer);
+        return (width == 0 || height == 0) ? flags | ImageObserver.ALLBITS : flags;
     }
 
     private static final class HeadlessToolkit extends Toolkit {
