@@ -30,7 +30,18 @@
  */
 package javax.swing;
 import java.awt.*;
-public class JWindow extends Window implements RootPaneContainer {
+public class JWindow extends Window implements javax.accessibility.Accessible, RootPaneContainer {
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJWindow();
+        }
+        return accessibleContext;
+    }
+
+    /** Accessibility support for Swing windows: the AWT WINDOW context. */
+    protected class AccessibleJWindow extends AccessibleAWTWindow {
+    }
     protected JRootPane rootPane = new JRootPane();
     public JWindow() { this((Window) null); }
     public JWindow(Frame owner) { this((Window) owner); }

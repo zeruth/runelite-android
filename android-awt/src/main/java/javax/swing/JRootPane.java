@@ -33,7 +33,21 @@ package javax.swing;
 import java.awt.Component;
 import java.awt.Container;
 
-public class JRootPane extends JComponent {
+public class JRootPane extends JComponent implements javax.accessibility.Accessible {
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJRootPane();
+        }
+        return accessibleContext;
+    }
+
+    /** Accessibility support for root panes: role ROOT_PANE. */
+    protected class AccessibleJRootPane extends AccessibleJComponent {
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.ROOT_PANE;
+        }
+    }
     private static final long serialVersionUID = 1L;
 
     public static final int NONE = 0;

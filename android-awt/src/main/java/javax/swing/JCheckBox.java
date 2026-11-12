@@ -30,7 +30,21 @@
  */
 package javax.swing;
 
-public class JCheckBox extends JToggleButton {
+public class JCheckBox extends JToggleButton implements javax.accessibility.Accessible {
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJCheckBox();
+        }
+        return accessibleContext;
+    }
+
+    /** Accessibility support for check boxes: role CHECK_BOX. */
+    protected class AccessibleJCheckBox extends AccessibleJToggleButton {
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.CHECK_BOX;
+        }
+    }
     private static final long serialVersionUID = 1L;
 
     public JCheckBox() { this(null, null, false); }

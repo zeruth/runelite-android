@@ -35,7 +35,21 @@ import java.awt.Graphics;
 import java.util.Map;
 import java.util.WeakHashMap;
 
-public class JLayeredPane extends JComponent {
+public class JLayeredPane extends JComponent implements javax.accessibility.Accessible {
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJLayeredPane();
+        }
+        return accessibleContext;
+    }
+
+    /** Accessibility support for layered panes: role LAYERED_PANE. */
+    protected class AccessibleJLayeredPane extends AccessibleJComponent {
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.LAYERED_PANE;
+        }
+    }
     private static final long serialVersionUID = 1L;
 
     public static final Integer DEFAULT_LAYER = 0;

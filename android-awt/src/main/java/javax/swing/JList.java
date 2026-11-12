@@ -34,7 +34,43 @@ import java.util.ArrayList;
 import java.util.Vector;
 import javax.swing.event.ListSelectionListener;
 
-public class JList<E> extends JComponent implements Scrollable {
+public class JList<E> extends JComponent implements Scrollable, javax.accessibility.Accessible {
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJList();
+        }
+        return accessibleContext;
+    }
+
+    /**
+     * Accessibility support for lists: role LIST with one child per model element, whatever
+     * is scrolled into view; MULTISELECTABLE unless the selection mode is single.
+     */
+    protected class AccessibleJList extends AccessibleJComponent {
+        public javax.accessibility.AccessibleStateSet getAccessibleStateSet() {
+            javax.accessibility.AccessibleStateSet states = super.getAccessibleStateSet();
+            if (getSelectionMode() != ListSelectionModel.SINGLE_SELECTION) {
+                states.add(javax.accessibility.AccessibleState.MULTISELECTABLE);
+            }
+            return states;
+        }
+
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.LIST;
+        }
+
+        public int getAccessibleChildrenCount() {
+            return getModel().getSize();
+        }
+
+        public javax.accessibility.Accessible getAccessibleChild(int i) {
+            if (i < 0 || i >= getModel().getSize()) {
+                return null;
+            }
+            return new net.runelite.awt.impl.AccessibleCell(JList.this, i, getModel().getElementAt(i), isSelectedIndex(i));
+        }
+    }
     private static final long serialVersionUID = -1697842831055920921L;
 
     public static final int VERTICAL = 0;

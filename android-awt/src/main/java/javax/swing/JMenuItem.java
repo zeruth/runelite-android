@@ -30,7 +30,21 @@
  */
 package javax.swing;
 
-public class JMenuItem extends AbstractButton implements MenuElement {
+public class JMenuItem extends AbstractButton implements javax.accessibility.Accessible, MenuElement {
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJMenuItem();
+        }
+        return accessibleContext;
+    }
+
+    /** Accessibility support for menu items: role MENU_ITEM. */
+    protected class AccessibleJMenuItem extends AccessibleAbstractButton {
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.MENU_ITEM;
+        }
+    }
     private static final long serialVersionUID = 1L;
 
     public JMenuItem() {}

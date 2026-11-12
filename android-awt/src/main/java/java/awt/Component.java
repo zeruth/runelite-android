@@ -132,6 +132,36 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
     protected Component() {
     }
 
+    private java.util.Locale locale;
+    /**
+     * The JDK's lookup: the component's own locale, else its parent's; a parentless component
+     * without one throws. {@link Window} answers the default locale instead.
+     */
+    public java.util.Locale getLocale() {
+        java.util.Locale locale = this.locale;
+        if (locale != null) return locale;
+        Container parent = this.parent;
+        if (parent == null) {
+            throw new IllegalComponentStateException("This component must have a parent in order to determine its locale");
+        }
+        return parent.getLocale();
+    }
+    public void setLocale(java.util.Locale l) {
+        java.util.Locale oldValue = locale;
+        locale = l;
+        firePropertyChange("locale", oldValue, l);
+        invalidateIfValid();
+    }
+    final java.util.Locale ownLocale() { return locale; }
+    private void invalidateIfValid() { if (isValid()) invalidate(); }
+
+    public boolean contains(int x, int y) { return inside(x, y); }
+    public boolean contains(Point p) { return contains(p.x, p.y); }
+
+    /** @deprecated As of 1.4, replaced by {@link #isFocusable()}. */
+    @Deprecated
+    public boolean isFocusTraversable() { return isFocusable(); }
+
     public Container getParent()  { return parent; }
     void setParent(Container p) {
         Container previous = parent;
@@ -614,6 +644,337 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
             case KeyEvent.KEY_TYPED:
                 for (KeyListener l : keyListeners) l.keyTyped(e);
                 break;
+        }
+    }
+
+    // --- Accessibility support ---
+
+    /**
+     * The {@code AccessibleContext} associated with this {@code Component}, created lazily by
+     * the subclasses that implement {@link javax.accessibility.Accessible}.
+     */
+    protected javax.accessibility.AccessibleContext accessibleContext = null;
+
+    /** Null here; each accessible subclass creates its own context on first use. */
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        return accessibleContext;
+    }
+
+    /** Index among the parent's {@link javax.accessibility.Accessible} children, or -1. */
+    int getAccessibleIndexInParent() {
+        synchronized (getTreeLock()) {
+            int index = -1;
+            Container parent = this.getParent();
+            if (parent != null && parent instanceof javax.accessibility.Accessible) {
+                Component[] ca = parent.getComponents();
+                for (int i = 0; i < ca.length; i++) {
+                    if (ca[i] instanceof javax.accessibility.Accessible) index++;
+                    if (this.equals(ca[i])) return index;
+                }
+            }
+            return -1;
+        }
+    }
+
+    /** The state set every AWT and Swing context starts from. */
+    javax.accessibility.AccessibleStateSet getAccessibleStateSet() {
+        synchronized (getTreeLock()) {
+            javax.accessibility.AccessibleStateSet states = new javax.accessibility.AccessibleStateSet();
+            if (this.isEnabled()) states.add(javax.accessibility.AccessibleState.ENABLED);
+            if (this.isFocusTraversable()) states.add(javax.accessibility.AccessibleState.FOCUSABLE);
+            if (this.isVisible()) states.add(javax.accessibility.AccessibleState.VISIBLE);
+            if (this.isShowing()) states.add(javax.accessibility.AccessibleState.SHOWING);
+            if (this.isFocusOwner()) states.add(javax.accessibility.AccessibleState.FOCUSED);
+            if (this instanceof javax.accessibility.Accessible) {
+                javax.accessibility.AccessibleContext ac = ((javax.accessibility.Accessible) this).getAccessibleContext();
+                if (ac != null) {
+                    javax.accessibility.Accessible ap = ac.getAccessibleParent();
+                    if (ap != null) {
+                        javax.accessibility.AccessibleContext pac = ap.getAccessibleContext();
+                        if (pac != null) {
+                            javax.accessibility.AccessibleSelection as = pac.getAccessibleSelection();
+                            if (as != null) {
+                                states.add(javax.accessibility.AccessibleState.SELECTABLE);
+                                int i = ac.getAccessibleIndexInParent();
+                                if (i >= 0 && as.isAccessibleChildSelected(i)) {
+                                    states.add(javax.accessibility.AccessibleState.SELECTED);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if (this instanceof javax.swing.JComponent && ((javax.swing.JComponent) this).isOpaque()) {
+                states.add(javax.accessibility.AccessibleState.OPAQUE);
+            }
+            return states;
+        }
+    }
+
+    /**
+     * Accessibility support shared by every component: geometry, colours, font and focus
+     * come straight from the component; visibility and focus changes are reported as
+     * {@link javax.accessibility.AccessibleContext#ACCESSIBLE_STATE_PROPERTY} changes while
+     * anyone listens.
+     */
+    protected abstract class AccessibleAWTComponent extends javax.accessibility.AccessibleContext
+            implements Serializable, javax.accessibility.AccessibleComponent {
+
+        private static final long serialVersionUID = 642321655757800191L;
+
+        protected AccessibleAWTComponent() {
+        }
+
+        private volatile transient int propertyListenersCount = 0;
+
+        protected ComponentListener accessibleAWTComponentHandler = null;
+        protected FocusListener accessibleAWTFocusHandler = null;
+
+        /** Fires visibility property changes for the component's show and hide. */
+        protected class AccessibleAWTComponentHandler implements ComponentListener {
+            public void componentHidden(java.awt.event.ComponentEvent e) {
+                if (accessibleContext != null) {
+                    accessibleContext.firePropertyChange(
+                        javax.accessibility.AccessibleContext.ACCESSIBLE_STATE_PROPERTY,
+                        javax.accessibility.AccessibleState.VISIBLE, null);
+                }
+            }
+            public void componentShown(java.awt.event.ComponentEvent e) {
+                if (accessibleContext != null) {
+                    accessibleContext.firePropertyChange(
+                        javax.accessibility.AccessibleContext.ACCESSIBLE_STATE_PROPERTY,
+                        null, javax.accessibility.AccessibleState.VISIBLE);
+                }
+            }
+            public void componentMoved(java.awt.event.ComponentEvent e) {
+            }
+            public void componentResized(java.awt.event.ComponentEvent e) {
+            }
+        }
+
+        /** Fires focus property changes for the component's focus gain and loss. */
+        protected class AccessibleAWTFocusHandler implements FocusListener {
+            public void focusGained(java.awt.event.FocusEvent event) {
+                if (accessibleContext != null) {
+                    accessibleContext.firePropertyChange(
+                        javax.accessibility.AccessibleContext.ACCESSIBLE_STATE_PROPERTY,
+                        null, javax.accessibility.AccessibleState.FOCUSED);
+                }
+            }
+            public void focusLost(java.awt.event.FocusEvent event) {
+                if (accessibleContext != null) {
+                    accessibleContext.firePropertyChange(
+                        javax.accessibility.AccessibleContext.ACCESSIBLE_STATE_PROPERTY,
+                        javax.accessibility.AccessibleState.FOCUSED, null);
+                }
+            }
+        }
+
+        public void addPropertyChangeListener(java.beans.PropertyChangeListener listener) {
+            if (accessibleAWTComponentHandler == null) {
+                accessibleAWTComponentHandler = new AccessibleAWTComponentHandler();
+            }
+            if (accessibleAWTFocusHandler == null) {
+                accessibleAWTFocusHandler = new AccessibleAWTFocusHandler();
+            }
+            if (propertyListenersCount++ == 0) {
+                Component.this.addComponentListener(accessibleAWTComponentHandler);
+                Component.this.addFocusListener(accessibleAWTFocusHandler);
+            }
+            super.addPropertyChangeListener(listener);
+        }
+
+        public void removePropertyChangeListener(java.beans.PropertyChangeListener listener) {
+            if (--propertyListenersCount == 0) {
+                Component.this.removeComponentListener(accessibleAWTComponentHandler);
+                Component.this.removeFocusListener(accessibleAWTFocusHandler);
+            }
+            super.removePropertyChangeListener(listener);
+        }
+
+        public String getAccessibleName() {
+            return accessibleName;
+        }
+
+        public String getAccessibleDescription() {
+            return accessibleDescription;
+        }
+
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.AWT_COMPONENT;
+        }
+
+        public javax.accessibility.AccessibleStateSet getAccessibleStateSet() {
+            return Component.this.getAccessibleStateSet();
+        }
+
+        public javax.accessibility.Accessible getAccessibleParent() {
+            if (accessibleParent != null) {
+                return accessibleParent;
+            }
+            Container parent = getParent();
+            if (parent instanceof javax.accessibility.Accessible) {
+                return (javax.accessibility.Accessible) parent;
+            }
+            return null;
+        }
+
+        public int getAccessibleIndexInParent() {
+            return Component.this.getAccessibleIndexInParent();
+        }
+
+        public int getAccessibleChildrenCount() {
+            return 0;
+        }
+
+        public javax.accessibility.Accessible getAccessibleChild(int i) {
+            return null;
+        }
+
+        public java.util.Locale getLocale() {
+            return Component.this.getLocale();
+        }
+
+        public javax.accessibility.AccessibleComponent getAccessibleComponent() {
+            return this;
+        }
+
+        // AccessibleComponent
+
+        public Color getBackground() {
+            return Component.this.getBackground();
+        }
+
+        public void setBackground(Color c) {
+            Component.this.setBackground(c);
+        }
+
+        public Color getForeground() {
+            return Component.this.getForeground();
+        }
+
+        public void setForeground(Color c) {
+            Component.this.setForeground(c);
+        }
+
+        public Cursor getCursor() {
+            return Component.this.getCursor();
+        }
+
+        public void setCursor(Cursor cursor) {
+            Component.this.setCursor(cursor);
+        }
+
+        public Font getFont() {
+            return Component.this.getFont();
+        }
+
+        public void setFont(Font f) {
+            Component.this.setFont(f);
+        }
+
+        public FontMetrics getFontMetrics(Font f) {
+            return f == null ? null : Component.this.getFontMetrics(f);
+        }
+
+        public boolean isEnabled() {
+            return Component.this.isEnabled();
+        }
+
+        public void setEnabled(boolean b) {
+            boolean old = Component.this.isEnabled();
+            Component.this.setEnabled(b);
+            if (b != old && accessibleContext != null) {
+                if (b) {
+                    accessibleContext.firePropertyChange(
+                        javax.accessibility.AccessibleContext.ACCESSIBLE_STATE_PROPERTY,
+                        null, javax.accessibility.AccessibleState.ENABLED);
+                } else {
+                    accessibleContext.firePropertyChange(
+                        javax.accessibility.AccessibleContext.ACCESSIBLE_STATE_PROPERTY,
+                        javax.accessibility.AccessibleState.ENABLED, null);
+                }
+            }
+        }
+
+        public boolean isVisible() {
+            return Component.this.isVisible();
+        }
+
+        public void setVisible(boolean b) {
+            boolean old = Component.this.isVisible();
+            Component.this.setVisible(b);
+            if (b != old && accessibleContext != null) {
+                if (b) {
+                    accessibleContext.firePropertyChange(
+                        javax.accessibility.AccessibleContext.ACCESSIBLE_STATE_PROPERTY,
+                        null, javax.accessibility.AccessibleState.VISIBLE);
+                } else {
+                    accessibleContext.firePropertyChange(
+                        javax.accessibility.AccessibleContext.ACCESSIBLE_STATE_PROPERTY,
+                        javax.accessibility.AccessibleState.VISIBLE, null);
+                }
+            }
+        }
+
+        public boolean isShowing() {
+            return Component.this.isShowing();
+        }
+
+        public boolean contains(Point p) {
+            return Component.this.contains(p);
+        }
+
+        /** Null while the component is not showing, as on the JDK. */
+        public Point getLocationOnScreen() {
+            synchronized (Component.this.getTreeLock()) {
+                return Component.this.isShowing() ? Component.this.getLocationOnScreen() : null;
+            }
+        }
+
+        public Point getLocation() {
+            return Component.this.getLocation();
+        }
+
+        public void setLocation(Point p) {
+            Component.this.setLocation(p);
+        }
+
+        public Rectangle getBounds() {
+            return Component.this.getBounds();
+        }
+
+        public void setBounds(Rectangle r) {
+            Component.this.setBounds(r);
+        }
+
+        public Dimension getSize() {
+            return Component.this.getSize();
+        }
+
+        public void setSize(Dimension d) {
+            Component.this.setSize(d);
+        }
+
+        public javax.accessibility.Accessible getAccessibleAt(Point p) {
+            return null;
+        }
+
+        @SuppressWarnings("deprecation")
+        public boolean isFocusTraversable() {
+            return Component.this.isFocusTraversable();
+        }
+
+        public void requestFocus() {
+            Component.this.requestFocus();
+        }
+
+        public void addFocusListener(FocusListener l) {
+            Component.this.addFocusListener(l);
+        }
+
+        public void removeFocusListener(FocusListener l) {
+            Component.this.removeFocusListener(l);
         }
     }
 }

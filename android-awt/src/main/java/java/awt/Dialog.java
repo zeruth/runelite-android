@@ -33,6 +33,33 @@ package java.awt;
 public class Dialog extends Window {
     private static final long serialVersionUID = 5036553639616394035L;
 
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleAWTDialog();
+        }
+        return accessibleContext;
+    }
+
+    /** Accessibility support for dialogs: role DIALOG, plus MODAL and RESIZABLE. */
+    protected class AccessibleAWTDialog extends AccessibleAWTWindow {
+        private static final long serialVersionUID = 4837230331833941201L;
+
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.DIALOG;
+        }
+
+        public javax.accessibility.AccessibleStateSet getAccessibleStateSet() {
+            javax.accessibility.AccessibleStateSet states = super.getAccessibleStateSet();
+            if (isModal()) {
+                states.add(javax.accessibility.AccessibleState.MODAL);
+            }
+            if (isResizable()) {
+                states.add(javax.accessibility.AccessibleState.RESIZABLE);
+            }
+            return states;
+        }
+    }
+
     public enum ModalityType {
         MODELESS, DOCUMENT_MODAL, APPLICATION_MODAL, TOOLKIT_MODAL
     }

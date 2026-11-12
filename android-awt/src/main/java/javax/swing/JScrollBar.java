@@ -35,7 +35,45 @@ import java.awt.event.AdjustmentListener;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
 
-public class JScrollBar extends JComponent implements SwingConstants {
+public class JScrollBar extends JComponent implements SwingConstants, javax.accessibility.Accessible {
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJScrollBar();
+        }
+        return accessibleContext;
+    }
+
+    /** Accessibility support for scroll bars: role SCROLL_BAR, valued by the model. */
+    protected class AccessibleJScrollBar extends AccessibleJComponent implements javax.accessibility.AccessibleValue {
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.SCROLL_BAR;
+        }
+
+        public javax.accessibility.AccessibleValue getAccessibleValue() {
+            return this;
+        }
+
+        public Number getCurrentAccessibleValue() {
+            return Integer.valueOf(getValue());
+        }
+
+        public boolean setCurrentAccessibleValue(Number n) {
+            if (n == null) {
+                return false;
+            }
+            setValue(n.intValue());
+            return true;
+        }
+
+        public Number getMinimumAccessibleValue() {
+            return Integer.valueOf(getMinimum());
+        }
+
+        public Number getMaximumAccessibleValue() {
+            return Integer.valueOf(getMaximum() - getVisibleAmount());
+        }
+    }
     private static final long serialVersionUID = 1L;
 
     protected int orientation = VERTICAL;

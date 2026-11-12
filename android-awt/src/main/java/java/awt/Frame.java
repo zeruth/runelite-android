@@ -33,6 +33,30 @@ package java.awt;
 public class Frame extends Window {
     private static final long serialVersionUID = 2673458971256075116L;
 
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleAWTFrame();
+        }
+        return accessibleContext;
+    }
+
+    /** Accessibility support for frames: role FRAME, ACTIVE with the focus, RESIZABLE. */
+    protected class AccessibleAWTFrame extends AccessibleAWTWindow {
+        private static final long serialVersionUID = -6172960752956030250L;
+
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.FRAME;
+        }
+
+        public javax.accessibility.AccessibleStateSet getAccessibleStateSet() {
+            javax.accessibility.AccessibleStateSet states = super.getAccessibleStateSet();
+            if (isResizable()) {
+                states.add(javax.accessibility.AccessibleState.RESIZABLE);
+            }
+            return states;
+        }
+    }
+
     public static final int NORMAL = 0;
     public static final int ICONIFIED = 1;
     public static final int MAXIMIZED_HORIZ = 2;

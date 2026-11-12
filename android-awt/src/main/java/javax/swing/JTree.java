@@ -37,7 +37,40 @@ import javax.swing.event.*;
 import javax.swing.tree.*;
 
 /** Tree state and renderer shared by desktop-style plugins and the Android host. */
-public class JTree extends JComponent implements Scrollable {
+public class JTree extends JComponent implements Scrollable, javax.accessibility.Accessible {
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJTree();
+        }
+        return accessibleContext;
+    }
+
+    /**
+     * Accessibility support for trees: role TREE; the children are the root alone when it is
+     * visible, otherwise the root's children, as on the JDK.
+     */
+    protected class AccessibleJTree extends AccessibleJComponent {
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.TREE;
+        }
+
+        public int getAccessibleChildrenCount() {
+            javax.swing.tree.TreeModel model = getModel();
+            if (model == null) return 0;
+            if (isRootVisible()) return 1;
+            Object root = model.getRoot();
+            return root == null ? 0 : model.getChildCount(root);
+        }
+
+        public javax.accessibility.Accessible getAccessibleChild(int i) {
+            javax.swing.tree.TreeModel model = getModel();
+            if (model == null || i < 0 || i >= getAccessibleChildrenCount()) return null;
+            Object root = model.getRoot();
+            Object node = isRootVisible() ? root : model.getChild(root, i);
+            return new net.runelite.awt.impl.AccessibleCell(JTree.this, i, node, false);
+        }
+    }
     private static final long serialVersionUID=1L;
     protected TreeModel treeModel;
     private TreeSelectionModel selectionModel;

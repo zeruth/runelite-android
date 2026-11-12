@@ -49,10 +49,98 @@ public class JComponent extends Container {
 
     protected javax.swing.plaf.ComponentUI ui;
 
-    private transient javax.accessibility.AccessibleContext accessibleContext;
+    /**
+     * A JComponent is not {@link javax.accessibility.Accessible} itself (the JDK leaves that to
+     * each widget), but RuneLite panels subclass it directly and the Android host asks every
+     * component it rasterizes, so a plain subclass answers a generic Swing context here.
+     */
     public javax.accessibility.AccessibleContext getAccessibleContext() {
-        if (accessibleContext == null) accessibleContext = new javax.accessibility.AccessibleContext() {};
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJComponent() {
+                private static final long serialVersionUID = 1L;
+            };
+        }
         return accessibleContext;
+    }
+
+    /**
+     * Accessibility support shared by every Swing component: the name falls back to a
+     * titled border, the description to the tool tip, and the children are the container's
+     * accessible components.
+     */
+    public abstract class AccessibleJComponent extends AccessibleAWTContainer
+            implements javax.accessibility.AccessibleExtendedComponent {
+        private static final long serialVersionUID = 1L;
+
+        protected AccessibleJComponent() {
+            super();
+        }
+
+        /** @deprecated This field is unused. */
+        @Deprecated
+        protected java.awt.event.FocusListener accessibleFocusHandler = null;
+
+        public String getAccessibleName() {
+            String name = accessibleName;
+            if (name == null) {
+                name = (String) getClientProperty(javax.accessibility.AccessibleContext.ACCESSIBLE_NAME_PROPERTY);
+            }
+            if (name == null) {
+                name = getBorderTitle(getBorder());
+            }
+            if (name == null) {
+                // JLabel.LABELED_BY_PROPERTY: set by JLabel.setLabelFor on the labelled component.
+                Object o = getClientProperty("labeledBy");
+                if (o instanceof javax.accessibility.Accessible) {
+                    javax.accessibility.AccessibleContext ac = ((javax.accessibility.Accessible) o).getAccessibleContext();
+                    if (ac != null) name = ac.getAccessibleName();
+                }
+            }
+            return name;
+        }
+
+        /** The title of the (possibly compound) titled border, the JDK's name fallback. */
+        protected String getBorderTitle(Border b) {
+            if (b instanceof javax.swing.border.TitledBorder) {
+                return ((javax.swing.border.TitledBorder) b).getTitle();
+            } else if (b instanceof javax.swing.border.CompoundBorder) {
+                String s = getBorderTitle(((javax.swing.border.CompoundBorder) b).getInsideBorder());
+                if (s == null) s = getBorderTitle(((javax.swing.border.CompoundBorder) b).getOutsideBorder());
+                return s;
+            }
+            return null;
+        }
+
+        public String getAccessibleDescription() {
+            String description = accessibleDescription;
+            if (description == null) {
+                description = (String) getClientProperty(javax.accessibility.AccessibleContext.ACCESSIBLE_DESCRIPTION_PROPERTY);
+            }
+            if (description == null) {
+                description = getToolTipText();
+            }
+            return description;
+        }
+
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.SWING_COMPONENT;
+        }
+
+        // State set (OPAQUE included) and children come from AccessibleAWTContainer.
+
+        // AccessibleExtendedComponent
+
+        public String getToolTipText() {
+            return JComponent.this.getToolTipText();
+        }
+
+        public String getTitledBorderText() {
+            return getBorderTitle(getBorder());
+        }
+
+        public javax.accessibility.AccessibleKeyBinding getAccessibleKeyBinding() {
+            return null;
+        }
     }
 
     private Border border;

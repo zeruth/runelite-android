@@ -33,7 +33,36 @@ package javax.swing.text;
 import javax.swing.JComponent;
 import javax.swing.event.CaretListener;
 
-public abstract class JTextComponent extends JComponent {
+public abstract class JTextComponent extends JComponent implements javax.accessibility.Accessible {
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJTextComponent();
+        }
+        return accessibleContext;
+    }
+
+    /**
+     * Accessibility support for text components: role TEXT, EDITABLE while editable. The
+     * {@code AccessibleText} view of the document is not offered yet, so {@code
+     * getAccessibleText()} stays null and readers fall back to the name.
+     */
+    public class AccessibleJTextComponent extends AccessibleJComponent {
+        public AccessibleJTextComponent() {
+        }
+
+        public javax.accessibility.AccessibleStateSet getAccessibleStateSet() {
+            javax.accessibility.AccessibleStateSet states = super.getAccessibleStateSet();
+            if (JTextComponent.this.isEditable()) {
+                states.add(javax.accessibility.AccessibleState.EDITABLE);
+            }
+            return states;
+        }
+
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.TEXT;
+        }
+    }
     private static final long serialVersionUID = -2911697971489974478L;
 
     public static final String DEFAULT_KEYMAP = "default";

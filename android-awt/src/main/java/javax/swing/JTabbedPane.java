@@ -34,7 +34,83 @@ import java.awt.Color;
 import java.awt.Component;
 import javax.swing.event.ChangeListener;
 
-public class JTabbedPane extends JComponent implements SwingConstants {
+public class JTabbedPane extends JComponent implements SwingConstants, javax.accessibility.Accessible {
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJTabbedPane();
+        }
+        return accessibleContext;
+    }
+
+    /**
+     * Accessibility support for tabbed panes: role PAGE_TAB_LIST; the children are the tabs
+     * (role PAGE_TAB, named by their titles), each holding its page component.
+     */
+    protected class AccessibleJTabbedPane extends AccessibleJComponent {
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.PAGE_TAB_LIST;
+        }
+
+        public int getAccessibleChildrenCount() {
+            return getTabCount();
+        }
+
+        public javax.accessibility.Accessible getAccessibleChild(int i) {
+            if (i < 0 || i >= getTabCount()) {
+                return null;
+            }
+            return new AccessiblePage(i);
+        }
+    }
+
+    /** One tab of the pane as the accessibility tree sees it. */
+    private final class AccessiblePage extends javax.accessibility.AccessibleContext
+            implements javax.accessibility.Accessible {
+        private final int index;
+
+        AccessiblePage(int index) {
+            this.index = index;
+            setAccessibleParent(JTabbedPane.this);
+        }
+
+        public javax.accessibility.AccessibleContext getAccessibleContext() {
+            return this;
+        }
+
+        public String getAccessibleName() {
+            return accessibleName != null ? accessibleName : getTitleAt(index);
+        }
+
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.PAGE_TAB;
+        }
+
+        public javax.accessibility.AccessibleStateSet getAccessibleStateSet() {
+            javax.accessibility.AccessibleStateSet states = new javax.accessibility.AccessibleStateSet();
+            if (JTabbedPane.this.isEnabled()) states.add(javax.accessibility.AccessibleState.ENABLED);
+            states.add(javax.accessibility.AccessibleState.SELECTABLE);
+            if (getSelectedIndex() == index) states.add(javax.accessibility.AccessibleState.SELECTED);
+            return states;
+        }
+
+        public int getAccessibleIndexInParent() {
+            return index;
+        }
+
+        public int getAccessibleChildrenCount() {
+            return getComponentAt(index) instanceof javax.accessibility.Accessible ? 1 : 0;
+        }
+
+        public javax.accessibility.Accessible getAccessibleChild(int i) {
+            java.awt.Component page = getComponentAt(index);
+            return i == 0 && page instanceof javax.accessibility.Accessible ? (javax.accessibility.Accessible) page : null;
+        }
+
+        public java.util.Locale getLocale() {
+            return JTabbedPane.this.getLocale();
+        }
+    }
     private static final long serialVersionUID = 1L;
     public static final int WRAP_TAB_LAYOUT = 0;
     public static final int SCROLL_TAB_LAYOUT = 1;
