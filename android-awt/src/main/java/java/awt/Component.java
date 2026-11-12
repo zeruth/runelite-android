@@ -656,6 +656,8 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
             l = mouseMotionListeners;
         } else if (listenerType == MouseWheelListener.class) {
             l = mouseWheelListeners;
+        } else if (listenerType == InputMethodListener.class) {
+            l = inputMethodListeners;
         } else if (listenerType == java.beans.PropertyChangeListener.class) {
             return (T[]) getPropertyChangeListeners();
         }
@@ -998,26 +1000,6 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
         return thisName + ',' + x + ',' + y + ',' + width + 'x' + height
             + (isValid() ? "" : ",invalid") + (visible ? "" : ",hidden") + (enabled ? "" : ",disabled");
     }
-
-    /**
-     * The listeners of {@code listenerType} registered on this component, as on the JDK; subclasses
-     * with listener types of their own (Button's ActionListener, ...) extend it.
-     */
-    @SuppressWarnings("unchecked")
-    public <T extends java.util.EventListener> T[] getListeners(Class<T> listenerType) {
-        List<? extends java.util.EventListener> found;
-        if (listenerType == ComponentListener.class) found = componentListeners;
-        else if (listenerType == FocusListener.class) found = focusListeners;
-        else if (listenerType == HierarchyListener.class) found = hierarchyListeners;
-        else if (listenerType == KeyListener.class) found = keyListeners;
-        else if (listenerType == MouseListener.class) found = mouseListeners;
-        else if (listenerType == MouseMotionListener.class) found = mouseMotionListeners;
-        else if (listenerType == MouseWheelListener.class) found = mouseWheelListeners;
-        else if (listenerType == java.beans.PropertyChangeListener.class) return (T[]) getPropertyChangeListeners();
-        else found = java.util.Collections.emptyList();
-        return found.toArray((T[]) java.lang.reflect.Array.newInstance(listenerType, 0));
-    }
-
 
     public ComponentListener[] getComponentListeners() { return componentListeners.toArray(new ComponentListener[0]); }
     public FocusListener[] getFocusListeners() { return focusListeners.toArray(new FocusListener[0]); }
