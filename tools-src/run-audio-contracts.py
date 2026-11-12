@@ -19,6 +19,10 @@ def main():
     p.add_argument('--mode', default='')
     p.add_argument('--trace', action='store_true', help='Trace native calls in test bytecode only')
     p.add_argument('--release-host', action='store_true', help='Test only the implementation shipped in --apk, without an overlay')
+    p.add_argument('--arg', action='append', default=[], help='Program argument for the test (repeatable), e.g. audible')
+    p.add_argument('--fixture', action='append', default=[], metavar='FILE[=SECONDS]',
+                   help='Push FILE next to the probe and pass its device path (with =SECONDS kept) to the test; '
+                        'TestAudioMusicAndEffect plays each .mp3/.ogg through the compressed-audio decoder')
     args = p.parse_args()
     if args.release_host and (args.package or args.standalone or args.trace):
         p.error('--release-host runs against the actual APK and cannot use an overlay or instrumentation')
