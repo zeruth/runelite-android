@@ -425,7 +425,7 @@ private val SHADOW_PREFIXES = listOf("java/", "javax/", "sun/", "com/sun/")
 // overlap), the shadow supplies the rest.
 val shadowPackages = listOf(
     "java.applet", "java.awt", "java.beans", "java.lang.management", "java.net.http",
-    "javax.accessibility", "javax.imageio", "javax.management", "javax.sound", "javax.swing",
+    "javax.accessibility", "javax.imageio", "javax.management", "javax.print", "javax.sound", "javax.swing",
     "sun", "com.sun",
 )
 val shadowClasses = listOf("java.lang.ProcessHandle")

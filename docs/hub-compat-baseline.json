@@ -1,0 +1,7 @@
+{
+ "comment": "Accepted hub-compat-scan signatures; see docs/hub-compat.md. Regenerate with tools-src/hub-compat-issues.py --update-baseline.",
+ "hubVersion": null,
+ "generatedAt": null,
+ "pluginsScanned": null,
+ "signatures": {}
+}

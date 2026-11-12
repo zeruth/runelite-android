@@ -61,13 +61,11 @@ internal class SwingDialogs(private val activity: ComponentActivity) {
             // presenting them here would put the whole client in a dialog whose Close runs RuneLite's exit.
             if (window is net.runelite.client.ui.ContainableFrame || window is net.runelite.client.ui.SplashScreen) return@handler
             main.post {
-                if (!visible || closed) {
-                    // Desktop order on hide: focus leaves, then the window deactivates (CLOSED follows from dispose).
-                    if (windows.remove(window)?.also { it.dismiss() } != null) javax.swing.SwingUtilities.invokeLater {
-                        window.dispatchEvent(java.awt.event.WindowEvent(window, java.awt.event.WindowEvent.WINDOW_LOST_FOCUS))
-                        window.dispatchEvent(java.awt.event.WindowEvent(window, java.awt.event.WindowEvent.WINDOW_DEACTIVATED))
-                    }
-                } else if (!windows.containsKey(window)) {
+                // Window events are not fired here: Window.setVisible fires OPENED and activates
+                // (ACTIVATED, GAINED_FOCUS) on show, and hiding clears focus (LOST_FOCUS, DEACTIVATED)
+                // synchronously, before dispose posts CLOSED, in the desktop order.
+                if (!visible || closed) windows.remove(window)?.dismiss()
+                else if (!windows.containsKey(window)) {
                     val root = (window as? javax.swing.RootPaneContainer)?.rootPane
                     if (root != null) {
                         val view = net.runelite.mp.ui.panels.SwingPanelView(activity, "Swing window", root)
@@ -93,13 +91,6 @@ internal class SwingDialogs(private val activity: ComponentActivity) {
                             }
                         }
                         dialog.show()
-                        // OPENED was fired by setVisible; the window manager's ACTIVATED then GAINED_FOCUS follow.
-                        javax.swing.SwingUtilities.invokeLater {
-                            if (window.isVisible) {
-                                window.dispatchEvent(java.awt.event.WindowEvent(window, java.awt.event.WindowEvent.WINDOW_ACTIVATED))
-                                window.dispatchEvent(java.awt.event.WindowEvent(window, java.awt.event.WindowEvent.WINDOW_GAINED_FOCUS))
-                            }
-                        }
                         dialog.window?.setLayout((activity.resources.displayMetrics.widthPixels * .9).toInt(), (activity.resources.displayMetrics.heightPixels * .85).toInt())
                     }
                 }

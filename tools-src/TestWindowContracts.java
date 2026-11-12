@@ -99,6 +99,9 @@ public class TestWindowContracts {
         check(refused, "opacity range");
         frame.setLocationByPlatform(true);
         check(frame.isLocationByPlatform(), "location by platform");
+        frame.setSize(200, 100);
+        frame.pack();
+        check(frame.isLocationByPlatform(), "resizing and pack keep location by platform");
         frame.setLocation(10, 10);
         check(!frame.isLocationByPlatform(), "setLocation clears location by platform");
         frame.setModalExclusionType(null);
