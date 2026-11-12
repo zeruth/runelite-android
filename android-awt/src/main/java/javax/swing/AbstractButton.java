@@ -432,8 +432,10 @@ public abstract class AbstractButton extends JComponent {
         if (isPreferredSizeSet()) return super.getPreferredSize();
         int textW = 0, textH = 0;
         String t = text;
-        if (t != null && !t.isEmpty()) {
-            java.awt.FontMetrics fm = getFontMetrics(getFont());
+        java.awt.Font font = getFont();
+        // A button outside any tree may have no font yet; it is measured by its icon and padding.
+        if (t != null && !t.isEmpty() && font != null) {
+            java.awt.FontMetrics fm = getFontMetrics(font);
             if (fm != null) {
                 textW = fm.stringWidth(t);
                 textH = fm.getHeight();

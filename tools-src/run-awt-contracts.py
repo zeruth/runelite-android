@@ -45,6 +45,21 @@ REPO = Path(__file__).resolve().parent.parent
 SHADOW = REPO / "android-awt/src/main/java"
 TESTS = REPO / "tools-src"
 KOTLIN_ONLY = ("net.runelite.awt.AwtNative", "net.runelite.awt.AwtCompat")
+JNI_READ_CLASSES = ("java/awt/AlphaComposite", "java/awt/Color", "java/awt/Font")
+# (shadow class or package prefix ending in "/", JDK class, why): the shadow is not patched while the
+# JDK class is loaded by the plain-JDK runs and has no patched shadow of its own.  BufImgSurfaceData
+# loads only when a JDK BufferedImage hands out a Graphics, so contracts that merely build images keep
+# the shadow image classes.
+RUNTIME_COUPLINGS = (
+    ("java/awt/Toolkit", "java/awt/KeyboardFocusManager",
+     "casts the default toolkit to sun.awt.KeyboardFocusManagerPeerProvider in initPeer"),
+    ("java/awt/Image", "sun/awt/image/BufImgSurfaceData",
+     "draws through the image accessor that the JDK's java.awt.Image installs in its static initializer"),
+    ("java/awt/image/", "sun/awt/image/BufImgSurfaceData",
+     "casts a JDK BufferedImage's rasters and color models to its own implementations"),
+    ("java/awt/color/", "sun/awt/image/BufImgSurfaceData",
+     "reads the JDK color spaces behind a JDK BufferedImage's color model"),
+)
 # Fallback for packages the host image lacks entirely (new shadow-only packages).
 MODULE_BY_PREFIX = (
     ("com.sun.net.httpserver", "jdk.httpserver"),
@@ -504,12 +519,29 @@ def drop_in_check(sources, in_jdk, patches, tests_dir, loaded, tool, build):
         # JNI code reaches fields and constructors no constant pool shows: a JDK class with native
         # methods caches its own field IDs (initIDs), and libfontmanager builds 2D geometry itself
         # (GeneralPath's package-private constructor in SunFontManager.initIDs).  Those layouts must match.
-        jni_visible = dotted in jdk.natives or internal.startswith(("java/awt/geom/", "java/awt/image/", "java/awt/font/", "java/awt/color/"))
+        # The 2D loops and font natives cache fields of these too (GraphicsPrimitiveMgr.initIDs reads
+        # AlphaComposite.extraAlpha; SunFontManager.initIDs the Font fields).
+        jni_visible = (dotted in jdk.natives or internal in JNI_READ_CLASSES
+                       or internal.startswith(("java/awt/geom/", "java/awt/image/", "java/awt/font/", "java/awt/color/")))
         layout = sorted((n, d) for (n, d), private in missing[internal].items()
-                        if not private and not n.startswith("$") and (n == "<init>" or not d.startswith("(")))
+                        if (not private or internal in JNI_READ_CLASSES)
+                        and not n.startswith("$") and (n == "<init>" or not d.startswith("(")))
         if layout and jni_visible and not by_internal[top(internal)].runtime_reason:
             by_internal[top(internal)].runtime_reason = (f"JNI-visible layout differs from the JDK's "
                                                          f"{dotted}: lacks {layout[0][0]}{layout[0][1]}")
+    # Couplings no member scan sees: a JDK class that stays live casts to, or reads state installed
+    # by, the JDK twin of a shadow class, so patching the shadow alone fails away from the contract.
+    for shadow_class, jdk_class, why in RUNTIME_COUPLINGS:
+        partner = by_internal.get(jdk_class)
+        partner_patched = jdk_class in files and partner is not None and not partner.runtime_reason
+        if jdk_class not in loaded or partner_patched:
+            continue
+        coupled = [f for f in files if f.startswith(shadow_class)] if shadow_class.endswith("/") \
+            else [shadow_class] if shadow_class in files else []
+        for internal in coupled:
+            source = by_internal[top(internal)]
+            if not source.runtime_reason:
+                source.runtime_reason = f"the JDK's {jdk_class.replace('/', '.')} {why}"
     jdk_refs, own_refs, member_refs = scan_references(
         tool, build, twins, sorted(patches) + [f"dir:{d}" for d in patches.values()] + [f"dir:{tests_dir}"])
     demoted = True

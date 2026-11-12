@@ -33,6 +33,7 @@ package javax.swing;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.GraphicsConfiguration;
+import java.awt.GraphicsEnvironment;
 import java.awt.Insets;
 import java.awt.Point;
 import java.awt.Rectangle;
@@ -77,7 +78,9 @@ public class JPopupMenu extends JComponent implements javax.accessibility.Access
         setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
         setOpaque(true);
         setBackground(new java.awt.Color(0x3A3D43));
-        setVisible(false);
+        // Hidden without our setVisible: it fires popup events and walks the selected path,
+        // which a subclass (BasicComboPopup) cannot take before its own constructor has run.
+        super.setVisible(false);
     }
     public JPopupMenu(String label) { this();setLabel(label); }
 
@@ -136,11 +139,10 @@ public class JPopupMenu extends JComponent implements javax.accessibility.Access
     Point adjustPopupLocationToFitScreen(int xPosition, int yPosition, Dimension popupSize) {
         Point popupLocation = new Point(xPosition, yPosition);
         if (popupPositionFixDisabled) return popupLocation;
-        Toolkit toolkit = Toolkit.getDefaultToolkit();
         GraphicsConfiguration gc = invoker != null ? invoker.getGraphicsConfiguration() : getGraphicsConfiguration();
-        Rectangle scrBounds = gc != null ? gc.getBounds() : new Rectangle(toolkit.getScreenSize());
+        Rectangle scrBounds = gc != null ? gc.getBounds() : new Rectangle(Toolkit.getDefaultToolkit().getScreenSize());
         if (gc != null) {
-            Insets insets = toolkit.getScreenInsets(gc);
+            Insets insets = screenInsets(gc);
             scrBounds.x += insets.left;
             scrBounds.y += insets.top;
             scrBounds.width -= insets.left + insets.right;
@@ -155,6 +157,15 @@ public class JPopupMenu extends JComponent implements javax.accessibility.Access
         if (popupLocation.x < scrBounds.x) popupLocation.x = scrBounds.x;
         if (popupLocation.y < scrBounds.y) popupLocation.y = scrBounds.y;
         return popupLocation;
+    }
+
+    /**
+     * The screen insets of {@code gc}. A headless environment has none: the shadow's toolkit
+     * reports zero there, and a headless JDK toolkit would throw HeadlessException instead.
+     */
+    static Insets screenInsets(GraphicsConfiguration gc) {
+        if (GraphicsEnvironment.isHeadless()) return new Insets(0, 0, 0, 0);
+        return Toolkit.getDefaultToolkit().getScreenInsets(gc);
     }
 
     /** 8u's two-argument form, sized by the popup's preferred size. */

@@ -231,12 +231,11 @@ public class JMenu extends JMenuItem implements javax.accessibility.Accessible {
         Dimension pmSize = popup.getSize();
         if (pmSize.width == 0) pmSize = popup.getPreferredSize();
         Point position = getLocationOnScreen();
-        Toolkit toolkit = Toolkit.getDefaultToolkit();
         GraphicsConfiguration gc = getGraphicsConfiguration();
-        Rectangle screenBounds = new Rectangle(toolkit.getScreenSize());
+        // The toolkit's screen size only when there is no configuration: a headless JDK toolkit throws.
+        Rectangle screenBounds = gc != null ? gc.getBounds() : new Rectangle(Toolkit.getDefaultToolkit().getScreenSize());
         if (gc != null) {
-            screenBounds = gc.getBounds();
-            Insets screenInsets = toolkit.getScreenInsets(gc);
+            Insets screenInsets = JPopupMenu.screenInsets(gc);
             screenBounds.width -= Math.abs(screenInsets.left + screenInsets.right);
             screenBounds.height -= Math.abs(screenInsets.top + screenInsets.bottom);
             position.x -= Math.abs(screenInsets.left);

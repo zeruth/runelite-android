@@ -1,5 +1,11 @@
 // host-contract: patched-args=shadow
+import java.awt.Component;
+import java.awt.GraphicsConfiguration;
+import java.awt.GraphicsDevice;
 import java.awt.Point;
+import java.awt.Rectangle;
+import java.awt.geom.AffineTransform;
+import java.awt.image.ColorModel;
 import java.awt.event.ActionEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
@@ -44,9 +50,38 @@ public class TestMenuContracts {
         }
     }
 
+    /**
+     * A 400x300 screen. The placement checks supply it, and the screen positions below, themselves:
+     * the patched run keeps the JDK's Component, which has no screen without a native peer.
+     */
+    static final class Screen extends GraphicsConfiguration {
+        public GraphicsDevice getDevice() { return null; }
+        public ColorModel getColorModel() { return null; }
+        public ColorModel getColorModel(int transparency) { return null; }
+        public AffineTransform getDefaultTransform() { return new AffineTransform(); }
+        public AffineTransform getNormalizingTransform() { return new AffineTransform(); }
+        public Rectangle getBounds() { return new Rectangle(0, 0, 400, 300); }
+    }
+
+    static final Screen SCREEN = new Screen();
+
+    /** The screen position the shadow gives a host-mounted tree: the sum of the parent offsets. */
+    static Point onScreen(Component c) {
+        Point p = new Point();
+        for (Component at = c; at != null; at = at.getParent()) p.translate(at.getX(), at.getY());
+        return p;
+    }
+
     static final class Menu extends JMenu {
         Menu(String text) { super(text); }
         Point origin() { return getPopupMenuOrigin(); }
+        @Override public Point getLocationOnScreen() { return onScreen(this); }
+        @Override public GraphicsConfiguration getGraphicsConfiguration() { return SCREEN; }
+    }
+
+    static final class Invoker extends JPanel {
+        @Override public Point getLocationOnScreen() { return onScreen(this); }
+        @Override public GraphicsConfiguration getGraphicsConfiguration() { return SCREEN; }
     }
 
     public static void main(String[] args) throws Exception {
@@ -195,11 +230,12 @@ public class TestMenuContracts {
         check(!edit.isSelected(), "clearing the path closes the menu");
     }
 
-    /** Shadow only: the host screen is set through the headless device, which the JDK lacks. */
+    /**
+     * Shadow only: the JDK's JMenu asks its headless toolkit for the screen size even when a
+     * configuration supplies the screen, and that throws HeadlessException.
+     */
     private static void placement() throws Exception {
-        Class.forName("net.runelite.awt.impl.HeadlessGraphicsConfiguration")
-            .getMethod("updateDisplay", int.class, int.class, int.class).invoke(null, 400, 300, 96);
-        try {
+        {
             JMenuBar bar = new JMenuBar();
             Menu menu = new Menu("View");
             bar.add(menu);
@@ -223,17 +259,18 @@ public class TestMenuContracts {
             JPopupMenu popup = new JPopupMenu();
             popup.add(new JMenuItem("A"));
             popup.setPopupSize(100, 80);
-            JPanel invoker = new JPanel();
+            JPanel invoker = new Invoker();
             invoker.setBounds(350, 250, 50, 50);
             popup.show(invoker, 30, 30);
             check(popup.getX() == 300 && popup.getY() == 220,
                 "show() moves the popup inside the screen, got " + popup.getX() + "," + popup.getY());
             check(popup.getInvoker() == invoker, "show() records the invoker");
+            check(MenuSelectionManager.defaultManager().isComponentPartOfCurrentMenu(popup),
+                "a shown context popup roots the selected path");
             popup.setVisible(false);
+            check(MenuSelectionManager.defaultManager().getSelectedPath().length == 0,
+                "hiding a context popup clears the selected path");
             JPopupMenu.class.getMethod("takeShownPopupMenu").invoke(null);
-        } finally {
-            Class.forName("net.runelite.awt.impl.HeadlessGraphicsConfiguration")
-                .getMethod("updateDisplay", int.class, int.class, int.class).invoke(null, 1, 1, 96);
         }
     }
 }
