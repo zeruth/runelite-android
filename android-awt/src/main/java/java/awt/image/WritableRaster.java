@@ -51,6 +51,11 @@ public class WritableRaster extends Raster {
         sampleModel.setSample(x - sampleModelTranslateX, y - sampleModelTranslateY, b, s, dataBuffer);
     }
 
+    public void setSample(int x, int y, int b, float s) {
+        checkBounds(x,y);
+        sampleModel.setSample(x - sampleModelTranslateX, y - sampleModelTranslateY, b, s, dataBuffer);
+    }
+
     public void setPixel(int x, int y, int[] iArray) {
         checkBounds(x,y);
         sampleModel.setPixel(x - sampleModelTranslateX, y - sampleModelTranslateY, iArray, dataBuffer);

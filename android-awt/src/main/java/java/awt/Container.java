@@ -445,12 +445,80 @@ public class Container extends Component {
         return super.getMinimumSize();
     }
 
-    public void setFocusCycleRoot(boolean focusCycleRoot) {}
-    public boolean isFocusCycleRoot() { return false; }
-    public void setFocusTraversalPolicyProvider(boolean provider) {}
-    public boolean isFocusTraversalPolicyProvider() { return false; }
-    public void setFocusTraversalPolicy(Object policy) {}
-    public Object getFocusTraversalPolicy() { return null; }
+    // --- focus (after OpenJDK 8u Container) ---
+
+    private boolean focusCycleRoot, focusTraversalPolicyProvider;
+    private transient FocusTraversalPolicy focusTraversalPolicy;
+
+    public void setFocusCycleRoot(boolean focusCycleRoot) {
+        boolean old;
+        synchronized (this) {
+            old = this.focusCycleRoot;
+            this.focusCycleRoot = focusCycleRoot;
+        }
+        firePropertyChange("focusCycleRoot", old, focusCycleRoot);
+    }
+    /** True when set, and for the root of a tree the Android host mounts (see {@link Component#isHostMountedRoot}). */
+    public boolean isFocusCycleRoot() { return focusCycleRoot || isHostMountedRoot(); }
+    public boolean isFocusCycleRoot(Container container) {
+        if (isFocusCycleRoot() && container == this) return true;
+        return super.isFocusCycleRoot(container);
+    }
+    public final void setFocusTraversalPolicyProvider(boolean provider) {
+        boolean old;
+        synchronized (this) {
+            old = focusTraversalPolicyProvider;
+            focusTraversalPolicyProvider = provider;
+        }
+        firePropertyChange("focusTraversalPolicyProvider", old, provider);
+    }
+    public final boolean isFocusTraversalPolicyProvider() { return focusTraversalPolicyProvider; }
+    public void setFocusTraversalPolicy(FocusTraversalPolicy policy) {
+        FocusTraversalPolicy old;
+        synchronized (this) {
+            old = focusTraversalPolicy;
+            focusTraversalPolicy = policy;
+        }
+        firePropertyChange("focusTraversalPolicy", old, policy);
+    }
+    /**
+     * Returns this container's policy, the cycle root's, or the manager's default;
+     * null unless this is a focus cycle root or policy provider.
+     */
+    public FocusTraversalPolicy getFocusTraversalPolicy() {
+        if (!isFocusTraversalPolicyProvider() && !isFocusCycleRoot()) return null;
+        FocusTraversalPolicy policy = focusTraversalPolicy;
+        if (policy != null) return policy;
+        Container rootAncestor = getFocusCycleRootAncestor();
+        return rootAncestor != null ? rootAncestor.getFocusTraversalPolicy()
+            : KeyboardFocusManager.getCurrentKeyboardFocusManager().getDefaultFocusTraversalPolicy();
+    }
+    public boolean isFocusTraversalPolicySet() { return focusTraversalPolicy != null; }
+    /** Moves focus down one cycle, to this root's default component. */
+    public void transferFocusDownCycle() {
+        if (isFocusCycleRoot()) {
+            KeyboardFocusManager.getCurrentKeyboardFocusManager().setGlobalCurrentFocusCycleRootPriv(this);
+            Component toFocus = getFocusTraversalPolicy().getDefaultComponent(this);
+            if (toFocus != null) toFocus.requestFocus(java.awt.event.FocusEvent.Cause.TRAVERSAL_DOWN);
+        }
+    }
+    @Override
+    Container getTraversalRoot() {
+        if (!isFocusCycleRoot()) return super.getTraversalRoot();
+        KeyboardFocusManager manager = KeyboardFocusManager.getCurrentKeyboardFocusManager();
+        Container currentFocusCycleRoot = manager.getCurrentFocusCycleRoot();
+        Container root;
+        if (currentFocusCycleRoot == this) {
+            root = this;
+        } else {
+            root = getFocusCycleRootAncestor();
+            if (root == null) root = this;
+        }
+        if (root != currentFocusCycleRoot) manager.setGlobalCurrentFocusCycleRootPriv(root);
+        return root;
+    }
+    @Override
+    int focusTraversalKeyLength() { return KeyboardFocusManager.TRAVERSAL_KEY_LENGTH; }
 
     /** No native frame decorates a container here, so a plain container has empty insets. */
     public Insets getInsets() { return insets(); }

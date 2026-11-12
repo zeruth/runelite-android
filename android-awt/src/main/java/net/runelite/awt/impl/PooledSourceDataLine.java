@@ -51,6 +51,8 @@ class PooledSourceDataLine implements SourceDataLine {
         volatile boolean unusable;
         volatile long written;
         long wrap, lastHead;
+        // Volume last pushed to the track, so a reused track is reset only when a line changed it.
+        float left = 1f, right = 1f;
         int calls;
         long idleGeneration;
         boolean idle, retired, stopped;
@@ -67,6 +69,7 @@ class PooledSourceDataLine implements SourceDataLine {
     private Slot slot;
     private long startFrame, written, closedPosition;
     private boolean running;
+    private volatile TrackControls controls;
     private final List<LineListener> listeners = new CopyOnWriteArrayList<>();
 
     PooledSourceDataLine(AudioFormat format, int bufferSize) { this.format=format; requestedBuffer=bufferSize; }
@@ -164,8 +167,17 @@ class PooledSourceDataLine implements SourceDataLine {
             if(bufferSize<=0 || format==null || format.getFrameSize()<=0 || bufferSize%format.getFrameSize()!=0)throw new IllegalArgumentException("Whole-frame buffer required");
             Slot acquired=acquire(format,bufferSize);this.format=format;requestedBuffer=bufferSize;
             slot=acquired;startFrame=acquired.written;written=0;closedPosition=0;running=false;
+            controls=new TrackControls(format.getChannels(),this::applyVolume);
         }
+        controls.apply();
         fire(LineEvent.Type.OPEN);
+    }
+    private void applyVolume(float left,float right) {
+        Slot current=borrow();if(current==null)return;
+        try {
+            synchronized(current) { if(current.left==left&&current.right==right)return; current.left=left;current.right=right; }
+            TrackControls.applyTo(current.track,left,right);
+        } finally { release(current); }
     }
     @Override public int write(byte[] data,int offset,int length) {
         Objects.requireNonNull(data);
@@ -231,9 +243,10 @@ class PooledSourceDataLine implements SourceDataLine {
         synchronized(this){if(slot==null)return;closedPosition=getLongFramePosition();previous=slot;slot=null;running=false;}
         returnSlot(previous);fire(LineEvent.Type.CLOSE);
     }
-    @Override public Control[] getControls(){return new Control[0];}
-    @Override public boolean isControlSupported(Control.Type type){return false;}
-    @Override public Control getControl(Control.Type type){throw new IllegalArgumentException("Unsupported control: "+type);}
+    // Controls exist once the line is open, as on the JDK's direct lines.
+    @Override public Control[] getControls(){TrackControls c=controls;return c==null?new Control[0]:c.controls();}
+    @Override public boolean isControlSupported(Control.Type type){TrackControls c=controls;return c!=null&&c.supports(type);}
+    @Override public Control getControl(Control.Type type){TrackControls c=controls;if(c==null)throw new IllegalArgumentException("Unsupported control: "+type);return c.get(type);}
     @Override public void addLineListener(LineListener listener){if(listener!=null)listeners.add(listener);}
     @Override public void removeLineListener(LineListener listener){listeners.remove(listener);}
     private void fire(LineEvent.Type type){LineEvent event=new LineEvent(this,type,getLongFramePosition());for(LineListener listener:listeners)listener.update(event);}
