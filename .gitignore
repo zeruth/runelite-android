@@ -3,6 +3,8 @@ build/
 !gradle/wrapper/gradle-wrapper.jar
 !**/src/main/**/build/
 !**/src/test/**/build/
+__pycache__/
+*.pyc
 
 # Android SDK location (machine-specific; auto-written by AGP)
 local.properties
@@ -74,6 +76,10 @@ android/.shaderc/
 # OpenJDK reference checkouts (tools-src/fetch-jdk-reference.py); see third-party/JDK-REFERENCE.md
 /third-party/jdk8u/
 /third-party/jdk17u/
+
+# Python bytecode caches the tools-src scripts leave beside themselves
+__pycache__/
+*.pyc
 
 # Rhipper Agent roadmap and per-project state (local orchestration, not source)
 /rhipper.md

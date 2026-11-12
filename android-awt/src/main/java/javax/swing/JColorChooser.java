@@ -31,6 +31,10 @@
 package javax.swing;
 import java.awt.*;
 public class JColorChooser extends JComponent implements javax.accessibility.Accessible {
+    private static final String uiClassID = "ColorChooserUI";
+    public javax.swing.plaf.ColorChooserUI getUI() { return (javax.swing.plaf.ColorChooserUI) ui; }
+    public void setUI(javax.swing.plaf.ColorChooserUI ui) { super.setUI(ui); }
+    public String getUIClassID() { return uiClassID; }
 
     public javax.accessibility.AccessibleContext getAccessibleContext() {
         if (accessibleContext == null) {

@@ -35,6 +35,10 @@ import java.util.Vector;
 import javax.swing.event.ListSelectionListener;
 
 public class JList<E> extends JComponent implements Scrollable, javax.accessibility.Accessible {
+    private static final String uiClassID = "ListUI";
+    public javax.swing.plaf.ListUI getUI() { return (javax.swing.plaf.ListUI) ui; }
+    public void setUI(javax.swing.plaf.ListUI ui) { super.setUI(ui); }
+    public String getUIClassID() { return uiClassID; }
 
     public javax.accessibility.AccessibleContext getAccessibleContext() {
         if (accessibleContext == null) {

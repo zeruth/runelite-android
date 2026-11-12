@@ -50,6 +50,8 @@ import java.io.Serializable;
  * {@code BasicRootPaneUI} installs on the desktop.
  */
 public class JRootPane extends JComponent implements javax.accessibility.Accessible {
+    public javax.swing.plaf.RootPaneUI getUI() { return (javax.swing.plaf.RootPaneUI) ui; }
+    public void setUI(javax.swing.plaf.RootPaneUI ui) { super.setUI(ui); }
     private static final long serialVersionUID = 1L;
 
     public javax.accessibility.AccessibleContext getAccessibleContext() {

@@ -36,6 +36,9 @@ import javax.swing.event.MenuKeyEvent;
 import javax.swing.event.MenuKeyListener;
 
 public class JMenuItem extends AbstractButton implements javax.accessibility.Accessible, MenuElement {
+    private static final String uiClassID = "MenuItemUI";
+    public void setUI(javax.swing.plaf.MenuItemUI ui) { super.setUI(ui); }
+    public String getUIClassID() { return uiClassID; }
     private static final long serialVersionUID = 1L;
 
     public javax.accessibility.AccessibleContext getAccessibleContext() {
