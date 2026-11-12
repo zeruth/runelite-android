@@ -34,27 +34,80 @@ import java.io.Serializable;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * Binds KeyStrokes to action-map keys, resolving through a parent chain. The JDK's contract
+ * is kept to the letter: {@link #keys()} and {@link #allKeys()} answer {@code null} rather
+ * than an empty array when nothing is bound, and putting a {@code null} key removes the
+ * binding through {@link #remove}, which {@code ComponentInputMap} overrides.
+ */
 public class InputMap implements Serializable {
     private static final long serialVersionUID = 2454458884813506064L;
-    private final Map<KeyStroke, Object> map = new HashMap<>();
+    // Lazily created, as the JDK's ArrayTable: most components never bind a key.
+    private transient Map<KeyStroke, Object> map;
     private InputMap parent;
 
+    public InputMap() {
+    }
+
+    public void setParent(InputMap map) { this.parent = map; }
+    public InputMap getParent() { return parent; }
+
     public void put(KeyStroke keyStroke, Object actionMapKey) {
-        if (actionMapKey == null) map.remove(keyStroke);
-        else map.put(keyStroke, actionMapKey);
+        if (keyStroke == null) return;
+        if (actionMapKey == null) {
+            remove(keyStroke);
+        } else {
+            if (map == null) map = new HashMap<>();
+            map.put(keyStroke, actionMapKey);
+        }
     }
 
     public Object get(KeyStroke keyStroke) {
-        Object o = map.get(keyStroke);
-        return o != null ? o : (parent != null ? parent.get(keyStroke) : null);
+        if (map == null) {
+            return parent != null ? parent.get(keyStroke) : null;
+        }
+        Object value = map.get(keyStroke);
+        if (value == null && parent != null) return parent.get(keyStroke);
+        return value;
     }
 
-    public void remove(KeyStroke key) { map.remove(key); }
-    public void clear() { map.clear(); }
-    public int size() { return map.size(); }
-    public KeyStroke[] keys() { return map.keySet().toArray(new KeyStroke[0]); }
-    public KeyStroke[] allKeys() { java.util.Set<KeyStroke> all = new java.util.LinkedHashSet<>(map.keySet()); if (parent != null && parent.allKeys() != null) java.util.Collections.addAll(all, parent.allKeys()); return all.toArray(new KeyStroke[0]); }
+    public void remove(KeyStroke key) {
+        if (map != null && key != null) map.remove(key);
+    }
 
-    public void setParent(InputMap parent) { this.parent = parent; }
-    public InputMap getParent() { return parent; }
+    public void clear() {
+        if (map != null) map.clear();
+    }
+
+    public KeyStroke[] keys() {
+        if (map == null) return null;
+        return map.keySet().toArray(new KeyStroke[0]);
+    }
+
+    public int size() {
+        return map == null ? 0 : map.size();
+    }
+
+    public KeyStroke[] allKeys() {
+        int count = size();
+        InputMap parent = getParent();
+        if (count == 0) return parent != null ? parent.allKeys() : keys();
+        if (parent == null) return keys();
+        KeyStroke[] parentKeys = parent.allKeys();
+        if (parentKeys == null) return keys();
+        java.util.Set<KeyStroke> all = new java.util.LinkedHashSet<>(map.keySet());
+        java.util.Collections.addAll(all, parentKeys);
+        return all.toArray(new KeyStroke[0]);
+    }
+
+    private void writeObject(java.io.ObjectOutputStream s) throws java.io.IOException {
+        s.defaultWriteObject();
+        s.writeObject(map == null ? null : new HashMap<>(map));
+    }
+
+    @SuppressWarnings("unchecked")
+    private void readObject(java.io.ObjectInputStream s) throws ClassNotFoundException, java.io.IOException {
+        s.defaultReadObject();
+        map = (Map<KeyStroke, Object>) s.readObject();
+    }
 }
