@@ -41,4 +41,7 @@ public abstract class MenuComponent implements java.io.Serializable {
     public void removeNotify() {}
     public final void dispatchEvent(AWTEvent event) { processEvent(event); }
     protected void processEvent(AWTEvent event) {}
+    protected final Object getTreeLock() { return Component.LOCK; }
+    protected String paramString() { String name = getName(); return name != null ? name : ""; }
+    @Override public String toString() { return getClass().getName() + "[" + paramString() + "]"; }
 }

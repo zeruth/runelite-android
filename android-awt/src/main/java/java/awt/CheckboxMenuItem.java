@@ -42,6 +42,12 @@ public class CheckboxMenuItem extends MenuItem implements ItemSelectable {
     public void addItemListener(ItemListener listener) { if (listener != null) listeners.add(listener); }
     public void removeItemListener(ItemListener listener) { listeners.remove(listener); }
     public ItemListener[] getItemListeners() { return listeners.toArray(new ItemListener[0]); }
+    @SuppressWarnings("unchecked")
+    @Override public <T extends java.util.EventListener> T[] getListeners(Class<T> listenerType) {
+        if (listenerType == ItemListener.class) return (T[]) getItemListeners();
+        return super.getListeners(listenerType);
+    }
+    @Override public String paramString() { return super.paramString() + ",state=" + state; }
     protected void processItemEvent(ItemEvent event) { for (ItemListener listener : listeners) listener.itemStateChanged(event); }
     @Override protected void processEvent(AWTEvent event) { if (event instanceof ItemEvent) processItemEvent((ItemEvent) event); else super.processEvent(event); }
     @Override javax.swing.JMenuItem swingItem() {

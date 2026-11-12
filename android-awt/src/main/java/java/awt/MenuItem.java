@@ -53,6 +53,16 @@ public class MenuItem extends MenuComponent {
     public void addActionListener(ActionListener listener) { if (listener != null) listeners.add(listener); }
     public void removeActionListener(ActionListener listener) { listeners.remove(listener); }
     public ActionListener[] getActionListeners() { return listeners.toArray(new ActionListener[0]); }
+    @SuppressWarnings("unchecked")
+    public <T extends java.util.EventListener> T[] getListeners(Class<T> listenerType) {
+        if (listenerType == ActionListener.class) return (T[]) getActionListeners();
+        return (T[]) java.lang.reflect.Array.newInstance(listenerType, 0);
+    }
+    @Override public String paramString() {
+        String str = ",label=" + label;
+        if (shortcut != null) str += ",shortcut=" + shortcut;
+        return super.paramString() + str;
+    }
     @Override protected void processEvent(AWTEvent event) { if (event instanceof ActionEvent) processActionEvent((ActionEvent) event); }
     protected void processActionEvent(ActionEvent event) { for (ActionListener listener : listeners) listener.actionPerformed(event); }
     javax.swing.JMenuItem swingItem() {

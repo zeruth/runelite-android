@@ -41,6 +41,7 @@ public class Menu extends MenuItem implements MenuContainer {
     public void addSeparator() { add("-"); }
     public void insert(MenuItem item, int index) {
         if (index < 0) throw new IllegalArgumentException("negative index");
+        if (item == null) throw new NullPointerException("item");
         for (MenuContainer ancestor = this; ancestor instanceof Menu; ancestor = ((Menu) ancestor).getParent())
             if (ancestor == item) throw new IllegalArgumentException("menu cycle");
         if (item.parent != null) item.parent.remove(item);
@@ -54,6 +55,29 @@ public class Menu extends MenuItem implements MenuContainer {
     public void remove(int index) { MenuItem item = items.remove(index); item.parent = null; }
     @Override public void remove(MenuComponent item) { if (items.remove(item)) item.parent = null; }
     public void removeAll() { for (MenuItem item : items) item.parent = null; items.clear(); }
+    /** There is no native menu peer on Android; the menu is realized as a Swing popup when shown. */
+    public void addNotify() {}
+    @Override public String paramString() { return super.paramString() + ",tearOff=" + tearOff + ",isHelpMenu=" + (getParent() instanceof MenuBar && ((MenuBar) getParent()).getHelpMenu() == this); }
+    // The shortcut lookups MenuBar delegates to, recursive through submenus as on the JDK.
+    void collectShortcuts(java.util.Vector<MenuShortcut> into) {
+        for (MenuItem item : items) {
+            if (item instanceof Menu) ((Menu) item).collectShortcuts(into);
+            else if (item.getShortcut() != null) into.addElement(item.getShortcut());
+        }
+    }
+    MenuItem getShortcutMenuItem(MenuShortcut s) {
+        for (MenuItem item : items) {
+            MenuItem found = item instanceof Menu ? ((Menu) item).getShortcutMenuItem(s) : s != null && s.equals(item.getShortcut()) ? item : null;
+            if (found != null) return found;
+        }
+        return null;
+    }
+    void deleteShortcut(MenuShortcut s) {
+        for (MenuItem item : items) {
+            if (item instanceof Menu) ((Menu) item).deleteShortcut(s);
+            else if (s != null && s.equals(item.getShortcut())) item.deleteShortcut();
+        }
+    }
     void fill(javax.swing.JPopupMenu popup) {
         for (MenuItem item : new java.util.ArrayList<>(items)) {
             if ("-".equals(item.getLabel())) popup.addSeparator(); else popup.add(item.swingItem());

@@ -53,7 +53,8 @@ import java.util.List;
  */
 public abstract class Component implements ImageObserver, Serializable, MenuContainer {
     private static final long serialVersionUID = -7644114512714619750L;
-    private static final Object TREE_LOCK = new Object();
+    /** The AWT tree lock; package-private as on the JDK so MenuComponent.getTreeLock shares it. */
+    static final Object LOCK = new Object();
     private boolean ignoreRepaint;
     private final java.util.List<PopupMenu> popupMenus = new java.util.ArrayList<>();
     public void add(PopupMenu popup) {
@@ -83,7 +84,7 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
     public void firePropertyChange(String name, float oldValue, float newValue) { if (oldValue != newValue) firePropertyChange(name, Float.valueOf(oldValue), Float.valueOf(newValue)); }
     public void firePropertyChange(String name, double oldValue, double newValue) { if (oldValue != newValue) firePropertyChange(name, Double.valueOf(oldValue), Double.valueOf(newValue)); }
 
-    public final Object getTreeLock() { return TREE_LOCK; }
+    public final Object getTreeLock() { return LOCK; }
     public void setIgnoreRepaint(boolean ignoreRepaint) { this.ignoreRepaint = ignoreRepaint; }
     public boolean getIgnoreRepaint() { return ignoreRepaint; }
 
@@ -496,8 +497,60 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
     public void removeMouseWheelListener(MouseWheelListener l)  { mouseWheelListeners.remove(l); }
 
     private String name = "";
-    public String getName() { return name; }
-    public void setName(String name) { String old = this.name; this.name = name; firePropertyChange("name", old, name); }
+    private boolean nameExplicitlySet, nameConstructed;
+    /**
+     * The heavyweight widgets answer a generated name ({@code button0}, {@code label3}) until one is
+     * set, as on the JDK; every other component keeps this shadow's historical empty default.
+     */
+    public String getName() {
+        if (!nameExplicitlySet && !nameConstructed) {
+            synchronized (this) {
+                if (!nameExplicitlySet && !nameConstructed) {
+                    String constructed = constructComponentName();
+                    if (constructed != null) name = constructed;
+                    nameConstructed = true;
+                }
+            }
+        }
+        return name;
+    }
+    public void setName(String name) { String old = getName(); this.name = name; nameExplicitlySet = true; firePropertyChange("name", old, name); }
+    /** The generated name of an unnamed component, or null for none; the widgets override it. */
+    String constructComponentName() { return null; }
+
+    /** The state string the JDK's subclasses extend in their own paramString. */
+    protected String paramString() {
+        String thisName = getName() == null ? "" : getName();
+        return thisName + ',' + x + ',' + y + ',' + width + 'x' + height
+            + (isValid() ? "" : ",invalid") + (visible ? "" : ",hidden") + (enabled ? "" : ",disabled");
+    }
+
+    /**
+     * The listeners of {@code listenerType} registered on this component, as on the JDK; subclasses
+     * with listener types of their own (Button's ActionListener, ...) extend it.
+     */
+    @SuppressWarnings("unchecked")
+    public <T extends java.util.EventListener> T[] getListeners(Class<T> listenerType) {
+        List<? extends java.util.EventListener> found;
+        if (listenerType == ComponentListener.class) found = componentListeners;
+        else if (listenerType == FocusListener.class) found = focusListeners;
+        else if (listenerType == HierarchyListener.class) found = hierarchyListeners;
+        else if (listenerType == KeyListener.class) found = keyListeners;
+        else if (listenerType == MouseListener.class) found = mouseListeners;
+        else if (listenerType == MouseMotionListener.class) found = mouseMotionListeners;
+        else if (listenerType == MouseWheelListener.class) found = mouseWheelListeners;
+        else if (listenerType == java.beans.PropertyChangeListener.class) return (T[]) getPropertyChangeListeners();
+        else found = java.util.Collections.emptyList();
+        return found.toArray((T[]) java.lang.reflect.Array.newInstance(listenerType, 0));
+    }
+
+    private long eventMask;
+    /**
+     * Recorded for {@link #disableEvents} and subclasses that read it back; this shadow has no peer
+     * filtering events by mask, so every event a host delivers reaches {@link #processEvent}.
+     */
+    protected final void enableEvents(long eventsToEnable) { eventMask |= eventsToEnable; }
+    protected final void disableEvents(long eventsToDisable) { eventMask &= ~eventsToDisable; }
 
     public ComponentListener[] getComponentListeners() { return componentListeners.toArray(new ComponentListener[0]); }
     public FocusListener[] getFocusListeners() { return focusListeners.toArray(new FocusListener[0]); }
@@ -526,6 +579,23 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
      */
     public void dispatchMouseEvent(MouseEvent e) {
         if (e == null) return;
+        // Through the JDK's per-kind hooks, so AWT widgets and plugin subclasses that override
+        // processMouseEvent see host-injected input as they would on desktop.
+        switch (e.getID()) {
+            case MouseEvent.MOUSE_MOVED:
+            case MouseEvent.MOUSE_DRAGGED:
+                processMouseMotionEvent(e);
+                break;
+            case MouseEvent.MOUSE_WHEEL:
+                if (e instanceof MouseWheelEvent) processMouseWheelEvent((MouseWheelEvent) e);
+                break;
+            default:
+                processMouseEvent(e);
+                break;
+        }
+    }
+
+    protected void processMouseEvent(MouseEvent e) {
         switch (e.getID()) {
             case MouseEvent.MOUSE_PRESSED:
                 for (MouseListener l : mouseListeners) l.mousePressed(e);
@@ -542,19 +612,22 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
             case MouseEvent.MOUSE_EXITED:
                 for (MouseListener l : mouseListeners) l.mouseExited(e);
                 break;
+        }
+    }
+
+    protected void processMouseMotionEvent(MouseEvent e) {
+        switch (e.getID()) {
             case MouseEvent.MOUSE_MOVED:
                 for (MouseMotionListener l : mouseMotionListeners) l.mouseMoved(e);
                 break;
             case MouseEvent.MOUSE_DRAGGED:
                 for (MouseMotionListener l : mouseMotionListeners) l.mouseDragged(e);
                 break;
-            case MouseEvent.MOUSE_WHEEL:
-                if (e instanceof MouseWheelEvent) {
-                    MouseWheelEvent we = (MouseWheelEvent) e;
-                    for (MouseWheelListener l : mouseWheelListeners) l.mouseWheelMoved(we);
-                }
-                break;
         }
+    }
+
+    protected void processMouseWheelEvent(MouseWheelEvent e) {
+        for (MouseWheelListener l : mouseWheelListeners) l.mouseWheelMoved(e);
     }
 
     /** Desktop entry point for plugins sending input to a component's listeners. */
@@ -603,7 +676,10 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
 
     /** Dispatches a {@link KeyEvent} to the registered {@link KeyListener}s. */
     public void dispatchKeyEvent(KeyEvent e) {
-        if (e == null) return;
+        if (e != null) processKeyEvent(e);
+    }
+
+    protected void processKeyEvent(KeyEvent e) {
         switch (e.getID()) {
             case KeyEvent.KEY_PRESSED:
                 for (KeyListener l : keyListeners) l.keyPressed(e);
