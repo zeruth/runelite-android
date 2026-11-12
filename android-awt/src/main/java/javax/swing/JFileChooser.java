@@ -79,6 +79,13 @@ public class JFileChooser extends JComponent implements javax.accessibility.Acce
         firePropertyChange("acceptAllFileFilterUsedChanged", previous, used);
     }
     public boolean isAcceptAllFileFilterUsed() { return acceptAllFileFilterUsed; }
+    // Kept for callers that toggle it; the SAF picker decides itself which entries it lists.
+    private boolean useFileHiding = true;
+    public boolean isFileHidingEnabled() { return useFileHiding; }
+    public void setFileHidingEnabled(boolean b) {
+        boolean previous = useFileHiding; useFileHiding = b;
+        firePropertyChange("FileHidingChanged", previous, b);
+    }
     private String dialogTitle;
     private int dialogType = OPEN_DIALOG;
     public interface DialogHandler { int show(JFileChooser chooser, boolean save); }

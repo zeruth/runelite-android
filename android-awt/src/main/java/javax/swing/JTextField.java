@@ -122,6 +122,7 @@ public class JTextField extends JTextComponent {
                 : in.left + 4);
         int baseline = in.top + (getHeight() - in.top - in.bottom - fm.getHeight()) / 2 + fm.getAscent();
         g.drawString(s, x, baseline);
+        paintComposedUnderline(g, s, 0, null, x, baseline);
         if (saved != null) g.setColor(saved);
     }
 }

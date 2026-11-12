@@ -145,6 +145,134 @@ public class JTree extends JComponent implements Scrollable, javax.accessibility
     public TreePath getClosestPathForLocation(int x,int y){return getPathForRow(getClosestRowForLocation(x,y));}
     public TreePath getPathForLocation(int x,int y){int row=y/effectiveRowHeight();Rectangle bounds=getRowBounds(row);return y<0||bounds==null||!bounds.contains(x,y)?null:getPathForRow(row);}
     public int getRowForLocation(int x,int y){return getRowForPath(getPathForLocation(x,y));}
+
+    private boolean dragEnabled;
+    private DropMode dropMode = DropMode.USE_SELECTION;
+    private transient DropLocation dropLocation;
+    private transient java.awt.dnd.DragGestureRecognizer dragRecognizer;
+
+    /**
+     * A subclass of <code>TransferHandler.DropLocation</code> representing
+     * a drop location for a <code>JTree</code>.
+     *
+     * @see #getDropLocation
+     * @since 1.6
+     */
+    public static final class DropLocation extends TransferHandler.DropLocation {
+        private final TreePath path;
+        private final int index;
+
+        private DropLocation(Point p, TreePath path, int index) {
+            super(p);
+            this.path = path;
+            this.index = index;
+        }
+
+        /**
+         * Returns the index where the dropped data should be inserted
+         * with respect to the path returned by <code>getPath()</code>;
+         * <code>-1</code> indicates a drop onto the path itself.
+         *
+         * @return the child index
+         */
+        public int getChildIndex() {
+            return index;
+        }
+
+        /**
+         * Returns the path where dropped data should be placed in the tree,
+         * or <code>null</code> for a drop over empty space.
+         *
+         * @return the drop path
+         */
+        public TreePath getPath() {
+            return path;
+        }
+
+        public String toString() {
+            return getClass().getName()
+                   + "[dropPoint=" + getDropPoint() + ","
+                   + "path=" + path + ","
+                   + "childIndex=" + index + "]";
+        }
+    }
+
+    /**
+     * Turns on or off automatic drag handling; a press on a row that moves past
+     * the drag threshold (after a long press on a touchscreen) starts a drag
+     * through the {@code TransferHandler}.
+     *
+     * @since 1.4
+     */
+    public void setDragEnabled(boolean b) {
+        dragEnabled = b;
+        dragRecognizer = net.runelite.awt.impl.SwingDragSupport.setDragEnabled(this, dragRecognizer, b);
+    }
+
+    public boolean getDragEnabled() { return dragEnabled; }
+
+    /**
+     * Sets the drop mode for this component: <code>USE_SELECTION</code> (the
+     * default), <code>ON</code>, <code>INSERT</code> or <code>ON_OR_INSERT</code>.
+     *
+     * @throws IllegalArgumentException if the drop mode is unsupported
+     *         or <code>null</code>
+     * @since 1.6
+     */
+    public final void setDropMode(DropMode dropMode) {
+        if (dropMode == DropMode.USE_SELECTION || dropMode == DropMode.ON
+                || dropMode == DropMode.INSERT || dropMode == DropMode.ON_OR_INSERT) {
+            this.dropMode = dropMode;
+            return;
+        }
+        throw new IllegalArgumentException(dropMode + ": Unsupported drop mode for tree");
+    }
+
+    public final DropMode getDropMode() { return dropMode; }
+
+    /**
+     * Returns the location that this component should visually indicate
+     * as the drop location during a DnD operation over the component,
+     * or {@code null} if no location is to currently be shown.
+     *
+     * @since 1.6
+     */
+    public final DropLocation getDropLocation() { return dropLocation; }
+
+    @Override
+    DropLocation dropLocationForPoint(Point p) {
+        if (dropMode == DropMode.USE_SELECTION || dropMode == DropMode.ON) {
+            return new DropLocation(p, getPathForLocation(p.x, p.y), -1);
+        }
+        int row = getClosestRowForLocation(p.x, p.y);
+        Rectangle bounds = row < 0 ? null : getRowBounds(row);
+        TreePath path = row < 0 ? null : getPathForRow(row);
+        if (bounds == null || path == null) {
+            Object root = getModel() == null ? null : getModel().getRoot();
+            return new DropLocation(p, root == null ? null : new TreePath(root),
+                    root == null ? -1 : getModel().getChildCount(root));
+        }
+        int offset = p.y - bounds.y;
+        if (dropMode == DropMode.ON_OR_INSERT && offset >= bounds.height / 4 && offset < bounds.height - bounds.height / 4) {
+            return new DropLocation(p, path, -1);
+        }
+        TreePath parent = path.getParentPath();
+        if (parent == null) {
+            // The root has no siblings; an insert next to it goes inside it.
+            return new DropLocation(p, path, offset < bounds.height / 2 ? 0 : getModel().getChildCount(path.getLastPathComponent()));
+        }
+        int index = getModel().getIndexOfChild(parent.getLastPathComponent(), path.getLastPathComponent());
+        return new DropLocation(p, parent, offset < bounds.height / 2 ? index : index + 1);
+    }
+
+    @Override
+    Object setDropLocation(TransferHandler.DropLocation location, Object state, boolean forDrop) {
+        DropLocation old = dropLocation;
+        dropLocation = (DropLocation) location;
+        firePropertyChange("dropLocation", old, dropLocation);
+        repaint();
+        return null;
+    }
     public void scrollPathToVisible(TreePath path){if(path==null)return;expandPath(path.getParentPath());Rectangle bounds=getPathBounds(path);if(bounds!=null)scrollRectToVisible(bounds);}
     public void scrollRowToVisible(int row){scrollPathToVisible(getPathForRow(row));}
     public void addTreeSelectionListener(TreeSelectionListener l){listeners.add(TreeSelectionListener.class,l);}

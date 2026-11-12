@@ -99,12 +99,231 @@ public class JList<E> extends JComponent implements Scrollable, javax.accessibil
                 if (!isEnabled() || e.getButton() != java.awt.event.MouseEvent.BUTTON1) return;
                 int index=locationToIndex(e.getPoint());
                 if (index<0 || !getCellBounds(index,index).contains(e.getPoint())) return;
+                pendingSelect = -1;
                 if (e.isShiftDown() && selectionModel.getAnchorSelectionIndex()>=0) setSelectionInterval(selectionModel.getAnchorSelectionIndex(),index);
                 else if (e.isControlDown()) { if(isSelectedIndex(index))removeSelectionInterval(index,index);else addSelectionInterval(index,index); }
+                // As BasicListUI: a press on a selected cell may start a drag of the whole
+                // selection, so collapsing it to the cell waits for the release.
+                else if (dragEnabled && isSelectedIndex(index)) pendingSelect = index;
                 else setSelectedIndex(index);
                 requestFocusInWindow();
             }
+            public void mouseReleased(java.awt.event.MouseEvent e) {
+                int index = pendingSelect;
+                pendingSelect = -1;
+                if (index >= 0 && index < model.getSize() && dropLocation == null
+                        && net.runelite.awt.impl.DragDropHost.current() == null) setSelectedIndex(index);
+            }
         });
+        setTransferHandler(new ListTransferHandler());
+    }
+
+    private int pendingSelect = -1;
+    private boolean dragEnabled;
+    private DropMode dropMode = DropMode.USE_SELECTION;
+    private transient DropLocation dropLocation;
+    private transient java.awt.dnd.DragGestureRecognizer dragRecognizer;
+
+    /**
+     * A subclass of <code>TransferHandler.DropLocation</code> representing
+     * a drop location for a <code>JList</code>.
+     *
+     * @see #getDropLocation
+     * @since 1.6
+     */
+    public static final class DropLocation extends TransferHandler.DropLocation {
+        private final int index;
+        private final boolean isInsert;
+
+        private DropLocation(java.awt.Point p, int index, boolean isInsert) {
+            super(p);
+            this.index = index;
+            this.isInsert = isInsert;
+        }
+
+        /**
+         * Returns the index where dropped data should be placed in the
+         * list. Interpretation of the value depends on the drop mode set on
+         * the associated component. If the drop mode is either
+         * <code>DropMode.USE_SELECTION</code> or <code>DropMode.ON</code>,
+         * the return value is an index of a row in the list. If the drop mode is
+         * <code>DropMode.INSERT</code>, the return value refers to the index
+         * where the data should be inserted. If the drop mode is
+         * <code>DropMode.ON_OR_INSERT</code>, the value of
+         * <code>isInsert()</code> indicates whether the index is an index
+         * of a row, or an insert index.
+         * <p>
+         * <code>-1</code> indicates that the drop occurred over empty space,
+         * and no index could be calculated.
+         *
+         * @return the drop index
+         */
+        public int getIndex() {
+            return index;
+        }
+
+        /**
+         * Returns whether or not this location represents an insert
+         * location.
+         *
+         * @return whether or not this is an insert location
+         */
+        public boolean isInsert() {
+            return isInsert;
+        }
+
+        /**
+         * Returns a string representation of this drop location.
+         *
+         * @return a string representation of this drop location
+         */
+        public String toString() {
+            return getClass().getName()
+                   + "[dropPoint=" + getDropPoint() + ","
+                   + "index=" + index + ","
+                   + "insert=" + isInsert + "]";
+        }
+    }
+
+    /**
+     * Turns on or off automatic drag handling. When enabled, a press on a
+     * selected cell that moves past the drag threshold (on a touchscreen, after a
+     * long press) starts a drag through the {@code TransferHandler}.
+     *
+     * @param b whether or not to enable automatic drag handling
+     * @since 1.4
+     */
+    public void setDragEnabled(boolean b) {
+        dragEnabled = b;
+        dragRecognizer = net.runelite.awt.impl.SwingDragSupport.setDragEnabled(this, dragRecognizer, b);
+    }
+
+    public boolean getDragEnabled() { return dragEnabled; }
+
+    /**
+     * Sets the drop mode for this component. For backward compatibility,
+     * the default for this property is <code>DropMode.USE_SELECTION</code>.
+     *
+     * @param dropMode the drop mode to use
+     * @throws IllegalArgumentException if the drop mode is unsupported
+     *         or <code>null</code>
+     * @since 1.6
+     */
+    public final void setDropMode(DropMode dropMode) {
+        if (dropMode != null) {
+            switch (dropMode) {
+                case USE_SELECTION:
+                case ON:
+                case INSERT:
+                case ON_OR_INSERT:
+                    this.dropMode = dropMode;
+                    return;
+                default:
+                    break;
+            }
+        }
+
+        throw new IllegalArgumentException(dropMode + ": Unsupported drop mode for list");
+    }
+
+    public final DropMode getDropMode() { return dropMode; }
+
+    /**
+     * Returns the location that this component should visually indicate
+     * as the drop location during a DnD operation over the component,
+     * or {@code null} if no location is to currently be shown.
+     *
+     * @return the drop location
+     * @since 1.6
+     */
+    public final DropLocation getDropLocation() { return dropLocation; }
+
+    @Override
+    DropLocation dropLocationForPoint(java.awt.Point p) {
+        int size = model.getSize();
+        int index = locationToIndex(p);
+        java.awt.Rectangle rect = index != -1 ? getCellBounds(index, index) : null;
+        boolean horizontal = layoutOrientation == HORIZONTAL_WRAP;
+
+        switch (dropMode) {
+            case USE_SELECTION:
+            case ON:
+                return new DropLocation(p, (rect != null && rect.contains(p)) ? index : -1, false);
+            case INSERT:
+                if (index == -1) return new DropLocation(p, size, true);
+                if (trailingHalf(rect, p, horizontal)) index++;
+                return new DropLocation(p, index, true);
+            case ON_OR_INSERT:
+                if (index == -1) return new DropLocation(p, size, true);
+                int section = section(rect, p, horizontal);
+                if (section < 0) return new DropLocation(p, index, true);
+                if (section > 0) return new DropLocation(p, index + 1, true);
+                return new DropLocation(p, index, false);
+            default:
+                throw new AssertionError("Unexpected drop mode");
+        }
+    }
+
+    private static boolean trailingHalf(java.awt.Rectangle r, java.awt.Point p, boolean horizontal) {
+        return horizontal ? p.x >= r.x + r.width / 2 : p.y >= r.y + r.height / 2;
+    }
+
+    /** -1 for the leading quarter, 1 for the trailing quarter, 0 between, as SwingUtilities2.liesIn. */
+    private static int section(java.awt.Rectangle r, java.awt.Point p, boolean horizontal) {
+        int pos = horizontal ? p.x - r.x : p.y - r.y;
+        int length = horizontal ? r.width : r.height;
+        int edge = length / 4;
+        if (pos < edge) return -1;
+        if (pos >= length - edge) return 1;
+        return 0;
+    }
+
+    @Override
+    Object setDropLocation(TransferHandler.DropLocation location, Object state, boolean forDrop) {
+        Object retVal = null;
+        DropLocation listLocation = (DropLocation) location;
+
+        if (dropMode == DropMode.USE_SELECTION) {
+            if (listLocation == null) {
+                if (!forDrop && state != null) {
+                    // The drag left or was cancelled: the selection it borrowed comes back.
+                    setSelectedIndices((int[]) state);
+                }
+            } else {
+                retVal = dropLocation == null ? getSelectedIndices() : state;
+                int index = listLocation.getIndex();
+                if (index == -1) clearSelection();
+                else setSelectionInterval(index, index);
+            }
+        }
+
+        DropLocation old = dropLocation;
+        dropLocation = listLocation;
+        firePropertyChange("dropLocation", old, dropLocation);
+        repaint();
+        return retVal;
+    }
+
+    /** BasicListUI's handler: exports the selected values as text, imports nothing. */
+    @SuppressWarnings("serial")
+    static class ListTransferHandler extends TransferHandler implements javax.swing.plaf.UIResource {
+        @Override
+        protected java.awt.datatransfer.Transferable createTransferable(JComponent c) {
+            if (!(c instanceof JList)) return null;
+            java.util.List<?> values = ((JList<?>) c).getSelectedValuesList();
+            if (values.isEmpty()) return null;
+            StringBuilder text = new StringBuilder();
+            for (Object value : values) {
+                if (text.length() > 0) text.append('\n');
+                text.append(value == null ? "" : value.toString());
+            }
+            return new java.awt.datatransfer.StringSelection(text.toString());
+        }
+
+        @Override
+        public int getSourceActions(JComponent c) {
+            return COPY;
+        }
     }
     public JList(ListModel<E> model) { this(); setModel(model); }
     public JList(E[] data) { this(); setListData(data); }

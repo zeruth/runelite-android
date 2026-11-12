@@ -123,6 +123,65 @@ public class DirectColorModel extends ColorModel {
         if(isAlphaPremultiplied()){r=(r*a+127)/255;g=(g*a+127)/255;b=(b*a+127)/255;}
         SampleModel.transferSet(p, 0, pack(r,redMask)|pack(g,greenMask)|pack(b,blueMask)|pack(a,alphaMask));return p;
     }
+    private int[] masks() {
+        return alphaMask == 0 ? new int[]{redMask, greenMask, blueMask}
+            : new int[]{redMask, greenMask, blueMask, alphaMask};
+    }
+
+    /** Unnormalized fields of the packed pixel, in mask order (OpenJDK 8u). */
+    @Override public int[] getComponents(int pixel, int[] components, int offset) {
+        int[] masks = masks();
+        if (components == null) components = new int[offset + masks.length];
+        for (int i = 0; i < masks.length; i++) {
+            components[offset + i] = (pixel & masks[i]) >>> trailingZeros(masks[i]);
+        }
+        return components;
+    }
+
+    @Override public int[] getComponents(Object pixel, int[] components, int offset) {
+        int intpixel;
+        switch (transferType) {
+            case DataBuffer.TYPE_BYTE: intpixel = ((byte[]) pixel)[0] & 0xff; break;
+            case DataBuffer.TYPE_USHORT: intpixel = ((short[]) pixel)[0] & 0xffff; break;
+            case DataBuffer.TYPE_INT: intpixel = ((int[]) pixel)[0]; break;
+            default: throw new UnsupportedOperationException("This method has not been "
+                + "implemented for transferType " + transferType);
+        }
+        return getComponents(intpixel, components, offset);
+    }
+
+    @Override public int getDataElement(int[] components, int offset) {
+        int[] masks = masks();
+        int pixel = 0;
+        for (int i = 0; i < masks.length; i++) {
+            pixel |= (components[offset + i] << trailingZeros(masks[i])) & masks[i];
+        }
+        return pixel;
+    }
+
+    @Override public Object getDataElements(int[] components, int offset, Object obj) {
+        int pixel = getDataElement(components, offset);
+        switch (transferType) {
+            case DataBuffer.TYPE_BYTE: {
+                byte[] out = obj == null ? new byte[1] : (byte[]) obj;
+                out[0] = (byte) pixel;
+                return out;
+            }
+            case DataBuffer.TYPE_USHORT: {
+                short[] out = obj == null ? new short[1] : (short[]) obj;
+                out[0] = (short) pixel;
+                return out;
+            }
+            case DataBuffer.TYPE_INT: {
+                int[] out = obj == null ? new int[1] : (int[]) obj;
+                out[0] = pixel;
+                return out;
+            }
+            default: throw new UnsupportedOperationException("This method has not been "
+                + "implemented for transferType " + transferType);
+        }
+    }
+
     @Override public boolean isCompatibleRaster(Raster raster) {
         if (!(raster.getSampleModel() instanceof SinglePixelPackedSampleModel) || raster.getTransferType() != transferType) return false;
         int[] masks = ((SinglePixelPackedSampleModel)raster.getSampleModel()).getBitMasks();

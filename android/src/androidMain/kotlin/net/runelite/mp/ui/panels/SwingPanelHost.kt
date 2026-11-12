@@ -116,6 +116,74 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
     @Volatile private var logicalWidth = BASE_LOGICAL_WIDTH
     private var diagnosed = false
     private val wheel = net.runelite.mp.input.MouseWheelSteps()
+    // In-process drag and drop (java.awt.dnd): every host draws the drag image while the
+    // pointer is over it, and registers its root's place on screen so a drag can cross
+    // into another panel. Origins are logical px, like the events.
+    private class DragOverlay(val image: Bitmap?, val x: Int, val y: Int, val offsetX: Int, val offsetY: Int,
+                              val accepted: Boolean)
+    private var dragOverlay: DragOverlay? = null // Android thread only
+    private val dragPaint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
+    @Volatile private var originX = 0
+    @Volatile private var originY = 0
+    private var dragSession: net.runelite.awt.impl.DragDropHost.Session? = null // AWT thread only
+    private var dragBitmap: Bitmap? = null // AWT thread only
+    private val dragListener = object : net.runelite.awt.impl.DragDropHost.Listener {
+        override fun dragUpdated(session: net.runelite.awt.impl.DragDropHost.Session) {
+            root?.let { net.runelite.awt.impl.DragDropHost.setRootOrigin(it, originX, originY) }
+            if (session !== dragSession) {
+                dragSession = session
+                dragBitmap = bitmapOf(session.dragImage)
+            }
+            val overlay = DragOverlay(dragBitmap, session.location.x, session.location.y,
+                session.dragImageOffset.x, session.dragImageOffset.y, session.isDropAccepted)
+            post { updateOrigin(); dragOverlay = overlay; invalidate() }
+        }
+        override fun dragEnded(session: net.runelite.awt.impl.DragDropHost.Session) {
+            if (session === dragSession) { dragSession = null; dragBitmap = null }
+            post { dragOverlay = null; invalidate() }
+        }
+    }
+
+    private fun bitmapOf(image: java.awt.Image?): Bitmap? {
+        val buffered = image as? java.awt.image.BufferedImage ?: return null
+        val w = buffered.width; val h = buffered.height
+        if (w <= 0 || h <= 0) return null
+        return Bitmap.createBitmap(buffered.getRGB(0, 0, w, h, null, 0, w), w, h, Bitmap.Config.ARGB_8888)
+    }
+
+    /** This view's top-left on screen, in logical px. Android thread. */
+    private fun updateOrigin() {
+        if (width == 0) return
+        val loc = IntArray(2)
+        getLocationOnScreen(loc)
+        val scale = logicalWidth.toFloat() / width
+        originX = (loc[0] * scale).toInt(); originY = (loc[1] * scale).toInt()
+    }
+
+    private fun drawDrag(canvas: Canvas) {
+        val o = dragOverlay ?: return
+        val s = width.toFloat() / logicalWidth.coerceAtLeast(1)
+        val px = (o.x - originX) * s; val py = (o.y - originY) * s
+        if (px < 0 || py < 0 || px >= width || py >= height) return
+        val image = o.image
+        if (image != null) {
+            val left = px + o.offsetX * s; val top = py + o.offsetY * s
+            dragPaint.alpha = 200
+            canvas.drawBitmap(image, null, android.graphics.RectF(left, top, left + image.width * s, top + image.height * s), dragPaint)
+        } else {
+            // No drag image: desktop shows only the drag cursor, so mark where the drop lands.
+            dragPaint.color = if (o.accepted) android.graphics.Color.rgb(220, 138, 0) else android.graphics.Color.GRAY
+            dragPaint.alpha = 160
+            canvas.drawCircle(px, py, 10 * s, dragPaint)
+        }
+    }
+
+    /** Cancels a drag that started in [base]'s tree; it can no longer receive its release. EDT. */
+    private fun cancelDragFrom(base: Component?) {
+        val session = net.runelite.awt.impl.DragDropHost.current() ?: return
+        if (base != null && net.runelite.awt.impl.DragDropHost.rootOf(session.sourceComponent) === base) session.cancel()
+    }
+
     private var paintedRoot: JComponent? = null // AWT thread only
     private var paintedGeneration = -1L // AWT thread only
     private var paintedLayoutGeneration = -1L // AWT thread only
@@ -205,6 +273,7 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         hosts.add(java.lang.ref.WeakReference(this))
+        net.runelite.awt.impl.DragDropHost.addListener(dragListener)
         attachmentSerial++
         running = true
         post(render)
@@ -212,11 +281,14 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
 
     override fun onDetachedFromWindow() {
         hosts.removeAll { it.get() == null || it.get() === this }
+        net.runelite.awt.impl.DragDropHost.removeListener(dragListener)
+        dragOverlay = null
         running = false
         attachmentSerial++
         removeCallbacks(render)
         clearAndroidState(mountSerial)
         SwingUtilities.invokeLater {
+            cancelDragFrom(root)
             root?.let { java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager().clearFocusIn(it); it.setHostShowing(false) }
             mountPanel(null, -1L)
             root = null
@@ -278,6 +350,7 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
         paint.color = android.graphics.Color.rgb(30, 30, 30)
         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
         frame?.let { canvas.drawBitmap(it, null, Rect(0, 0, width, height), paint) }
+        drawDrag(canvas)
         error?.let {
             paint.color = android.graphics.Color.WHITE
             paint.textSize = 14 * resources.displayMetrics.scaledDensity
@@ -327,6 +400,8 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
         SwingUtilities.invokeLater {
             if (!isCurrentMount(serial)) return@invokeLater
             val base = root ?: return@invokeLater
+            // A mouse starts a drag on the desktop threshold alone, no long press.
+            net.runelite.awt.impl.DragDropHost.setPointer(false, false)
             when (id) {
                 MouseEvent.MOUSE_PRESSED -> {
                     val target = mousePresses.values.firstOrNull()?.target ?: sink(base, hit(base, sx, sy))
@@ -387,9 +462,13 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
                 val x = (event.x * scale).toInt(); val y = (event.y * scale).toInt()
                 dragX = x; dragY = y
                 val serial = touchMount
+                updateOrigin()
+                val ox = originX; val oy = originY
                 SwingUtilities.invokeLater {
                     try {
                         if (isCurrentMount(serial)) {
+                            root?.let { net.runelite.awt.impl.DragDropHost.setRootOrigin(it, ox, oy) }
+                            net.runelite.awt.impl.DragDropHost.setPointer(tool != MotionEvent.TOOL_TYPE_MOUSE, false)
                             JPopupMenu.takeShownPopupMenu()?.isVisible = false
                             if (tool != MotionEvent.TOOL_TYPE_MOUSE) hover(null)
                             // A mouse drag never scrolls on desktop, so any drag handler takes it.
@@ -484,7 +563,8 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
                 SwingUtilities.invokeLater {
                     clicks.reset()
                     // AWT has no cancel; a release leaves drag handlers in their resting state.
-                    try { if (serial == mountSerial) release(x, y, false, 0L, 0L, 0f, 0f, 0, 0, 0f) } catch (t: Throwable) {
+                    // A java.awt.dnd drag is cancelled first, so the release does not drop it.
+                    try { if (serial == mountSerial) { cancelDragFrom(root); release(x, y, false, 0L, 0L, 0f, 0f, 0, 0, 0f) } } catch (t: Throwable) {
                         android.util.Log.e("SwingPanelHost", "Panel input failed: $panelKey", t)
                     }
                 }
@@ -600,6 +680,8 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
     }
 
     private fun drag(x: Int, y: Int, downX: Int, downY: Int, tool: Int, held: Boolean) {
+        // Before the press below: a held finger may start a drag, a swiping one only scrolls.
+        net.runelite.awt.impl.DragDropHost.setPointer(tool != MotionEvent.TOOL_TYPE_MOUSE, held)
         if (gesture == null && !(held && press(downX, downY, tool, true))) return
         val target = gesture ?: return
         send(target, MouseEvent.MOUSE_DRAGGED, x, y, InputEvent.BUTTON1_DOWN_MASK)
@@ -984,7 +1066,7 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
             ancestor = ancestor.parent
         }
         if (target is JTextComponent || target is JComboBox<*> || target is JSpinner) clicks.reset()
-        if (target.isEnabled) target.requestFocusInWindow()
+        if (target.isEnabled) net.runelite.mp.ui.bridge.SoftKeyboardController.hostEditing { target.requestFocusInWindow() }
         when (val control = target) {
             is JTextComponent -> if (control.isEnabled && control.isEditable) {
                 val search = generateSequence(control as Component?) { it.parent }.take(4)

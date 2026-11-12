@@ -131,6 +131,132 @@ public class JTable extends JComponent implements Scrollable, javax.swing.event.
     public int convertRowIndexToView(int row) { return sorter == null ? row : sorter.convertRowIndexToView(row); }
     public int rowAtPoint(java.awt.Point p) { if(p.y<0)return -1;int y=0;for(int row=0;row<getRowCount();row++){y+=getRowHeight(row);if(p.y<y)return row;}return -1; }
     public int columnAtPoint(java.awt.Point p) { return columnModel.getColumnIndexAtX(p.x); }
+
+    private boolean dragEnabled;
+    private DropMode dropMode = DropMode.USE_SELECTION;
+    private transient DropLocation dropLocation;
+    private transient java.awt.dnd.DragGestureRecognizer dragRecognizer;
+
+    /**
+     * A subclass of <code>TransferHandler.DropLocation</code> representing
+     * a drop location for a <code>JTable</code>.
+     *
+     * @see #getDropLocation
+     * @since 1.6
+     */
+    public static final class DropLocation extends TransferHandler.DropLocation {
+        private final int row;
+        private final int col;
+        private final boolean isInsertRow;
+        private final boolean isInsertCol;
+
+        private DropLocation(java.awt.Point p, int row, int col, boolean isInsertRow, boolean isInsertCol) {
+            super(p);
+            this.row = row;
+            this.col = col;
+            this.isInsertRow = isInsertRow;
+            this.isInsertCol = isInsertCol;
+        }
+
+        /** Returns the row index where a dropped item should be placed, or -1 over empty space. */
+        public int getRow() { return row; }
+
+        /** Returns the column index where a dropped item should be placed, or -1 over empty space. */
+        public int getColumn() { return col; }
+
+        /** Whether this location represents insertion of rows. */
+        public boolean isInsertRow() { return isInsertRow; }
+
+        /** Whether this location represents insertion of columns. */
+        public boolean isInsertColumn() { return isInsertCol; }
+
+        public String toString() {
+            return getClass().getName()
+                   + "[dropPoint=" + getDropPoint() + ","
+                   + "row=" + row + ","
+                   + "column=" + col + ","
+                   + "insertRow=" + isInsertRow + ","
+                   + "insertColumn=" + isInsertCol + "]";
+        }
+    }
+
+    /**
+     * Turns on or off automatic drag handling; a press on a cell that moves past
+     * the drag threshold (after a long press on a touchscreen) starts a drag
+     * through the {@code TransferHandler}.
+     *
+     * @since 1.4
+     */
+    public void setDragEnabled(boolean b) {
+        dragEnabled = b;
+        dragRecognizer = net.runelite.awt.impl.SwingDragSupport.setDragEnabled(this, dragRecognizer, b);
+    }
+
+    public boolean getDragEnabled() { return dragEnabled; }
+
+    /**
+     * Sets the drop mode for this component; every {@code DropMode} is supported.
+     *
+     * @throws IllegalArgumentException if the drop mode is <code>null</code>
+     * @since 1.6
+     */
+    public final void setDropMode(DropMode dropMode) {
+        if (dropMode == null) throw new IllegalArgumentException(dropMode + ": Unsupported drop mode for table");
+        this.dropMode = dropMode;
+    }
+
+    public final DropMode getDropMode() { return dropMode; }
+
+    /**
+     * Returns the location that this component should visually indicate
+     * as the drop location during a DnD operation over the component,
+     * or {@code null} if no location is to currently be shown.
+     *
+     * @since 1.6
+     */
+    public final DropLocation getDropLocation() { return dropLocation; }
+
+    @Override
+    DropLocation dropLocationForPoint(java.awt.Point p) {
+        int row = rowAtPoint(p);
+        int col = columnAtPoint(p);
+        Rectangle rect = row >= 0 && col >= 0 ? getCellRect(row, col, true) : null;
+        boolean rows = dropMode == DropMode.INSERT || dropMode == DropMode.INSERT_ROWS
+                || dropMode == DropMode.ON_OR_INSERT || dropMode == DropMode.ON_OR_INSERT_ROWS;
+        boolean cols = dropMode == DropMode.INSERT || dropMode == DropMode.INSERT_COLS
+                || dropMode == DropMode.ON_OR_INSERT || dropMode == DropMode.ON_OR_INSERT_COLS;
+        boolean on = dropMode == DropMode.ON_OR_INSERT || dropMode == DropMode.ON_OR_INSERT_ROWS
+                || dropMode == DropMode.ON_OR_INSERT_COLS;
+        if (!rows && !cols) return new DropLocation(p, row, col, false, false);
+
+        boolean insertRow = false, insertCol = false;
+        if (rows) {
+            if (row < 0) { row = getRowCount(); insertRow = true; }
+            else if (rect != null) {
+                int offset = p.y - rect.y, edge = on ? rect.height / 4 : rect.height / 2;
+                if (offset < edge) insertRow = true;
+                else if (offset >= rect.height - edge) { insertRow = true; row++; }
+            }
+        }
+        if (cols && !insertRow) {
+            if (col < 0) { col = getColumnCount(); insertCol = true; }
+            else if (rect != null) {
+                int offset = p.x - rect.x, edge = on ? rect.width / 4 : rect.width / 2;
+                if (offset < edge) insertCol = true;
+                else if (offset >= rect.width - edge) { insertCol = true; col++; }
+            }
+        }
+        return new DropLocation(p, row, col, insertRow, insertCol);
+    }
+
+    @Override
+    Object setDropLocation(TransferHandler.DropLocation location, Object state, boolean forDrop) {
+        DropLocation old = dropLocation;
+        dropLocation = (DropLocation) location;
+        firePropertyChange("dropLocation", old, dropLocation);
+        repaint();
+        return null;
+    }
     public int convertColumnIndexToModel(int column) { return column<0?column:columnModel.getColumn(column).getModelIndex(); }
     public int convertColumnIndexToView(int column) { for(int i=0;i<getColumnCount();i++)if(convertColumnIndexToModel(i)==column)return i;return -1; }
     public void setGridColor(java.awt.Color c) { gridColor = c; repaint(); }

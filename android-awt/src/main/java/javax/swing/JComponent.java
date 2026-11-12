@@ -151,6 +151,8 @@ public class JComponent extends Container {
     private float alignmentY = 0.5f;
 
     public JComponent() {
+        // As the JDK's JComponent(): key events reach processKeyEvent overrides.
+        enableEvents(java.awt.AWTEvent.KEY_EVENT_MASK);
         addHierarchyListener(e -> {
             if ((e.getChangeFlags() & (java.awt.event.HierarchyEvent.PARENT_CHANGED | java.awt.event.HierarchyEvent.SHOWING_CHANGED)) == 0) return;
             boolean attached = getParent() != null && isVisible();
@@ -244,16 +246,56 @@ public class JComponent extends Container {
         return inputMaps[condition];
     }
     public void setInputMap(int condition, InputMap map) { checkCondition(condition); inputMaps[condition] = map; }
+    /** The JDK's package-private accessors: SwingUtilities walks the maps without creating them. */
+    final InputMap getInputMap(int condition, boolean create) { return create ? getInputMap(condition) : (condition < 0 || condition > 2 ? null : inputMaps[condition]); }
+    final ActionMap getActionMap(boolean create) { return create ? getActionMap() : actionMap; }
     private void checkCondition(int condition) { if (condition < 0 || condition > 2) throw new IllegalArgumentException("condition"); }
     public void registerKeyboardAction(ActionListener listener, KeyStroke stroke, int condition) { registerKeyboardAction(listener, null, stroke, condition); }
     public void registerKeyboardAction(ActionListener listener, String command, KeyStroke stroke, int condition) {
-        if (listener == null || stroke == null) return;
-        Object key = new Object();
-        getInputMap(condition).put(stroke, key);
-        getActionMap().put(key, new AbstractAction(command) {
-            { putValue(Action.ACTION_COMMAND_KEY, command); }
-            public void actionPerformed(java.awt.event.ActionEvent e) { listener.actionPerformed(e); }
-        });
+        InputMap inputMap = getInputMap(condition, true);
+        ActionStandin action = new ActionStandin(listener, command);
+        inputMap.put(stroke, action);
+        getActionMap(true).put(action, action);
+    }
+
+    /**
+     * The JDK's wrapper for registerKeyboardAction listeners. SwingUtilities.notifyAction
+     * recognizes it to pass a null action command when none was registered.
+     */
+    static final class ActionStandin implements Action {
+        final ActionListener actionListener;
+        private final String command;
+        private final Action action;
+
+        ActionStandin(ActionListener actionListener, String command) {
+            this.actionListener = actionListener;
+            this.action = actionListener instanceof Action ? (Action) actionListener : null;
+            this.command = command;
+        }
+
+        public Object getValue(String key) {
+            if (key != null) {
+                if (key.equals(Action.ACTION_COMMAND_KEY)) return command;
+                if (action != null) return action.getValue(key);
+                if (key.equals(NAME)) return "ActionStandin";
+            }
+            return null;
+        }
+
+        public boolean isEnabled() {
+            if (actionListener == null) return false;
+            return action == null || action.isEnabled();
+        }
+
+        public void actionPerformed(java.awt.event.ActionEvent ae) {
+            if (actionListener != null) actionListener.actionPerformed(ae);
+        }
+
+        // As in the JDK, the standin is immutable; the wrapped Action keeps its own state.
+        public void putValue(String key, Object value) {}
+        public void setEnabled(boolean b) {}
+        public void addPropertyChangeListener(PropertyChangeListener listener) {}
+        public void removePropertyChangeListener(PropertyChangeListener listener) {}
     }
     public void unregisterKeyboardAction(KeyStroke stroke) {
         for (InputMap map : inputMaps) if (map != null) { Object key = map.get(stroke); map.remove(stroke); if (key != null && actionMap != null) actionMap.remove(key); }
@@ -266,33 +308,51 @@ public class JComponent extends Container {
     public int getConditionForKeyStroke(KeyStroke stroke) { for (int i=0;i<3;i++) if (inputMaps[i] != null && inputMaps[i].get(stroke) != null) return i; return UNDEFINED_CONDITION; }
     public ActionListener getActionForKeyStroke(KeyStroke stroke) {
         int condition = getConditionForKeyStroke(stroke);
-        return condition < 0 || actionMap == null ? null : actionMap.get(inputMaps[condition].get(stroke));
+        if (condition < 0 || actionMap == null) return null;
+        Action action = actionMap.get(inputMaps[condition].get(stroke));
+        return action instanceof ActionStandin ? ((ActionStandin) action).actionListener : action;
     }
     protected boolean processKeyBinding(KeyStroke stroke, java.awt.event.KeyEvent event, int condition, boolean pressed) {
-        if (!isEnabled() || inputMaps[condition] == null || actionMap == null) return false;
-        Action action = actionMap.get(inputMaps[condition].get(stroke));
-        if (action == null || !action.isEnabled()) return false;
-        Object command = action.getValue(Action.ACTION_COMMAND_KEY);
-        action.actionPerformed(new java.awt.event.ActionEvent(this, java.awt.event.ActionEvent.ACTION_PERFORMED,
-            command == null ? String.valueOf(event.getKeyChar()) : command.toString(), event.getWhen(), event.getModifiers()));
-        event.consume(); return true;
+        InputMap map = getInputMap(condition, false);
+        ActionMap am = getActionMap(false);
+        if (map != null && am != null && isEnabled()) {
+            Object binding = map.get(stroke);
+            Action action = binding == null ? null : am.get(binding);
+            if (action != null) return SwingUtilities.notifyAction(action, stroke, event, this, event.getModifiers());
+        }
+        return false;
     }
     /** Host entry point after normal KeyListeners and before game-wide fallback. */
     public boolean hostProcessKeyBinding(java.awt.event.KeyEvent event) {
         if (event.isConsumed()) return false;
-        KeyStroke stroke = KeyStroke.getKeyStrokeForEvent(event);
-        if (processKeyBinding(stroke, event, WHEN_FOCUSED, event.getID() == java.awt.event.KeyEvent.KEY_PRESSED)) return true;
-        java.awt.Component root = this;
-        for (Container p = getParent(); p != null; p = p.getParent()) {
-            root = p;
-            if (p instanceof JComponent && ((JComponent)p).processKeyBinding(stroke, event, WHEN_ANCESTOR_OF_FOCUSED_COMPONENT, event.getID() == java.awt.event.KeyEvent.KEY_PRESSED)) return true;
+        // JComponent.processKeyEvent consumes an event a binding took.
+        if (processKeyBindings(event, event.getID() == java.awt.event.KeyEvent.KEY_PRESSED)) {
+            event.consume();
+            return true;
         }
-        return windowBinding(root, stroke, event);
+        return false;
     }
-    private static boolean windowBinding(java.awt.Component component, KeyStroke stroke, java.awt.event.KeyEvent event) {
+    /** The JDK's focused -> ancestors -> window walk; the window pass runs on the topmost ancestor. */
+    boolean processKeyBindings(java.awt.event.KeyEvent event, boolean pressed) {
+        KeyStroke stroke = KeyStroke.getKeyStrokeForEvent(event);
+        if (processKeyBinding(stroke, event, WHEN_FOCUSED, pressed)) return true;
+        Container parent = this, root = this;
+        while (parent != null && !(parent instanceof java.awt.Window) && !(parent instanceof java.applet.Applet)) {
+            if (parent instanceof JComponent && ((JComponent) parent).processKeyBinding(stroke, event, WHEN_ANCESTOR_OF_FOCUSED_COMPONENT, pressed)) return true;
+            root = parent;
+            parent = parent.getParent();
+        }
+        // The sidebar host roots panels outside any Window; there the topmost ancestor
+        // stands in for the window the JDK would search.
+        return processKeyBindingsForAllComponents(event, parent != null ? parent : root, pressed);
+    }
+    static boolean processKeyBindingsForAllComponents(java.awt.event.KeyEvent event, Container container, boolean pressed) {
+        return windowBinding(container, KeyStroke.getKeyStrokeForEvent(event), event, pressed);
+    }
+    private static boolean windowBinding(java.awt.Component component, KeyStroke stroke, java.awt.event.KeyEvent event, boolean pressed) {
         if (!component.isVisible() || !component.isEnabled()) return false;
-        if (component instanceof JComponent && ((JComponent)component).processKeyBinding(stroke, event, WHEN_IN_FOCUSED_WINDOW, event.getID() == java.awt.event.KeyEvent.KEY_PRESSED)) return true;
-        if (component instanceof Container) for (java.awt.Component child : ((Container)component).getComponents()) if (windowBinding(child, stroke, event)) return true;
+        if (component instanceof JComponent && ((JComponent)component).processKeyBinding(stroke, event, WHEN_IN_FOCUSED_WINDOW, pressed)) return true;
+        if (component instanceof Container) for (java.awt.Component child : ((Container)component).getComponents()) if (windowBinding(child, stroke, event, pressed)) return true;
         return false;
     }
 
@@ -357,6 +417,46 @@ public class JComponent extends Container {
     public void setInheritsPopupMenu(boolean value) { inheritsPopupMenu = value; }
 
     public java.awt.Insets getInsets() { return border != null ? border.getBorderInsets(this) : super.getInsets(); }
+
+    private boolean autoscrolls;
+    public void setAutoscrolls(boolean autoscrolls) { this.autoscrolls = autoscrolls; }
+    public boolean getAutoscrolls() { return autoscrolls; }
+
+    private TransferHandler transferHandler;
+
+    /**
+     * Sets the {@code TransferHandler}, which provides support for transfer
+     * of data into and out of this component via cut/copy/paste and drag
+     * and drop. As on desktop, a drop target is installed unless the
+     * application set its own.
+     *
+     * @since 1.4
+     */
+    public void setTransferHandler(TransferHandler newHandler) {
+        TransferHandler oldHandler = transferHandler;
+        transferHandler = newHandler;
+        TransferHandler.installSwingDropTargetAsNecessary(this, newHandler);
+        firePropertyChange("transferHandler", oldHandler, newHandler);
+    }
+
+    public TransferHandler getTransferHandler() { return transferHandler; }
+
+    /**
+     * Calculates a custom drop location for this type of component,
+     * representing where a drop at the given point should insert data.
+     * {@code null} means the plain point-only location.
+     */
+    TransferHandler.DropLocation dropLocationForPoint(java.awt.Point p) {
+        return null;
+    }
+
+    /**
+     * Called to set or clear the drop location during a DnD operation;
+     * returns the state the next call is handed back.
+     */
+    Object setDropLocation(TransferHandler.DropLocation location, Object state, boolean forDrop) {
+        return null;
+    }
 
     private JPopupMenu componentPopupMenu;
     public void setComponentPopupMenu(JPopupMenu menu) { this.componentPopupMenu = menu; }

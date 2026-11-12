@@ -86,6 +86,8 @@ public class JDialog extends Dialog implements javax.accessibility.Accessible, R
     }
 
     private void initDialog() {
+        // As JDialog.dialogInit: processWindowEvent runs the default close operation.
+        enableEvents(java.awt.AWTEvent.KEY_EVENT_MASK | java.awt.AWTEvent.WINDOW_EVENT_MASK);
         super.setLayout(new java.awt.BorderLayout());
         super.add(rootPane, -1);
     }
