@@ -35,6 +35,9 @@ import java.io.File;
 import javax.swing.filechooser.FileFilter;
 
 public class JFileChooser extends JComponent {
+    private static final String uiClassID = "FileChooserUI";
+    public javax.swing.plaf.FileChooserUI getUI() { return (javax.swing.plaf.FileChooserUI) ui; }
+    public String getUIClassID() { return uiClassID; }
     private static final long serialVersionUID = 1L;
 
     public static final int OPEN_DIALOG = 0;

@@ -32,6 +32,10 @@ package javax.swing;
 import java.awt.*;
 import javax.swing.event.*;
 public class JSlider extends JComponent implements SwingConstants {
+    private static final String uiClassID = "SliderUI";
+    public javax.swing.plaf.SliderUI getUI() { return (javax.swing.plaf.SliderUI) ui; }
+    public void setUI(javax.swing.plaf.SliderUI ui) { super.setUI(ui); }
+    public String getUIClassID() { return uiClassID; }
     private BoundedRangeModel model;
     private int orientation, majorTickSpacing, minorTickSpacing;
     private boolean paintTicks,paintLabels,snapToTicks,inverted;

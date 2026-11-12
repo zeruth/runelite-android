@@ -43,6 +43,8 @@ import javax.swing.event.PopupMenuListener;
  * array-built combos started blank and removeAllItems() never cleared anything.
  */
 public class JComboBox<E> extends JComponent implements ListDataListener {
+    private static final String uiClassID = "ComboBoxUI";
+    public String getUIClassID() { return uiClassID; }
     private static final long serialVersionUID = -2378717525866512215L;
 
     public interface KeySelectionManager {

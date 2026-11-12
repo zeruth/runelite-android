@@ -34,11 +34,16 @@ import java.awt.Component;
 import javax.swing.event.PopupMenuListener;
 
 public class JPopupMenu extends JComponent implements MenuElement {
+    private static final String uiClassID = "PopupMenuUI";
+    public javax.swing.plaf.PopupMenuUI getUI() { return (javax.swing.plaf.PopupMenuUI) ui; }
+    public void setUI(javax.swing.plaf.PopupMenuUI ui) { super.setUI(ui); }
+    public String getUIClassID() { return uiClassID; }
     private static final long serialVersionUID = 1L;
 
     public static class Separator extends JSeparator {
         private static final long serialVersionUID = 1L;
         public Separator() { super(SwingConstants.HORIZONTAL); }
+        public String getUIClassID() { return "PopupMenuSeparatorUI"; }
     }
 
     private Component invoker;

@@ -37,6 +37,10 @@ import java.awt.Rectangle;
 import javax.swing.event.ChangeListener;
 
 public class JViewport extends JComponent {
+    private static final String uiClassID = "ViewportUI";
+    public javax.swing.plaf.ViewportUI getUI() { return (javax.swing.plaf.ViewportUI) ui; }
+    public void setUI(javax.swing.plaf.ViewportUI ui) { super.setUI(ui); }
+    public String getUIClassID() { return uiClassID; }
     private static final long serialVersionUID = 1L;
 
     public static final int BLIT_SCROLL_MODE = 1;

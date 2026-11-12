@@ -31,6 +31,9 @@
 package javax.swing;
 
 public class JLabel extends JComponent implements SwingConstants {
+    private static final String uiClassID = "LabelUI";
+    public javax.swing.plaf.LabelUI getUI() { return (javax.swing.plaf.LabelUI) ui; }
+    public String getUIClassID() { return uiClassID; }
     private static final long serialVersionUID = 5496508283662221534L;
 
     private String text = "";

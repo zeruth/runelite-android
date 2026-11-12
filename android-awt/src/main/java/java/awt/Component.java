@@ -446,6 +446,42 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
         return x >= 0 && x < width && y >= 0 && y < height;
     }
 
+    /**
+     * Enumeration of the common ways the baseline of a component can
+     * change as the size changes.
+     *
+     * @since 1.6
+     */
+    public enum BaselineResizeBehavior {
+        CONSTANT_ASCENT,
+        CONSTANT_DESCENT,
+        CENTER_OFFSET,
+        OTHER
+    }
+
+    /**
+     * Returns the baseline, or -1 when the component has none.
+     *
+     * @throws IllegalArgumentException if width or height is &lt; 0
+     * @since 1.6
+     */
+    public int getBaseline(int width, int height) {
+        if (width < 0 || height < 0) {
+            throw new IllegalArgumentException(
+                    "Width and height must be >= 0");
+        }
+        return -1;
+    }
+
+    /**
+     * Returns how the baseline changes as the size changes.
+     *
+     * @since 1.6
+     */
+    public BaselineResizeBehavior getBaselineResizeBehavior() {
+        return BaselineResizeBehavior.OTHER;
+    }
+
     // --- focus (after OpenJDK 8u Component; requests complete synchronously, see KeyboardFocusManager) ---
 
     public void requestFocus() { requestFocusHelper(false, java.awt.event.FocusEvent.Cause.UNKNOWN); }

@@ -38,6 +38,10 @@ import javax.swing.tree.*;
 
 /** Tree state and renderer shared by desktop-style plugins and the Android host. */
 public class JTree extends JComponent implements Scrollable {
+    private static final String uiClassID = "TreeUI";
+    public javax.swing.plaf.TreeUI getUI() { return (javax.swing.plaf.TreeUI) ui; }
+    public void setUI(javax.swing.plaf.TreeUI ui) { super.setUI(ui); }
+    public String getUIClassID() { return uiClassID; }
     private static final long serialVersionUID=1L;
     protected TreeModel treeModel;
     private TreeSelectionModel selectionModel;

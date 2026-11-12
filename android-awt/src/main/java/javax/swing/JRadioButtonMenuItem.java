@@ -30,6 +30,8 @@
  */
 package javax.swing;
 public class JRadioButtonMenuItem extends JMenuItem {
+    private static final String uiClassID = "RadioButtonMenuItemUI";
+    public String getUIClassID() { return uiClassID; }
     private static final long serialVersionUID=1L;
     public JRadioButtonMenuItem() { setModel(new JToggleButton.ToggleButtonModel()); }
     public JRadioButtonMenuItem(String text) { this(text,null,false); }

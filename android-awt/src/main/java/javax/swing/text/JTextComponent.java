@@ -34,6 +34,8 @@ import javax.swing.JComponent;
 import javax.swing.event.CaretListener;
 
 public abstract class JTextComponent extends JComponent {
+    public javax.swing.plaf.TextUI getUI() { return (javax.swing.plaf.TextUI) ui; }
+    public void setUI(javax.swing.plaf.TextUI ui) { super.setUI(ui); }
     private static final long serialVersionUID = -2911697971489974478L;
 
     public static final String DEFAULT_KEYMAP = "default";

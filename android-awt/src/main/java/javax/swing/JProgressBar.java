@@ -33,6 +33,8 @@ package javax.swing;
 import javax.swing.event.ChangeListener;
 
 public class JProgressBar extends JComponent implements SwingConstants {
+    private static final String uiClassID = "ProgressBarUI";
+    public String getUIClassID() { return uiClassID; }
     private static final long serialVersionUID = 1L;
     protected BoundedRangeModel model = new DefaultBoundedRangeModel();
     protected int orientation = HORIZONTAL;

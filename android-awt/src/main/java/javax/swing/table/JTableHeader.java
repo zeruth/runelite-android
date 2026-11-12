@@ -34,6 +34,10 @@ import java.awt.*;
 import javax.swing.*;
 
 public class JTableHeader extends JComponent {
+    private static final String uiClassID = "TableHeaderUI";
+    public javax.swing.plaf.TableHeaderUI getUI() { return (javax.swing.plaf.TableHeaderUI) ui; }
+    public void setUI(javax.swing.plaf.TableHeaderUI ui) { super.setUI(ui); }
+    public String getUIClassID() { return uiClassID; }
     private TableColumnModel columnModel;
     private JTable table;
     private TableCellRenderer defaultRenderer = (t, value, selected, focus, row, col) -> {

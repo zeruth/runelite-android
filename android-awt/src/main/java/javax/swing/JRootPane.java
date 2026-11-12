@@ -34,6 +34,10 @@ import java.awt.Component;
 import java.awt.Container;
 
 public class JRootPane extends JComponent {
+    private static final String uiClassID = "RootPaneUI";
+    public javax.swing.plaf.RootPaneUI getUI() { return (javax.swing.plaf.RootPaneUI) ui; }
+    public void setUI(javax.swing.plaf.RootPaneUI ui) { super.setUI(ui); }
+    public String getUIClassID() { return uiClassID; }
     private static final long serialVersionUID = 1L;
 
     public static final int NONE = 0;

@@ -31,6 +31,8 @@
 package javax.swing;
 
 public class JToggleButton extends AbstractButton {
+    private static final String uiClassID = "ToggleButtonUI";
+    public String getUIClassID() { return uiClassID; }
     private static final long serialVersionUID = -3128140058214808885L;
 
     public static class ToggleButtonModel extends DefaultButtonModel {

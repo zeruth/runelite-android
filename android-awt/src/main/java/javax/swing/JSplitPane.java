@@ -33,6 +33,10 @@ package javax.swing;
 import java.awt.Component;
 
 public class JSplitPane extends JComponent {
+    private static final String uiClassID = "SplitPaneUI";
+    public javax.swing.plaf.SplitPaneUI getUI() { return (javax.swing.plaf.SplitPaneUI) ui; }
+    public void setUI(javax.swing.plaf.SplitPaneUI ui) { super.setUI(ui); }
+    public String getUIClassID() { return uiClassID; }
     private static final long serialVersionUID = 1L;
     public static final int VERTICAL_SPLIT = 0;
     public static final int HORIZONTAL_SPLIT = 1;

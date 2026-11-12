@@ -31,6 +31,8 @@
 package javax.swing;
 
 public class JCheckBox extends JToggleButton {
+    private static final String uiClassID = "CheckBoxUI";
+    public String getUIClassID() { return uiClassID; }
     private static final long serialVersionUID = 1L;
 
     public JCheckBox() { this(null, null, false); }

@@ -36,6 +36,8 @@ import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
 
 public class JScrollBar extends JComponent implements SwingConstants {
+    private static final String uiClassID = "ScrollBarUI";
+    public String getUIClassID() { return uiClassID; }
     private static final long serialVersionUID = 1L;
 
     protected int orientation = VERTICAL;

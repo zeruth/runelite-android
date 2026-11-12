@@ -31,6 +31,8 @@
 package javax.swing;
 
 public class JMenu extends JMenuItem {
+    private static final String uiClassID = "MenuUI";
+    public String getUIClassID() { return uiClassID; }
     private static final long serialVersionUID = 1L;
     private final JPopupMenu popup = new JPopupMenu();
     public JMenu() {

@@ -31,6 +31,8 @@
 package javax.swing;
 
 public class JRadioButton extends JToggleButton {
+    private static final String uiClassID = "RadioButtonUI";
+    public String getUIClassID() { return uiClassID; }
     private static final long serialVersionUID = 1L;
 
     public JRadioButton() { this(null, null, false); }

@@ -31,6 +31,8 @@
 package javax.swing;
 
 public class JButton extends AbstractButton {
+    private static final String uiClassID = "ButtonUI";
+    public String getUIClassID() { return uiClassID; }
     private static final long serialVersionUID = -1602050342864801480L;
 
     public JButton() { this(null, null); }

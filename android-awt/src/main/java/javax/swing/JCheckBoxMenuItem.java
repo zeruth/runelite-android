@@ -30,6 +30,8 @@
  */
 package javax.swing;
 public class JCheckBoxMenuItem extends JMenuItem {
+    private static final String uiClassID = "CheckBoxMenuItemUI";
+    public String getUIClassID() { return uiClassID; }
     private static final long serialVersionUID=1L;
     public JCheckBoxMenuItem() { setModel(new JToggleButton.ToggleButtonModel()); }
     public JCheckBoxMenuItem(String text) { this(text,null,false); }

@@ -37,6 +37,10 @@ import javax.swing.table.TableModel;
 import javax.swing.table.AbstractTableModel;
 
 public class JTable extends JComponent implements Scrollable, javax.swing.event.TableModelListener {
+    private static final String uiClassID = "TableUI";
+    public javax.swing.plaf.TableUI getUI() { return (javax.swing.plaf.TableUI) ui; }
+    public void setUI(javax.swing.plaf.TableUI ui) { super.setUI(ui); }
+    public String getUIClassID() { return uiClassID; }
     private static final long serialVersionUID = 1L;
     public static final int AUTO_RESIZE_OFF = 0;
     public static final int AUTO_RESIZE_NEXT_COLUMN = 1;

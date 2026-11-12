@@ -33,6 +33,10 @@ package javax.swing;
 import javax.swing.event.ChangeListener;
 
 public class JSpinner extends JComponent {
+    private static final String uiClassID = "SpinnerUI";
+    public javax.swing.plaf.SpinnerUI getUI() { return (javax.swing.plaf.SpinnerUI) ui; }
+    public void setUI(javax.swing.plaf.SpinnerUI ui) { super.setUI(ui); }
+    public String getUIClassID() { return uiClassID; }
     private static final long serialVersionUID = 1L;
 
     public static class DefaultEditor extends JPanel implements ChangeListener, java.beans.PropertyChangeListener {

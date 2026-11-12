@@ -34,6 +34,10 @@ import java.awt.Component;
 import javax.swing.border.Border;
 
 public class JScrollPane extends JComponent implements ScrollPaneConstants {
+    private static final String uiClassID = "ScrollPaneUI";
+    public javax.swing.plaf.ScrollPaneUI getUI() { return (javax.swing.plaf.ScrollPaneUI) ui; }
+    public void setUI(javax.swing.plaf.ScrollPaneUI ui) { super.setUI(ui); }
+    public String getUIClassID() { return uiClassID; }
     private static final long serialVersionUID = 1L;
 
     protected JViewport viewport;

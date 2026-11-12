@@ -135,9 +135,29 @@ public class JComponent extends Container {
     public void removeAncestorListener(AncestorListener l) { ancestorListeners.remove(AncestorListener.class, l); }
     public AncestorListener[] getAncestorListeners() { return ancestorListeners.getListeners(AncestorListener.class); }
 
+    // JDK 9+ (9): jdk17u src/java.desktop/share/classes/javax/swing/JComponent.java
     public javax.swing.plaf.ComponentUI getUI() { return ui; }
-    public void setUI(javax.swing.plaf.ComponentUI ui) { javax.swing.plaf.ComponentUI old=this.ui;if(old!=null)old.uninstallUI(this);this.ui=ui;if(ui!=null)ui.installUI(this);firePropertyChange("UI",old,ui);revalidate();repaint(); }
+    /** Protected as on the JDK: callers go through each component's typed setUI(FooUI). */
+    protected void setUI(javax.swing.plaf.ComponentUI ui) { javax.swing.plaf.ComponentUI old=this.ui;if(old!=null)old.uninstallUI(this);this.ui=ui;if(ui!=null)ui.installUI(this);firePropertyChange("UI",old,ui);revalidate();repaint(); }
     public String getUIClassID() { return "ComponentUI"; }
+
+    @Override
+    public int getBaseline(int width, int height) {
+        // check width and height are valid
+        super.getBaseline(width, height);
+        if (ui != null) {
+            return ui.getBaseline(this, width, height);
+        }
+        return -1;
+    }
+
+    @Override
+    public BaselineResizeBehavior getBaselineResizeBehavior() {
+        if (ui != null) {
+            return ui.getBaselineResizeBehavior(this);
+        }
+        return BaselineResizeBehavior.OTHER;
+    }
 
     public void updateUI() { javax.swing.plaf.ComponentUI delegate=UIManager.getUI(this);if(delegate!=null)setUI(delegate); }
 

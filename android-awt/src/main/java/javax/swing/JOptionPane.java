@@ -33,6 +33,10 @@ package javax.swing;
 import java.awt.Component;
 
 public class JOptionPane extends JComponent {
+    private static final String uiClassID = "OptionPaneUI";
+    public javax.swing.plaf.OptionPaneUI getUI() { return (javax.swing.plaf.OptionPaneUI) ui; }
+    public void setUI(javax.swing.plaf.OptionPaneUI ui) { super.setUI(ui); }
+    public String getUIClassID() { return uiClassID; }
     private static final long serialVersionUID = 1L;
 
     public static final int DEFAULT_OPTION = -1;

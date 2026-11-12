@@ -35,6 +35,10 @@ import java.awt.Component;
 import javax.swing.event.ChangeListener;
 
 public class JTabbedPane extends JComponent implements SwingConstants {
+    private static final String uiClassID = "TabbedPaneUI";
+    public javax.swing.plaf.TabbedPaneUI getUI() { return (javax.swing.plaf.TabbedPaneUI) ui; }
+    public void setUI(javax.swing.plaf.TabbedPaneUI ui) { super.setUI(ui); }
+    public String getUIClassID() { return uiClassID; }
     private static final long serialVersionUID = 1L;
     public static final int WRAP_TAB_LAYOUT = 0;
     public static final int SCROLL_TAB_LAYOUT = 1;

@@ -36,6 +36,8 @@ import javax.swing.text.Document;
 import javax.swing.text.JTextComponent;
 
 public class JTextField extends JTextComponent {
+    private static final String uiClassID = "TextFieldUI";
+    public String getUIClassID() { return uiClassID; }
     private static final long serialVersionUID = 353936840712925302L;
 
     public static final String notifyAction = "notify-field-accept";

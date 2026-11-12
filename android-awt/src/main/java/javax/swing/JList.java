@@ -35,6 +35,10 @@ import java.util.Vector;
 import javax.swing.event.ListSelectionListener;
 
 public class JList<E> extends JComponent implements Scrollable {
+    private static final String uiClassID = "ListUI";
+    public javax.swing.plaf.ListUI getUI() { return (javax.swing.plaf.ListUI) ui; }
+    public void setUI(javax.swing.plaf.ListUI ui) { super.setUI(ui); }
+    public String getUIClassID() { return uiClassID; }
     private static final long serialVersionUID = -1697842831055920921L;
 
     public static final int VERTICAL = 0;
