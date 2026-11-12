@@ -467,6 +467,16 @@ public class JComboBox<E> extends JComponent implements ListDataListener, javax.
     }
 
     /**
+     * The JDK's JComponent asks the delegate before the layout; the shadow one asks the
+     * layout first, and BasicComboBoxUI's layout answers {@code parent.getMinimumSize()},
+     * so the combo answers here with its own measurement to end that loop.
+     */
+    @Override public java.awt.Dimension getMinimumSize() {
+        if (isMinimumSizeSet()) return super.getMinimumSize();
+        return getPreferredSize();
+    }
+
+    /**
      * BasicComboBoxUI.paintCurrentValue: the renderer component paints the selected value,
      * with the combo's font and colours forced on it, left of the arrow.
      */

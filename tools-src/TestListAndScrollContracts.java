@@ -228,6 +228,40 @@ public class TestListAndScrollContracts {
         check(events.contains("S:durian"), "commit selects: " + events);
         eq("A:comboBoxEdited", events.get(events.size() - 1), "edited action last: " + events);
         eq("comboBoxChanged", combo.getActionCommand(), "command restored");
+
+        // BasicComboBoxUI.installComponents/addEditor: the arrow button and the editor are children.
+        check(field.getParent() == combo, "an editable combo's editor is its child");
+        boolean arrow = false;
+        for (java.awt.Component child : combo.getComponents()) arrow |= child instanceof javax.swing.JButton;
+        check(arrow, "the arrow button is a child");
+        combo.setEditable(false);
+        check(field.getParent() != combo, "the editor leaves when the combo stops being editable");
+    }
+
+    /**
+     * The list paints each cell at its bounds through BasicListUI; on the shadow no look and
+     * feel installed one, so this is the list's own uninstalled delegate.
+     */
+    static void paintCells() {
+        JList<String> list = list(JList.VERTICAL, 8, 100, 70);
+        list.setCellRenderer((l, value, index, selected, focused) -> {
+            JLabel label = new JLabel(value);
+            label.setOpaque(true);
+            label.setBackground(index == 2 ? java.awt.Color.RED : java.awt.Color.WHITE);
+            return label;
+        });
+        java.awt.image.BufferedImage image =
+                new java.awt.image.BufferedImage(100, 70, java.awt.image.BufferedImage.TYPE_INT_RGB);
+        java.awt.Graphics2D g = image.createGraphics();
+        try {
+            list.paint(g);
+        } finally {
+            g.dispose();
+        }
+        // x = 95 is right of the label text, so only the cell background is sampled.
+        eq(java.awt.Color.RED.getRGB(), image.getRGB(95, 2 * CELL_H + CELL_H / 2), "cell 2 painted at its bounds");
+        eq(java.awt.Color.WHITE.getRGB(), image.getRGB(95, CELL_H / 2), "cell 0 painted at its bounds");
+        eq(java.awt.Color.WHITE.getRGB(), image.getRGB(95, 3 * CELL_H + CELL_H / 2), "cell 3 painted at its bounds");
     }
 
     static class CustomBar extends JScrollBar {
@@ -293,6 +327,7 @@ public class TestListAndScrollContracts {
         remeasure();
         viewport();
         combo();
+        paintCells();
         scrollPane();
         scrollPaneDelegate();
         System.out.println("PASS: list and scroll contracts");

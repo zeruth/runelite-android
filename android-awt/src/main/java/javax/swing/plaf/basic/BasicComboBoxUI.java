@@ -48,11 +48,11 @@ import sun.swing.UIAction;
  * on the combo box and the combo box model. These listeners update the user
  * interface in response to changes in the properties and state of the combo box.
  * <p>
- * Android: the panel host owns touch on the combo and draws the open picker
- * from the popup's list, so the arrow button and the editor component are not
- * added as children; {@link ComboBoxLayoutManager} still gives them their JDK
- * bounds, and {@link #paint} draws the arrow button and the current value at
- * those bounds. Sizing stays with {@code JComboBox}'s own measurement.
+ * Android: the arrow button and the editor are children as in the JDK, but the
+ * panel host routes a tap anywhere in the combo to the combo itself and draws
+ * the open picker from the popup's list. Sizing stays with {@code JComboBox}'s
+ * own measurement, and ENTER clicks the root pane's default button directly
+ * because the shadow root pane has no WHEN_IN_FOCUSED_WINDOW "press" binding.
  *
  * @author Arnaud Weber
  * @author Tom Santos
@@ -182,26 +182,172 @@ public class BasicComboBoxUI extends ComboBoxUI {
     }
 
     /**
-     * Creates and installs the arrow button and the editor component. On
-     * Android neither becomes a child of the combo box; see the class comment.
+     * Creates and initializes the components which make up the
+     * aggregate combo box. This method is called as part of the UI
+     * installation process.
      */
     protected void installComponents() {
         arrowButton = createArrowButton();
         if (arrowButton != null) {
+            comboBox.add(arrowButton);
             configureArrowButton();
         }
-        ComboBoxEditor cbEditor = comboBox.getEditor();
-        editor = cbEditor == null ? null : cbEditor.getEditorComponent();
+        if (comboBox.isEditable()) {
+            addEditor();
+        }
     }
 
     /**
-     * Uninstalls the arrow button and the editor component.
+     * The aggregate components which comprise the combo box are
+     * unregistered and uninitialized. This method is called as part of the
+     * UI uninstallation process.
      */
     protected void uninstallComponents() {
         if (arrowButton != null) {
             unconfigureArrowButton();
         }
-        editor = null;
+        if (editor != null) {
+            unconfigureEditor();
+        }
+        comboBox.removeAll(); // Just to be safe.
+        arrowButton = null;
+    }
+
+    /**
+     * This public method is implementation specific and should be private.
+     * do not call or override. To implement a specific editor create a
+     * custom <code>ComboBoxEditor</code>
+     *
+     * @see #createEditor
+     * @see javax.swing.JComboBox#setEditor
+     * @see javax.swing.ComboBoxEditor
+     */
+    public void addEditor() {
+        removeEditor();
+        ComboBoxEditor cbEditor = comboBox.getEditor();
+        editor = cbEditor == null ? null : cbEditor.getEditorComponent();
+        if (editor != null) {
+            configureEditor();
+            comboBox.add(editor);
+            if (comboBox.isFocusOwner()) {
+                // Switch focus to the editor component
+                editor.requestFocusInWindow();
+            }
+        }
+    }
+
+    /**
+     * This public method is implementation specific and should be private.
+     * do not call or override.
+     *
+     * @see #addEditor
+     */
+    public void removeEditor() {
+        if (editor != null) {
+            unconfigureEditor();
+            comboBox.remove(editor);
+            editor = null;
+        }
+    }
+
+    /**
+     * This protected method is implementation specific and should be private.
+     * do not call or override.
+     *
+     * @see #addEditor
+     */
+    protected void configureEditor() {
+        // Should be in the same state as the combobox
+        editor.setEnabled(comboBox.isEnabled());
+        editor.setFocusable(comboBox.isFocusable());
+        editor.setFont(comboBox.getFont());
+        // JComboBox registers its own action listener on the ComboBoxEditor
+        // (setEditor), which commits the edit as the JDK's handler does.
+        comboBox.configureEditor(comboBox.getEditor(), comboBox.getSelectedItem());
+    }
+
+    /**
+     * This protected method is implementation specific and should be private.
+     * Do not call or override.
+     *
+     * @see #addEditor
+     */
+    protected void unconfigureEditor() {
+    }
+
+    /**
+     * This protected field is implementation specific. Do not access directly
+     * or override. Override the listener construction method instead.
+     *
+     * @see #createPropertyChangeListener
+     */
+    protected java.beans.PropertyChangeListener propertyChangeListener;
+
+    /**
+     * Creates a <code>PropertyChangeListener</code> which will be added to
+     * the combo box. If this method returns null then it will not
+     * be added to the combo box.
+     *
+     * @return an instance of a <code>PropertyChangeListener</code> or null
+     */
+    protected java.beans.PropertyChangeListener createPropertyChangeListener() {
+        return new PropertyChangeHandler();
+    }
+
+    /**
+     * This listener watches for bound properties that have changed in the
+     * combo box: the editor and the editable flag add or remove the editor
+     * child, and enabled/focusable are passed on to the children.
+     * <p>
+     * This public inner class should be treated as protected.
+     * Instantiate it only within subclasses of
+     * <code>BasicComboBoxUI</code>.
+     */
+    public class PropertyChangeHandler implements java.beans.PropertyChangeListener {
+        public void propertyChange(java.beans.PropertyChangeEvent e) {
+            String propertyName = e.getPropertyName();
+            if (comboBox == null) {
+                return;
+            }
+            if ("editor".equals(propertyName) && comboBox.isEditable()) {
+                addEditor();
+                comboBox.revalidate();
+            } else if ("editable".equals(propertyName)) {
+                if (comboBox.isEditable()) {
+                    comboBox.setRequestFocusEnabled(false);
+                    addEditor();
+                } else {
+                    comboBox.setRequestFocusEnabled(true);
+                    removeEditor();
+                }
+                comboBox.revalidate();
+            } else if ("enabled".equals(propertyName)) {
+                boolean enabled = comboBox.isEnabled();
+                if (editor != null) {
+                    editor.setEnabled(enabled);
+                }
+                if (arrowButton != null) {
+                    arrowButton.setEnabled(enabled);
+                }
+                comboBox.repaint();
+            } else if ("focusable".equals(propertyName)) {
+                boolean focusable = comboBox.isFocusable();
+                if (editor != null) {
+                    editor.setFocusable(focusable);
+                }
+                if (arrowButton != null) {
+                    arrowButton.setFocusable(focusable);
+                }
+                comboBox.repaint();
+            } else if ("font".equals(propertyName)) {
+                if (editor != null) {
+                    editor.setFont(comboBox.getFont());
+                }
+                comboBox.revalidate();
+            } else if ("componentOrientation".equals(propertyName)) {
+                comboBox.revalidate();
+            }
+        }
     }
 
     protected ComboPopup createPopup() { return new BasicComboPopup(comboBox); }
@@ -253,6 +399,9 @@ public class BasicComboBoxUI extends ComboBoxUI {
     }
 
     protected void installListeners() {
+        if ((propertyChangeListener = createPropertyChangeListener()) != null) {
+            comboBox.addPropertyChangeListener(propertyChangeListener);
+        }
         if ((keyListener = createKeyListener()) != null) {
             comboBox.addKeyListener(keyListener);
         }
@@ -262,6 +411,10 @@ public class BasicComboBoxUI extends ComboBoxUI {
     }
 
     protected void uninstallListeners() {
+        if (propertyChangeListener != null) {
+            comboBox.removePropertyChangeListener(propertyChangeListener);
+            propertyChangeListener = null;
+        }
         if (keyListener != null) {
             comboBox.removeKeyListener(keyListener);
             keyListener = null;
@@ -402,20 +555,22 @@ public class BasicComboBoxUI extends ComboBoxUI {
     //=================================
     // begin ComponentUI Implementation
 
+    /**
+     * Paints the current value of a non-editable combo box; the arrow
+     * button and the editor are children and paint themselves.
+     */
     @Override public void paint(Graphics g, JComponent c) {
         hasFocus = comboBox.hasFocus();
         if (arrowButton != null && arrowButton.getHeight() != comboBox.getHeight()
                 - getInsets().top - getInsets().bottom) {
-            // The layout runs on validation; paint can come first after a resize.
+            // The layout runs on validation; paint can come first after a resize, and
+            // the value rectangle is measured from the arrow button's bounds.
             layoutArrowButton();
         }
-        Rectangle r = rectangleForCurrentValue();
-        paintCurrentValueBackground(g, r, hasFocus);
-        // An editable combo's editor is not a child here, so it is painted with the value.
-        paintCurrentValue(g, r, hasFocus);
-        if (arrowButton != null) {
-            Rectangle b = arrowButton.getBounds();
-            paintArrow(g, b.x, b.y, b.width, b.height);
+        if (!comboBox.isEditable()) {
+            Rectangle r = rectangleForCurrentValue();
+            paintCurrentValueBackground(g, r, hasFocus);
+            paintCurrentValue(g, r, hasFocus);
         }
     }
 
@@ -434,13 +589,6 @@ public class BasicComboBoxUI extends ComboBoxUI {
                               bounds.height - (padding.top + padding.bottom));
         }
         comboBox.hostPaintValue(g, r);
-    }
-
-    private void paintArrow(Graphics g, int x, int y, int width, int height) {
-        if (arrowButton == null || width <= 0 || height <= 0) return;
-        arrowButton.setEnabled(comboBox.isEnabled());
-        Graphics child = g.create(x, y, width, height);
-        try { arrowButton.paint(child); } finally { child.dispose(); }
     }
 
     //
@@ -632,12 +780,8 @@ public class BasicComboBoxUI extends ComboBoxUI {
             return parent.getPreferredSize();
         }
 
-        // The JDK answers parent.getMinimumSize(), which reaches the delegate's
-        // getMinimumSize first; the shadow JComponent asks the layout first, so
-        // that would recurse. JComboBox's own measurement is the minimum, as it
-        // was before this layout was installed.
         public Dimension minimumLayoutSize(Container parent) {
-            return parent.getPreferredSize();
+            return parent.getMinimumSize();
         }
 
         public void layoutContainer(Container parent) {
