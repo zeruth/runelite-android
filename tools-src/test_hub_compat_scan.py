@@ -606,6 +606,58 @@ class JdkGapsTest(unittest.TestCase):
                      ('class', 'com/google/common/collect/ImmutableList', '', '')):
             self.assertIsNone(c.classify(*gone), gone)
 
+    def test_floor_cut_from_jar_sees_hidden_supertypes(self):
+        # api-versions.xml lists no hidden supertype; android.jar does, so what StringBuilder
+        # inherits from AbstractStringBuilder links at the floor and is no gap.
+        obj = ClassWriter('java/lang/Object', superclass=None)
+        obj.method('<init>', '()V')
+        asb = ClassWriter('java/lang/AbstractStringBuilder')
+        asb.method('setLength', '(I)V')
+        sb = ClassWriter('java/lang/StringBuilder', superclass='java/lang/AbstractStringBuilder')
+        sb.method('<init>', '()V')
+        s = ClassWriter('java/lang/String')
+        s.method('length', '()I')
+        s.method('repeat', '(I)Ljava/lang/String;')
+        path = os.path.join(self.tmp.name, 'android.jar')
+        with open(path, 'wb') as fh:
+            fh.write(jar_bytes([obj.build(), asb.build(), sb.build(), s.build()]))
+        floor = scan.FilteredSurface(scan.Surface([path]), self.api, 26)
+        try:
+            self.assertFalse(scan.ApiLevelSurface(self.api, 26).has_member('java/lang/StringBuilder', 'setLength', '(I)V', False))
+            self.assertTrue(floor.has_member('java/lang/StringBuilder', 'setLength', '(I)V', False))
+            self.assertTrue(floor.has_member('java/lang/String', 'length', '()I', False))
+            self.assertFalse(floor.has_member('java/lang/String', 'repeat', '(I)Ljava/lang/String;', False))
+            c = scan.JdkGapClassifier(floor, scan.ApiLevelSurface(self.api, 35), scan.DesugarConfig(DESUGAR_JSON, 26),
+                                      self.api, self.shadow)
+            self.assertIsNone(c.classify('method', 'java/lang/StringBuilder', 'setLength', '(I)V'))
+            self.assertEqual(c.classify('method', 'java/lang/String', 'repeat', '(I)Ljava/lang/String;')['disposition'], 'desugar')
+        finally:
+            floor.close()
+
+    def test_member_since_takes_the_earliest_inherited_path(self):
+        xml = os.path.join(self.tmp.name, 'sequenced.xml')
+        with open(xml, 'w', encoding='utf8') as fh:
+            fh.write('''<?xml version="1.0" encoding="utf-8"?>
+<api version="3">
+	<class name="java/util/Collection" since="1"><method name="add(Ljava/lang/Object;)Z"/></class>
+	<class name="java/util/SequencedCollection" since="35"><implements name="java/util/Collection"/></class>
+	<class name="java/util/Set" since="1"><implements name="java/util/Collection"/></class>
+	<class name="java/util/SortedSet" since="1">
+		<implements name="java/util/SequencedCollection" since="35"/>
+		<implements name="java/util/Set"/>
+	</class>
+</api>
+''')
+        api = scan.ApiVersions(xml)
+        self.assertEqual(api.member_since('java/util/SortedSet', 'add', '(Ljava/lang/Object;)Z', False), 1)
+
+    def test_unshimmed_retargets_name_their_planned_helper(self):
+        got = self.classifier.classify('method', 'java/lang/Runtime', 'version', '()Ljava/lang/Runtime$Version;')
+        self.assertEqual(got['disposition'], 'retarget')
+        self.assertTrue(got['via'].startswith('planned (#91)'), got)
+        got = self.classifier.classify('method', 'java/nio/file/Files', 'readString', '(Ljava/nio/file/Path;)Ljava/lang/String;')
+        self.assertTrue(got['via'].startswith('planned (#91)'), got)
+
     def test_report_baseline_and_markdown(self):
         refs = scan.jdk_references([scan.parse_class(jdk_fixture_plugin())])
         self.assertNotIn(('class', 'javax/annotation/Nullable', '', ''), refs)

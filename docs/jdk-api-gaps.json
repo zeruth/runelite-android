@@ -1,11 +1,11 @@
 {
  "_comment": "JDK 9-21 java.*/javax.* references the floor API lacks, from tools-src/hub-compat-scan.py --jdk-gaps. disposition: desugar = D8 backport or desugar_jdk_libs supplies it at minSdk; retarget = an app shim already rewrites it (via names it) or the dexer needs a retargeting entry (via empty); already-on-device-API = the device API has it, older devices do not; unsupported = nothing on ART can stand in for it.",
- "generatedAt": "2026-11-12T12:09:31Z",
+ "generatedAt": "2026-11-12T12:13:23Z",
  "hubVersion": "1.13.6",
  "minApi": 26,
  "deviceApi": 35,
  "resolvedAgainst": {
-  "floor": "android-37.0/data/api-versions.xml at API 26",
+  "floor": "android-37.0/android.jar cut to API 26 by android-37.0/data/api-versions.xml",
   "device": "android-35/android.jar",
   "desugar": "com.tools.android:desugar_jdk_libs_configuration:2.1.4",
   "shims": "DesktopRegexTransformer, DesugarApisTask (IndyConcat), ProcessHandleShim; StringShim covers no JDK member"
@@ -23,9 +23,9 @@
    "references": 0
   },
   "already-on-device-API": {
-   "signatures": 15,
-   "plugins": 22,
-   "references": 50
+   "signatures": 8,
+   "plugins": 15,
+   "references": 28
   },
   "desugar": {
    "signatures": 59,
@@ -41,7 +41,7 @@
    "name": "writeString",
    "descriptor": "(Ljava/nio/file/Path;Ljava/lang/CharSequence;Ljava/nio/charset/Charset;[Ljava/nio/file/OpenOption;)Ljava/nio/file/Path;",
    "disposition": "retarget",
-   "via": "",
+   "via": "planned (#91): Files.write(path, s.getBytes(charset), options), UTF-8 default",
    "androidSince": 36.1,
    "pluginCount": 3,
    "referenceCount": 4,
@@ -59,7 +59,7 @@
    "name": "readString",
    "descriptor": "(Ljava/nio/file/Path;)Ljava/lang/String;",
    "disposition": "retarget",
-   "via": "",
+   "via": "planned (#91): Files.readAllBytes + new String(bytes, charset), UTF-8 default",
    "androidSince": 36.1,
    "pluginCount": 3,
    "referenceCount": 5,
@@ -77,7 +77,7 @@
    "name": "writeString",
    "descriptor": "(Ljava/nio/file/Path;Ljava/lang/CharSequence;[Ljava/nio/file/OpenOption;)Ljava/nio/file/Path;",
    "disposition": "retarget",
-   "via": "",
+   "via": "planned (#91): Files.write(path, s.getBytes(charset), options), UTF-8 default",
    "androidSince": 36.1,
    "pluginCount": 2,
    "referenceCount": 3,
@@ -94,7 +94,7 @@
    "name": "readString",
    "descriptor": "(Ljava/nio/file/Path;Ljava/nio/charset/Charset;)Ljava/lang/String;",
    "disposition": "retarget",
-   "via": "",
+   "via": "planned (#91): Files.readAllBytes + new String(bytes, charset), UTF-8 default",
    "androidSince": 36.1,
    "pluginCount": 1,
    "referenceCount": 3,
@@ -126,7 +126,7 @@
    "name": "version",
    "descriptor": "()Ljava/lang/Runtime$Version;",
    "disposition": "retarget",
-   "via": "",
+   "via": "planned (#91): static helper answering a Runtime$Version shadow that parses java.specification.version",
    "androidSince": null,
    "pluginCount": 1,
    "referenceCount": 1,
@@ -142,7 +142,7 @@
    "name": "",
    "descriptor": "",
    "disposition": "retarget",
-   "via": "",
+   "via": "planned (#91): android-awt shadow class over java.specification.version",
    "androidSince": null,
    "pluginCount": 1,
    "referenceCount": 1,
@@ -158,7 +158,7 @@
    "name": "feature",
    "descriptor": "()I",
    "disposition": "retarget",
-   "via": "",
+   "via": "planned (#91): android-awt shadow class over java.specification.version",
    "androidSince": null,
    "pluginCount": 1,
    "referenceCount": 1,
@@ -174,7 +174,7 @@
    "name": "keySet",
    "descriptor": "()Ljava/util/concurrent/ConcurrentHashMap$KeySetView;",
    "disposition": "retarget",
-   "via": "",
+   "via": "planned (#91): keySet()Ljava/util/Set; + checkcast ConcurrentHashMap$KeySetView",
    "androidSince": null,
    "pluginCount": 1,
    "referenceCount": 1,
@@ -228,29 +228,6 @@
    "referenceCount": 1,
    "installs": 0,
    "plugins": [
-    "(runelite-client)"
-   ]
-  },
-  {
-   "signature": "method java/lang/StringBuilder.setLength(I)V",
-   "kind": "method",
-   "owner": "java/lang/StringBuilder",
-   "name": "setLength",
-   "descriptor": "(I)V",
-   "disposition": "already-on-device-API",
-   "via": "android API <= 35",
-   "androidSince": null,
-   "pluginCount": 8,
-   "referenceCount": 13,
-   "installs": 1066106,
-   "plugins": [
-    "117hd",
-    "better-npc-highlight",
-    "ba-minigame",
-    "osrs-tcg",
-    "collection-log-popup-enhanced",
-    "clue-details",
-    "boat-upgrades",
     "(runelite-client)"
    ]
   },
@@ -311,57 +288,6 @@
     "resource-packs",
     "c-engineer-completed",
     "osrs-tcg",
-    "(runelite-client)"
-   ]
-  },
-  {
-   "signature": "method java/lang/StringBuilder.indexOf(Ljava/lang/String;)I",
-   "kind": "method",
-   "owner": "java/lang/StringBuilder",
-   "name": "indexOf",
-   "descriptor": "(Ljava/lang/String;)I",
-   "disposition": "already-on-device-API",
-   "via": "android API <= 35",
-   "androidSince": null,
-   "pluginCount": 2,
-   "referenceCount": 2,
-   "installs": 161416,
-   "plugins": [
-    "elysiumevents-plugin",
-    "dink"
-   ]
-  },
-  {
-   "signature": "method java/lang/StringBuilder.setCharAt(IC)V",
-   "kind": "method",
-   "owner": "java/lang/StringBuilder",
-   "name": "setCharAt",
-   "descriptor": "(IC)V",
-   "disposition": "already-on-device-API",
-   "via": "android API <= 35",
-   "androidSince": null,
-   "pluginCount": 2,
-   "referenceCount": 2,
-   "installs": 158718,
-   "plugins": [
-    "elysiumevents-plugin",
-    "emote-clue-items"
-   ]
-  },
-  {
-   "signature": "method java/lang/StringBuilder.substring(II)Ljava/lang/String;",
-   "kind": "method",
-   "owner": "java/lang/StringBuilder",
-   "name": "substring",
-   "descriptor": "(II)Ljava/lang/String;",
-   "disposition": "already-on-device-API",
-   "via": "android API <= 35",
-   "androidSince": null,
-   "pluginCount": 2,
-   "referenceCount": 2,
-   "installs": 72666,
-   "plugins": [
-    "dink",
     "(runelite-client)"
    ]
   },
@@ -430,22 +356,6 @@
    ]
   },
   {
-   "signature": "method java/lang/StringBuffer.setLength(I)V",
-   "kind": "method",
-   "owner": "java/lang/StringBuffer",
-   "name": "setLength",
-   "descriptor": "(I)V",
-   "disposition": "already-on-device-API",
-   "via": "android API <= 35",
-   "androidSince": null,
-   "pluginCount": 1,
-   "referenceCount": 1,
-   "installs": 84803,
-   "plugins": [
-    "collection-log-luck"
-   ]
-  },
-  {
    "signature": "method java/lang/String.lines()Ljava/util/stream/Stream;",
    "kind": "method",
    "owner": "java/lang/String",
@@ -459,38 +369,6 @@
    "installs": 72666,
    "plugins": [
     "dink"
-   ]
-  },
-  {
-   "signature": "method java/lang/StringBuilder.indexOf(Ljava/lang/String;I)I",
-   "kind": "method",
-   "owner": "java/lang/StringBuilder",
-   "name": "indexOf",
-   "descriptor": "(Ljava/lang/String;I)I",
-   "disposition": "already-on-device-API",
-   "via": "android API <= 35",
-   "androidSince": null,
-   "pluginCount": 1,
-   "referenceCount": 1,
-   "installs": 72666,
-   "plugins": [
-    "dink"
-   ]
-  },
-  {
-   "signature": "method java/lang/StringBuffer.substring(II)Ljava/lang/String;",
-   "kind": "method",
-   "owner": "java/lang/StringBuffer",
-   "name": "substring",
-   "descriptor": "(II)Ljava/lang/String;",
-   "disposition": "already-on-device-API",
-   "via": "android API <= 35",
-   "androidSince": null,
-   "pluginCount": 1,
-   "referenceCount": 1,
-   "installs": 0,
-   "plugins": [
-    "(runelite-client)"
    ]
   },
   {
@@ -1724,11 +1602,11 @@
    "name": "(runelite-client)",
    "installs": 0,
    "classes": 1715,
-   "gaps": 27,
+   "gaps": 24,
    "dispositions": {
     "retarget": 10,
     "unsupported": 0,
-    "already-on-device-API": 4,
+    "already-on-device-API": 1,
     "desugar": 13
    },
    "error": null
@@ -1750,11 +1628,11 @@
    "name": "117hd",
    "installs": 387343,
    "classes": 347,
-   "gaps": 21,
+   "gaps": 20,
    "dispositions": {
     "retarget": 0,
     "unsupported": 0,
-    "already-on-device-API": 2,
+    "already-on-device-API": 1,
     "desugar": 19
    },
    "error": null
@@ -1828,11 +1706,11 @@
    "name": "better-npc-highlight",
    "installs": 301869,
    "classes": 25,
-   "gaps": 2,
+   "gaps": 1,
    "dispositions": {
     "retarget": 0,
     "unsupported": 0,
-    "already-on-device-API": 1,
+    "already-on-device-API": 0,
     "desugar": 1
    },
    "error": null
@@ -2309,11 +2187,11 @@
    "name": "ba-minigame",
    "installs": 132403,
    "classes": 60,
-   "gaps": 1,
+   "gaps": 0,
    "dispositions": {
     "retarget": 0,
     "unsupported": 0,
-    "already-on-device-API": 1,
+    "already-on-device-API": 0,
     "desugar": 0
    },
    "error": null
@@ -2439,11 +2317,11 @@
    "name": "osrs-tcg",
    "installs": 117481,
    "classes": 226,
-   "gaps": 22,
+   "gaps": 21,
    "dispositions": {
     "retarget": 2,
     "unsupported": 0,
-    "already-on-device-API": 4,
+    "already-on-device-API": 3,
     "desugar": 16
    },
    "error": null
@@ -2725,11 +2603,11 @@
    "name": "elysiumevents-plugin",
    "installs": 88750,
    "classes": 804,
-   "gaps": 2,
+   "gaps": 0,
    "dispositions": {
     "retarget": 0,
     "unsupported": 0,
-    "already-on-device-API": 2,
+    "already-on-device-API": 0,
     "desugar": 0
    },
    "error": null
@@ -2816,11 +2694,11 @@
    "name": "collection-log-luck",
    "installs": 84803,
    "classes": 828,
-   "gaps": 1,
+   "gaps": 0,
    "dispositions": {
     "retarget": 0,
     "unsupported": 0,
-    "already-on-device-API": 1,
+    "already-on-device-API": 0,
     "desugar": 0
    },
    "error": null
@@ -2998,11 +2876,11 @@
    "name": "dink",
    "installs": 72666,
    "classes": 175,
-   "gaps": 25,
+   "gaps": 22,
    "dispositions": {
     "retarget": 0,
     "unsupported": 0,
-    "already-on-device-API": 4,
+    "already-on-device-API": 1,
     "desugar": 21
    },
    "error": null
@@ -3037,11 +2915,11 @@
    "name": "emote-clue-items",
    "installs": 69968,
    "classes": 75,
-   "gaps": 1,
+   "gaps": 0,
    "dispositions": {
     "retarget": 0,
     "unsupported": 0,
-    "already-on-device-API": 1,
+    "already-on-device-API": 0,
     "desugar": 0
    },
    "error": null
@@ -3778,11 +3656,11 @@
    "name": "collection-log-popup-enhanced",
    "installs": 47153,
    "classes": 53,
-   "gaps": 10,
+   "gaps": 9,
    "dispositions": {
     "retarget": 0,
     "unsupported": 0,
-    "already-on-device-API": 1,
+    "already-on-device-API": 0,
     "desugar": 9
    },
    "error": null
@@ -4038,11 +3916,11 @@
    "name": "clue-details",
    "installs": 41702,
    "classes": 77,
-   "gaps": 13,
+   "gaps": 12,
    "dispositions": {
     "retarget": 0,
     "unsupported": 0,
-    "already-on-device-API": 1,
+    "already-on-device-API": 0,
     "desugar": 12
    },
    "error": null
@@ -4168,11 +4046,11 @@
    "name": "boat-upgrades",
    "installs": 38155,
    "classes": 39,
-   "gaps": 9,
+   "gaps": 8,
    "dispositions": {
     "retarget": 0,
     "unsupported": 0,
-    "already-on-device-API": 2,
+    "already-on-device-API": 1,
     "desugar": 7
    },
    "error": null

@@ -1007,6 +1007,21 @@ UNSUPPORTED = [
     ('javax/annotation/processing/', None, 'compiler API: not in ART'),
 ]
 
+# Retargets the on-device dexer still needs (#91's table-driven layer): members neither
+# desugar_jdk_libs 2.1 nor an existing shim covers, with the static helper each is planned
+# to rewrite to. Files.readString/writeString are outside desugar_jdk_libs' nio rewrite
+# (it backs Files with the platform's, which gained them at 36.1).
+PLANNED_RETARGETS = [
+    ('java/nio/file/Files', 'readString', 'planned (#91): Files.readAllBytes + new String(bytes, charset), UTF-8 default'),
+    ('java/nio/file/Files', 'writeString', 'planned (#91): Files.write(path, s.getBytes(charset), options), UTF-8 default'),
+    ('java/lang/Runtime', 'version', 'planned (#91): static helper answering a Runtime$Version shadow that parses java.specification.version'),
+    ('java/lang/Runtime$Version', None, 'planned (#91): android-awt shadow class over java.specification.version'),
+    # Not a stub gap but a runtime one: android.jar declares keySet()Set, and ART adds the
+    # KeySetView overload only from API 29 (@CovariantReturnType presentAfter = 28), so a
+    # call compiled on a desktop JDK fails with NoSuchMethodError on API 26-28.
+    ('java/util/concurrent/ConcurrentHashMap', 'keySet', 'planned (#91): keySet()Ljava/util/Set; + checkcast ConcurrentHashMap$KeySetView'),
+]
+
 
 def _owner_matches(owner, pattern):
     return owner == pattern or (pattern.endswith('/') and owner.startswith(pattern))
@@ -1091,12 +1106,17 @@ class ApiVersions(object):
             return max(hit[0], since)
         if name in ('<init>', '<clinit>'):
             return None
+        # The earliest path wins: SortedSet.add arrived through Set at API 1, not through
+        # the SequencedSet supertype API 35 added. Each parent gets its own visited set so
+        # a shared ancestor is reachable on every path.
+        best = None
         for p, s, r in parents:
             if _alive(s, r, level):
-                got = self.member_since(p, name, desc, field, level, seen)
+                got = self.member_since(p, name, desc, field, level, set(seen))
                 if got is not None:
-                    return max(got, s, since)
-        return None
+                    got = max(got, s, since)
+                    best = got if best is None else min(best, got)
+        return best
 
 
 class ApiLevelSurface(object):
@@ -1154,7 +1174,7 @@ class FilteredSurface(object):
         return since is None or since <= self.level
 
     def close(self):
-        pass
+        self.base.close()
 
 
 _PRIMS = {'void': 'V', 'boolean': 'Z', 'byte': 'B', 'char': 'C', 'short': 'S', 'int': 'I',
@@ -1377,7 +1397,8 @@ class JdkGapClassifier(object):
         why = _table_lookup(UNSUPPORTED, owner, name)
         if why:
             return done('unsupported', why)
-        return done('retarget', '')
+        # An empty via is a retarget nobody has planned yet: the next card's to-do list.
+        return done('retarget', _table_lookup(PLANNED_RETARGETS, owner, name) or '')
 
     def device_level(self):
         return getattr(self.device.surface, 'level', DEFAULT_DEVICE_API)
@@ -1653,6 +1674,14 @@ def jdk_gaps_main(args):
         if api is None:
             raise SystemExit('no android.jar for API %d and no api-versions.xml (pass --floor-jar/--device-jar or --api-versions)' % level)
         short = '%s/data/api-versions.xml' % os.path.basename(os.path.dirname(os.path.dirname(os.path.abspath(api_path))))
+        # api-versions.xml alone misses what android.jar inherits through hidden supertypes
+        # (StringBuilder.setLength via AbstractStringBuilder) and some covariant returns
+        # (ConcurrentHashMap.keySet()KeySetView): cut the compile SDK's jar back instead.
+        base = find_android_jar(sdk_dir)
+        if base:
+            base_short = '%s/android.jar' % os.path.basename(os.path.dirname(os.path.abspath(base)))
+            return (FilteredSurface(Surface([base]), api, level), '%s cut to API %d by %s' % (base, level, api_path),
+                    '%s cut to API %d by %s' % (base_short, level, short))
         return ApiLevelSurface(api, level), '%s at API %d' % (api_path, level), '%s at API %d' % (short, level)
 
     floor, floor_label, floor_short = level_surface(args.floor_jar, min_api)
