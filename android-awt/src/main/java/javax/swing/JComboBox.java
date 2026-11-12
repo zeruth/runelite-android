@@ -274,7 +274,71 @@ public class JComboBox<E> extends JComponent implements ListDataListener, javax.
     @Override public void intervalRemoved(ListDataEvent e) { contentsChanged(e); }
 
     public int getMaximumRowCount() { return maximumRowCount; }
-    public void setMaximumRowCount(int count) { this.maximumRowCount = count; }
+    public void setMaximumRowCount(int count) {
+        int old = maximumRowCount;
+        maximumRowCount = count;
+        firePropertyChange("maximumRowCount", old, count);
+    }
+
+    protected KeySelectionManager keySelectionManager;
+
+    /**
+     * Selects the list item that corresponds to the specified keyboard
+     * character and returns true, if there is an item corresponding
+     * to that character.  Otherwise, returns false.
+     */
+    public boolean selectWithKeyChar(char keyChar) {
+        if (keySelectionManager == null) {
+            keySelectionManager = createDefaultKeySelectionManager();
+        }
+        int index = keySelectionManager.selectionForKey(keyChar, getModel());
+        if (index != -1) {
+            setSelectedIndex(index);
+            return true;
+        }
+        return false;
+    }
+
+    public void setKeySelectionManager(KeySelectionManager aManager) { keySelectionManager = aManager; }
+    public KeySelectionManager getKeySelectionManager() { return keySelectionManager; }
+
+    /** Returns an instance of the default key-selection manager. */
+    protected KeySelectionManager createDefaultKeySelectionManager() {
+        return new DefaultKeySelectionManager();
+    }
+
+    /**
+     * The JDK's default: the next item after the selection whose toString() starts with the
+     * key, ignoring case, wrapping around to the top.
+     */
+    class DefaultKeySelectionManager implements KeySelectionManager, java.io.Serializable {
+        public int selectionForKey(char aKey, ComboBoxModel<?> aModel) {
+            int currentSelection = -1;
+            Object selectedItem = aModel.getSelectedItem();
+            if (selectedItem != null) {
+                for (int i = 0, c = aModel.getSize(); i < c; i++) {
+                    if (selectedItem == aModel.getElementAt(i)) {
+                        currentSelection = i;
+                        break;
+                    }
+                }
+            }
+            aKey = ("" + aKey).toLowerCase().charAt(0);
+            for (int i = ++currentSelection, c = aModel.getSize(); i < c; i++) {
+                if (startsWith(aModel.getElementAt(i), aKey)) return i;
+            }
+            for (int i = 0; i < currentSelection; i++) {
+                if (startsWith(aModel.getElementAt(i), aKey)) return i;
+            }
+            return -1;
+        }
+
+        private boolean startsWith(Object elem, char key) {
+            if (elem == null || elem.toString() == null) return false;
+            String v = elem.toString().toLowerCase();
+            return v.length() > 0 && v.charAt(0) == key;
+        }
+    }
 
     // Prototype value real Swing uses to size the combo's cells before data loads. We don't
     // lay out from it, but plugins set it (resource-packs' HubPanel) and without the method
@@ -282,7 +346,12 @@ public class JComboBox<E> extends JComponent implements ListDataListener, javax.
     // plugin from registering its toolbar nav button.
     private Object prototypeDisplayValue;
     public Object getPrototypeDisplayValue() { return prototypeDisplayValue; }
-    public void setPrototypeDisplayValue(Object value) { this.prototypeDisplayValue = value; invalidate(); }
+    public void setPrototypeDisplayValue(Object value) {
+        Object old = prototypeDisplayValue;
+        prototypeDisplayValue = value;
+        firePropertyChange("prototypeDisplayValue", old, value);
+        invalidate();
+    }
     public interface PopupHandler { void show(JComboBox<?> combo, boolean visible); }
     private static volatile PopupHandler popupHandler;
     public static void setPopupHandler(PopupHandler handler) { popupHandler = handler; }

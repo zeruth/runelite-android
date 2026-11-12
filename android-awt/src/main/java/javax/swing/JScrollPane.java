@@ -444,7 +444,11 @@ public class JScrollPane extends JComponent implements ScrollPaneConstants, java
     public int getHorizontalScrollBarPolicy() { return horizontalScrollBarPolicy; }
     public void setHorizontalScrollBarPolicy(int policy) { this.horizontalScrollBarPolicy = policy; }
     public Border getViewportBorder() { return viewportBorder; }
-    public void setViewportBorder(Border viewportBorder) { this.viewportBorder = viewportBorder; }
+    public void setViewportBorder(Border viewportBorder) {
+        Border old = this.viewportBorder;
+        this.viewportBorder = viewportBorder;
+        firePropertyChange("viewportBorder", old, viewportBorder);
+    }
     public JViewport getRowHeader() { return rowHeader; }
     public void setRowHeader(JViewport header) { JViewport old=rowHeader;if(old!=null)remove(old);rowHeader=header;if(header!=null)add(header,ROW_HEADER);firePropertyChange("rowHeader",old,header);revalidate();repaint(); }
     public void setRowHeaderView(Component view) { if(rowHeader==null)setRowHeader(new JViewport());rowHeader.setView(view);revalidate(); }
