@@ -58,8 +58,35 @@ public class Container extends Component {
 
     public Component[] getComponents() { return children.toArray(new Component[0]); }
 
+    /** @deprecated As of JDK version 1.1, replaced by getComponentCount(). */
+    @Deprecated
+    public int countComponents() { return getComponentCount(); }
+
+    /*
+     * Every add variant funnels into addImpl, as in the JDK: a subclass that overrides addImpl
+     * (JLayeredPane, hub panels that intercept children) sees all of them.
+     */
     public Component add(Component comp) {
-        return add(comp, -1);
+        addImpl(comp, null, -1);
+        return comp;
+    }
+
+    public Component add(String name, Component comp) {
+        addImpl(comp, name, -1);
+        return comp;
+    }
+
+    public Component add(Component comp, int index) {
+        addImpl(comp, null, index);
+        return comp;
+    }
+
+    public void add(Component comp, Object constraints) {
+        addImpl(comp, constraints, -1);
+    }
+
+    public void add(Component comp, Object constraints, int index) {
+        addImpl(comp, constraints, index);
     }
 
     /**
@@ -67,6 +94,8 @@ public class Container extends Component {
      * the JDK's addImpl does. Without this it stayed listed in both, and the old parent's
      * later removeAll() nulled its parent while the new one still painted it — quest-helper's
      * AssistLevelPanel adds its title to mainPanel, then to northPanel, then clears mainPanel.
+     * Re-adding to the same parent only unlists it, so the move raises no remove/add
+     * notifications for a tree that never left the screen.
      */
     private void detach(Component comp) {
         Container old = comp.getParent();
@@ -74,64 +103,61 @@ public class Container extends Component {
         if (old != this) old.remove(comp);
         else if (children.remove(comp) && layout != null) layout.removeLayoutComponent(comp);
     }
-    private void checkCycle(Component comp) {
-        for (Component ancestor = this; ancestor != null; ancestor = ancestor.getParent())
-            if (ancestor == comp) throw new IllegalArgumentException("container cycle");
+
+    private void checkAddToSelf(Component comp) {
+        if (comp instanceof Container) {
+            for (Container cn = this; cn != null; cn = cn.parent) {
+                if (cn == comp) {
+                    throw new IllegalArgumentException("adding container's parent to itself");
+                }
+            }
+        }
     }
 
-    public Component add(Component comp, int index) {
-        if (comp == null) return null;
-        checkCycle(comp);
-        int at = children.indexOf(comp);
-        if (at >= 0 && at < index) index--;
-        detach(comp);
-        if (index < 0 || index >= children.size()) children.add(comp);
-        else children.add(index, comp);
-        comp.setParent(this);
-        if (layout instanceof LayoutManager2) ((LayoutManager2) layout).addLayoutComponent(comp, null);
-        else if (layout != null) layout.addLayoutComponent(null, comp);
-        invalidate();
-        fireContainerEvent(java.awt.event.ContainerEvent.COMPONENT_ADDED, comp);
-        return comp;
+    private static void checkNotAWindow(Component comp) {
+        if (comp instanceof Window) {
+            throw new IllegalArgumentException("adding a window to a container");
+        }
     }
 
-    /** Legacy AWT add(name, comp) — delegates to the constraints-taking form. */
-    public Component add(String name, Component comp) {
-        add(comp, name);
-        return comp;
+    /**
+     * Adds the specified component to this container at the specified index; the JDK's
+     * ordering: the index is checked, the component leaves its old parent (so an index
+     * past the shrunken list is rejected), is inserted, and the layout manager learns its
+     * constraints (a plain LayoutManager only for a String constraint).
+     */
+    protected void addImpl(Component comp, Object constraints, int index) {
+        synchronized (getTreeLock()) {
+            if (index > children.size() || (index < 0 && index != -1)) {
+                throw new IllegalArgumentException("illegal component position");
+            }
+            checkAddToSelf(comp);
+            checkNotAWindow(comp);
+            insert(comp, constraints, index);
+        }
     }
 
-    public void add(Component comp, Object constraints) {
-        if (comp == null) return;
-        checkCycle(comp);
-        boolean added = !children.contains(comp);
-        if (!added) {
-            // add(comp, -1) already added; just register constraint
-        } else {
+    private void insert(Component comp, Object constraints, int index) {
+        // A move within this container raises no remove/add notifications (see detach), so
+        // only a component new to it fires COMPONENT_ADDED.
+        boolean added = comp.parent != this;
+        if (comp.parent != null) {
             detach(comp);
-            children.add(comp);
-            comp.setParent(this);
+            if (index > children.size()) {
+                throw new IllegalArgumentException("illegal component position");
+            }
         }
-        if (layout instanceof LayoutManager2) {
-            ((LayoutManager2) layout).addLayoutComponent(comp, constraints);
-        } else if (layout != null && constraints instanceof String) {
-            layout.addLayoutComponent((String) constraints, comp);
-        }
-        invalidate();
-        if (added) fireContainerEvent(java.awt.event.ContainerEvent.COMPONENT_ADDED, comp);
-    }
-
-    public void add(Component comp, Object constraints, int index) {
-        if (comp == null) throw new NullPointerException("component");
-        if (index < -1 || index > children.size()) throw new IllegalArgumentException("invalid index");
-        checkCycle(comp);
-        detach(comp);
-        if (index == -1 || index >= children.size()) children.add(comp); else children.add(index, comp);
+        if (index == -1) children.add(comp); else children.add(index, comp);
         comp.setParent(this);
-        if (layout instanceof LayoutManager2) ((LayoutManager2) layout).addLayoutComponent(comp, constraints);
-        else if (layout != null && (constraints == null || constraints instanceof String)) layout.addLayoutComponent((String) constraints, comp);
         invalidate();
-        fireContainerEvent(java.awt.event.ContainerEvent.COMPONENT_ADDED, comp);
+        if (layout != null) {
+            if (layout instanceof LayoutManager2) {
+                ((LayoutManager2) layout).addLayoutComponent(comp, constraints);
+            } else if (constraints instanceof String) {
+                layout.addLayoutComponent((String) constraints, comp);
+            }
+        }
+        if (added) fireContainerEvent(java.awt.event.ContainerEvent.COMPONENT_ADDED, comp);
     }
 
     /**
@@ -159,6 +185,11 @@ public class Container extends Component {
         if (c != null) fireContainerEvent(java.awt.event.ContainerEvent.COMPONENT_REMOVED, c);
     }
 
+    /*
+     * Unlike the JDK this does not call remove(int): the shadow JTabbedPane and JMenuBar
+     * override remove(int) with their own index spaces and reach this through
+     * super.remove(Component).
+     */
     public void remove(Component comp) {
         if (children.remove(comp)) {
             if (layout != null) layout.removeLayoutComponent(comp);
@@ -180,14 +211,227 @@ public class Container extends Component {
         for (Component c : removed) fireContainerEvent(java.awt.event.ContainerEvent.COMPONENT_REMOVED, c);
     }
 
-    public int getComponentZOrder(Component comp) { return children.indexOf(comp); }
+    public int getComponentZOrder(Component comp) {
+        if (comp == null) {
+            return -1;
+        }
+        synchronized (getTreeLock()) {
+            if (comp.parent != this) {
+                return -1;
+            }
+            return children.indexOf(comp);
+        }
+    }
+
+    /**
+     * Moves the specified component to the specified z-order index in the container; a
+     * component of another container is removed from it and added here, as in the JDK.
+     *
+     * @throws IllegalArgumentException if the index is outside {@code [0, getComponentCount()]}
+     *         (or equal to the count when {@code comp} is already a child), or {@code comp} is
+     *         an ancestor of this container or a window
+     */
     public void setComponentZOrder(Component comp, int index) {
-        int cur = children.indexOf(comp);
-        if (cur < 0) return;
-        children.remove(cur);
-        int target = Math.min(Math.max(0, index), children.size());
-        children.add(target, comp);
-        invalidate();
+        synchronized (getTreeLock()) {
+            Container curParent = comp.parent;
+            int oldZindex = getComponentZOrder(comp);
+            if (curParent == this && index == oldZindex) {
+                return;
+            }
+            if (index > children.size() || index < 0) {
+                throw new IllegalArgumentException("illegal component position");
+            }
+            if (curParent == this && index == children.size()) {
+                throw new IllegalArgumentException("illegal component position " + index
+                        + " should be less then " + children.size());
+            }
+            checkAddToSelf(comp);
+            checkNotAWindow(comp);
+            if (curParent == this) {
+                children.remove(oldZindex);
+                children.add(index, comp);
+                invalidate();
+                comp.repaint();
+            } else {
+                // The JDK moves the component in without addImpl, so subclass add hooks
+                // (JLayeredPane's layer placement) do not reorder it.
+                insert(comp, null, index);
+            }
+        }
+    }
+
+    /**
+     * Checks if the component is contained in the component hierarchy of this container.
+     */
+    public boolean isAncestorOf(Component c) {
+        Container p;
+        if (c == null || ((p = c.getParent()) == null)) {
+            return false;
+        }
+        while (p != null) {
+            if (p == this) {
+                return true;
+            }
+            p = p.getParent();
+        }
+        return false;
+    }
+
+    @Override
+    boolean isSameOrAncestorOf(Component comp, boolean allowChildren) {
+        return this == comp || (allowChildren && isAncestorOf(comp));
+    }
+
+    public Component getComponentAt(int x, int y) {
+        return locate(x, y);
+    }
+
+    /**
+     * Locates the immediate child at the point, whether or not it is visible, as the JDK
+     * does; children earlier in the list are on top. Heavyweight children win over
+     * lightweight ones at the same point.
+     *
+     * @deprecated As of JDK version 1.1, replaced by {@code getComponentAt(int, int)}.
+     */
+    @Deprecated
+    public Component locate(int x, int y) {
+        if (!contains(x, y)) {
+            return null;
+        }
+        Component lightweight = null;
+        synchronized (getTreeLock()) {
+            for (Component comp : children) {
+                if (comp.contains(x - comp.x, y - comp.y)) {
+                    if (!comp.isLightweight()) {
+                        return comp;
+                    }
+                    if (lightweight == null) {
+                        lightweight = comp;
+                    }
+                }
+            }
+        }
+        return lightweight != null ? lightweight : this;
+    }
+
+    public Component getComponentAt(Point p) {
+        return getComponentAt(p.x, p.y);
+    }
+
+    /**
+     * Locates the visible child that contains the specified position, descending to the
+     * deepest nested child; disabled components are found too.
+     */
+    public Component findComponentAt(int x, int y) {
+        return findComponentAt(x, y, true);
+    }
+
+    final Component findComponentAt(int x, int y, boolean ignoreEnabled) {
+        synchronized (getTreeLock()) {
+            if (isRecursivelyVisible()) {
+                return findComponentAtImpl(x, y, ignoreEnabled);
+            }
+        }
+        return null;
+    }
+
+    final Component findComponentAtImpl(int x, int y, boolean ignoreEnabled) {
+        if (!(contains(x, y) && visible && (ignoreEnabled || enabled))) {
+            return null;
+        }
+        Component lightweight = null;
+        // The JDK's single pass over both kinds: the first heavyweight hit returns at once,
+        // the first lightweight hit is kept for the end.
+        for (Component comp : children) {
+            int x1 = x - comp.x;
+            int y1 = y - comp.y;
+            if (!comp.contains(x1, y1)) {
+                continue;
+            }
+            if (!comp.isLightweight()) {
+                Component child = getChildAt(comp, x1, y1, ignoreEnabled);
+                if (child != null) {
+                    return child;
+                }
+            } else if (lightweight == null) {
+                lightweight = getChildAt(comp, x1, y1, ignoreEnabled);
+            }
+        }
+        return lightweight != null ? lightweight : this;
+    }
+
+    private static Component getChildAt(Component comp, int x, int y, boolean ignoreEnabled) {
+        Component child;
+        if (comp instanceof Container) {
+            child = ((Container) comp).findComponentAtImpl(x, y, ignoreEnabled);
+        } else {
+            child = comp.getComponentAt(x, y);
+        }
+        if (child != null && child.visible && (ignoreEnabled || child.enabled)) {
+            return child;
+        }
+        return null;
+    }
+
+    public Component findComponentAt(Point p) {
+        return findComponentAt(p.x, p.y);
+    }
+
+    /**
+     * Returns the position of the pointer in this container's coordinates if the container
+     * is under it and, with {@code allowChildren}, also when one of its children is the
+     * component under the pointer; {@code null} otherwise.
+     */
+    public Point getMousePosition(boolean allowChildren) throws HeadlessException {
+        PointerInfo pi = MouseInfo.getPointerInfo();
+        synchronized (getTreeLock()) {
+            Component inTheSameWindow = findUnderMouseInWindow(pi);
+            if (isSameOrAncestorOf(inTheSameWindow, allowChildren)) {
+                return pointRelativeToComponent(pi.getLocation());
+            }
+            return null;
+        }
+    }
+
+    @Override
+    public void applyComponentOrientation(ComponentOrientation o) {
+        super.applyComponentOrientation(o);
+        synchronized (getTreeLock()) {
+            for (Component child : children) {
+                child.applyComponentOrientation(o);
+            }
+        }
+    }
+
+    /** Prints each visible child of this container, translated and clipped to its bounds. */
+    public void printComponents(Graphics g) {
+        if (!isShowing()) {
+            return;
+        }
+        Component[] comps = getComponents();
+        for (int i = comps.length - 1; i >= 0; i--) {
+            Component c = comps[i];
+            if (!c.isVisible() || c.width <= 0 || c.height <= 0) {
+                continue;
+            }
+            Graphics cg = g.create(c.x, c.y, c.width, c.height);
+            try {
+                c.print(cg);
+            } finally {
+                cg.dispose();
+            }
+        }
+    }
+
+    /**
+     * Prints the container when it is showing. Component.print paints, and the shadow's
+     * Container.paint already draws the children, so they are printed with it.
+     */
+    @Override
+    public void print(Graphics g) {
+        if (isShowing()) {
+            super.print(g);
+        }
     }
 
     public LayoutManager getLayout() { return layout; }
@@ -341,7 +585,12 @@ public class Container extends Component {
     @Override
     int focusTraversalKeyLength() { return KeyboardFocusManager.TRAVERSAL_KEY_LENGTH; }
 
-    public Insets getInsets() { return new Insets(0, 0, 0, 0); }
+    /** No native frame decorates a container here, so a plain container has empty insets. */
+    public Insets getInsets() { return insets(); }
+
+    /** @deprecated As of JDK version 1.1, replaced by {@code getInsets()}. */
+    @Deprecated
+    public Insets insets() { return new Insets(0, 0, 0, 0); }
 
     /**
      * Indicates if this container is a validate root: {@code revalidate()} of a descendant
