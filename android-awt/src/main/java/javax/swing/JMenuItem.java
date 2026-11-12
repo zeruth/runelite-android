@@ -65,7 +65,13 @@ public class JMenuItem extends AbstractButton implements javax.accessibility.Acc
 
     private KeyStroke accelerator;
     public KeyStroke getAccelerator() { return accelerator; }
-    public void setAccelerator(KeyStroke keyStroke) { this.accelerator = keyStroke; }
+    public void setAccelerator(KeyStroke keyStroke) {
+        KeyStroke old = accelerator;
+        accelerator = keyStroke;
+        repaint();
+        revalidate();
+        firePropertyChange("accelerator", old, keyStroke);
+    }
 
     // Swing's JMenuItem takes only SMALL_ICON from its Action (never LARGE_ICON_KEY) and
     // also picks up ACCELERATOR_KEY.
@@ -77,6 +83,11 @@ public class JMenuItem extends AbstractButton implements javax.accessibility.Acc
     @Override
     protected void configurePropertiesFromAction(Action a) {
         super.configurePropertiesFromAction(a);
+        configureAcceleratorFromAction(a);
+    }
+
+    /** JMenu overrides this to nothing: a menu has no accelerator (8u). */
+    void configureAcceleratorFromAction(Action a) {
         Object ks = a == null ? null : a.getValue(Action.ACCELERATOR_KEY);
         setAccelerator(ks instanceof KeyStroke ? (KeyStroke) ks : null);
     }
@@ -85,8 +96,7 @@ public class JMenuItem extends AbstractButton implements javax.accessibility.Acc
     protected void actionPropertyChanged(Action a, String propertyName) {
         if (Action.LARGE_ICON_KEY.equals(propertyName)) return;
         if (Action.ACCELERATOR_KEY.equals(propertyName)) {
-            Object ks = a.getValue(Action.ACCELERATOR_KEY);
-            setAccelerator(ks instanceof KeyStroke ? (KeyStroke) ks : null);
+            configureAcceleratorFromAction(a);
             return;
         }
         super.actionPropertyChanged(a, propertyName);
@@ -235,7 +245,8 @@ public class JMenuItem extends AbstractButton implements javax.accessibility.Acc
     }
 
     // A leaf item has no sub-elements; JMenu overrides getSubElements().
-    @Override public void menuSelectionChanged(boolean isIncluded) {}
+    /** As in 8u: an item on the selected path is armed, so releasing over it fires it. */
+    @Override public void menuSelectionChanged(boolean isIncluded) { setArmed(isIncluded); }
     @Override public MenuElement[] getSubElements() { return new MenuElement[0]; }
     @Override public java.awt.Component getComponent() { return this; }
 }

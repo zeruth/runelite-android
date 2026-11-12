@@ -36,11 +36,30 @@ import javax.swing.plaf.*;
 public class BasicButtonUI extends ButtonUI {
     protected int defaultTextIconGap=4;
     protected int defaultTextShiftOffset;
+    private int shiftOffset;
     protected String getPropertyPrefix(){return "Button.";}
+    // 8u: the pressed-state text nudge a subclass applies while painting.
+    protected void clearTextShiftOffset(){shiftOffset=0;}
+    protected void setTextShiftOffset(){shiftOffset=defaultTextShiftOffset;}
+    protected int getTextShiftOffset(){return shiftOffset;}
     public static ComponentUI createUI(JComponent c){return new BasicButtonUI();}
-    public void installUI(JComponent c){if(c instanceof AbstractButton)installDefaults((AbstractButton)c);}
-    public void uninstallUI(JComponent c){if(c instanceof AbstractButton)uninstallDefaults((AbstractButton)c);}
-    protected void installDefaults(AbstractButton button){String prefix=getPropertyPrefix();LookAndFeel.installColorsAndFont(button,prefix+"background",prefix+"foreground",prefix+"font");LookAndFeel.installBorder(button,prefix+"border");}
+    public void installUI(JComponent c){if(c instanceof AbstractButton){AbstractButton b=(AbstractButton)c;installDefaults(b);installListeners(b);installKeyboardActions(b);}}
+    public void uninstallUI(JComponent c){if(c instanceof AbstractButton){AbstractButton b=(AbstractButton)c;uninstallKeyboardActions(b);uninstallListeners(b);uninstallDefaults(b);}}
+    // As 8u, except that the listener is not added as a mouse listener: the Android host
+    // delivers a tap as press/release and then doClick(), so arming the model from the
+    // mouse here would fire every button's action twice.
+    protected void installListeners(AbstractButton b){BasicButtonListener listener=createButtonListener(b);if(listener!=null){b.addFocusListener(listener);b.addPropertyChangeListener(listener);b.addChangeListener(listener);}}
+    protected void installKeyboardActions(AbstractButton b){BasicButtonListener listener=getButtonListener(b);if(listener!=null)listener.installKeyboardActions(b);}
+    protected void uninstallKeyboardActions(AbstractButton b){BasicButtonListener listener=getButtonListener(b);if(listener!=null)listener.uninstallKeyboardActions(b);}
+    protected void uninstallListeners(AbstractButton b){BasicButtonListener listener=getButtonListener(b);if(listener!=null){b.removeFocusListener(listener);b.removePropertyChangeListener(listener);b.removeChangeListener(listener);}}
+    protected BasicButtonListener createButtonListener(AbstractButton b){return new BasicButtonListener(b);}
+    /** Returns the ButtonListener for the passed in Button, or null if one could not be found. */
+    private BasicButtonListener getButtonListener(AbstractButton b){
+        java.awt.event.FocusListener[] listeners=b.getFocusListeners();
+        if(listeners!=null){for(java.awt.event.FocusListener listener:listeners){if(listener instanceof BasicButtonListener)return (BasicButtonListener)listener;}}
+        return null;
+    }
+    protected void installDefaults(AbstractButton button){String prefix=getPropertyPrefix();LookAndFeel.installColorsAndFont(button,prefix+"background",prefix+"foreground",prefix+"font");LookAndFeel.installBorder(button,prefix+"border");defaultTextShiftOffset=UIManager.getInt(prefix+"textShiftOffset");}
     protected void uninstallDefaults(AbstractButton button){LookAndFeel.uninstallBorder(button);}
     public void paint(Graphics g,JComponent c){c.hostPaintDefaultComponent(g);}
     public Dimension getPreferredSize(JComponent c){return c.hostDefaultPreferredSize();}

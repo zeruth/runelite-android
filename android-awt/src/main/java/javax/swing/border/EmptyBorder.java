@@ -1,54 +1,102 @@
 /*
- * Copyright (c) 2026, Tyler Bochard
- * All rights reserved.
+ * Copyright (c) 1997, 2013, Oracle and/or its affiliates. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
- * Part of android-awt, the Android shadow of the desktop JDK surface used by
- * runelite-android. Original work of this project, not derived from OpenJDK;
- * licensed under the BSD 2-Clause License (see the LICENSE file at the
- * repository root). Files ported from OpenJDK carry the OpenJDK header instead;
- * see android-awt/LICENSE.
+ * This code is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 only, as
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
+ * This code is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ * version 2 for more details (a copy is included in the LICENSE file that
+ * accompanied this code).
  *
- * 1. Redistributions of source code must retain the above copyright notice, this
- *    list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright notice,
- *    this list of conditions and the following disclaimer in the documentation
- *    and/or other materials provided with the distribution.
+ * You should have received a copy of the GNU General Public License version
+ * 2 along with this work; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
- * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
+ * or visit www.oracle.com if you need additional information or have any
+ * questions.
  */
 package javax.swing.border;
 
 import java.awt.Component;
+import java.awt.Graphics;
 import java.awt.Insets;
+import java.beans.ConstructorProperties;
 
-public class EmptyBorder extends AbstractBorder {
-    private static final long serialVersionUID = -7615601466794030291L;
-    protected int top, left, bottom, right;
+/**
+ * A class which provides an empty, transparent border which
+ * takes up space but does no drawing.
+ *
+ * @author David Kloba
+ */
+@SuppressWarnings("serial")
+public class EmptyBorder extends AbstractBorder implements java.io.Serializable
+{
+    protected int left, right, top, bottom;
 
-    public EmptyBorder(int top, int left, int bottom, int right) {
-        this.top = top; this.left = left; this.bottom = bottom; this.right = right;
+    /**
+     * Creates an empty border with the specified insets.
+     * @param top the top inset of the border
+     * @param left the left inset of the border
+     * @param bottom the bottom inset of the border
+     * @param right the right inset of the border
+     */
+    public EmptyBorder(int top, int left, int bottom, int right)   {
+        this.top = top;
+        this.right = right;
+        this.bottom = bottom;
+        this.left = left;
     }
 
-    public EmptyBorder(Insets insets) {
-        this(insets.top, insets.left, insets.bottom, insets.right);
+    /**
+     * Creates an empty border with the specified insets.
+     * @param borderInsets the insets of the border
+     */
+    @ConstructorProperties({"borderInsets"})
+    public EmptyBorder(Insets borderInsets)   {
+        this.top = borderInsets.top;
+        this.right = borderInsets.right;
+        this.bottom = borderInsets.bottom;
+        this.left = borderInsets.left;
     }
 
-    public Insets getBorderInsets() { return new Insets(top, left, bottom, right); }
+    /**
+     * Does no drawing by default.
+     */
+    public void paintBorder(Component c, Graphics g, int x, int y, int width, int height) {
+    }
 
-    @Override
-    public Insets getBorderInsets(Component c) {
+    /**
+     * Reinitialize the insets parameter with this Border's current Insets.
+     * @param c the component for which this border insets value applies
+     * @param insets the object to be reinitialized
+     */
+    public Insets getBorderInsets(Component c, Insets insets) {
+        insets.left = left;
+        insets.top = top;
+        insets.right = right;
+        insets.bottom = bottom;
+        return insets;
+    }
+
+    /**
+     * Returns the insets of the border.
+     * @since 1.3
+     */
+    public Insets getBorderInsets() {
         return new Insets(top, left, bottom, right);
     }
+
+    /**
+     * Returns whether or not the border is opaque.
+     * Returns false by default.
+     */
+    public boolean isBorderOpaque() { return false; }
+
 }

@@ -58,6 +58,7 @@ public abstract class BasicLookAndFeel extends LookAndFeel {
         Object[] uiDefaults = {
                   "LabelUI", basicPackageName + "BasicLabelUI",
              "OptionPaneUI", basicPackageName + "BasicOptionPaneUI",
+            "ProgressBarUI", basicPackageName + "BasicProgressBarUI",
            "ColorChooserUI", basicPackageName + "BasicColorChooserUI",
             "FileChooserUI", basicPackageName + "BasicFileChooserUI",
                    "TreeUI", basicPackageName + "BasicTreeUI",
@@ -162,6 +163,23 @@ public abstract class BasicLookAndFeel extends LookAndFeel {
             "OptionPane.titleText", "Select an Option",
             "OptionPane.inputDialogTitle", "Input",
             "OptionPane.messageDialogTitle", "Message",
+
+            "TitledBorder.font", dialogPlain12,
+            "TitledBorder.titleColor", controlText,
+            "TitledBorder.border", BorderUIResource.getEtchedBorderUIResource(),
+
+            "ProgressBar.font", dialogPlain12,
+            "ProgressBar.foreground", table.get("textHighlight"),
+            "ProgressBar.background", control,
+            "ProgressBar.selectionForeground", control,
+            "ProgressBar.selectionBackground", table.get("textHighlight"),
+            "ProgressBar.border", new BorderUIResource.LineBorderUIResource(Color.green, 2),
+            "ProgressBar.cellLength", Integer.valueOf(1),
+            "ProgressBar.cellSpacing", Integer.valueOf(0),
+            "ProgressBar.repaintInterval", Integer.valueOf(50),
+            "ProgressBar.cycleTime", Integer.valueOf(3000),
+            "ProgressBar.horizontalSize", new javax.swing.plaf.DimensionUIResource(146, 12),
+            "ProgressBar.verticalSize", new javax.swing.plaf.DimensionUIResource(12, 146),
 
             "Table.font", dialogPlain12,
             "Table.foreground", controlText,

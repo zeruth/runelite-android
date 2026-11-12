@@ -388,9 +388,8 @@ public abstract class LookAndFeel
      * @since 1.6
      */
     public LayoutStyle getLayoutStyle() {
-        // The shadow LayoutStyle.getInstance() holds its own default rather
-        // than asking the look and feel, so this cannot recurse.
-        return LayoutStyle.getInstance();
+        // sun.swing.DefaultLayoutStyle lives inside LayoutStyle in the shadow.
+        return LayoutStyle.defaultStyle();
     }
 
     /**
