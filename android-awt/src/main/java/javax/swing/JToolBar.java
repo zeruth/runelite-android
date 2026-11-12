@@ -30,16 +30,19 @@ import java.awt.Dimension;
 import java.awt.Graphics;
 import java.awt.Insets;
 import java.beans.PropertyChangeListener;
+import javax.swing.plaf.ComponentUI;
+import javax.swing.plaf.ToolBarUI;
 
 /**
  * <code>JToolBar</code> provides a component that is useful for
  * displaying commonly used <code>Action</code>s or controls.
  *
  * <p>The shadow port keeps the 8u properties, their bound events and the
- * orientation checks. There is no ToolBarUI delegate (BasicToolBarUI and its
- * floating window are not ported), so the bar lays its children out with a
- * <code>BoxLayout</code> along its orientation, which is what 8u's
- * DefaultToolBarLayout does, and cannot be dragged off into a floating frame.
+ * orientation checks. The look and feel's ToolBarUI (BasicToolBarUI or a
+ * subclass) is installed when one is mapped; floating is off, so the bar
+ * cannot be dragged off into a floating window. The bar lays its children
+ * out with a <code>BoxLayout</code> along its orientation, which is what 8u's
+ * DefaultToolBarLayout does.
  *
  * @author Georges Saab
  * @author Jeff Shapiro
@@ -107,6 +110,7 @@ public class JToolBar extends JComponent implements SwingConstants
         this.orientation = orientation;
         setLayout(new BoxLayout(this, orientation == VERTICAL ? BoxLayout.PAGE_AXIS : BoxLayout.LINE_AXIS));
         setOpaque(true);
+        updateUI();
     }
 
     /**
@@ -119,10 +123,46 @@ public class JToolBar extends JComponent implements SwingConstants
     }
 
     /**
-     * Deliberate no-op: no <code>ToolBarUI</code> delegate is ported, so a look and
-     * feel's "ToolBarUI" class cannot load; the bar paints as a plain container.
+     * Returns the tool bar's current UI.
+     *
+     * @return the tool bar's current UI, or <code>null</code> when the look and
+     *         feel maps no "ToolBarUI"
+     * @see #setUI
+     */
+    public ToolBarUI getUI() {
+        return (ToolBarUI)ui;
+    }
+
+    /**
+     * Sets the L&amp;F object that renders this component.
+     *
+     * @param ui  the <code>ToolBarUI</code> L&amp;F object
+     * @see UIDefaults#getUI
+     */
+    public void setUI(ToolBarUI ui) {
+        super.setUI(ui);
+    }
+
+    /**
+     * Notification from the <code>UIFactory</code> that the L&amp;F has changed.
+     * The shadow's default look and feel maps no "ToolBarUI", so the bar then
+     * keeps no delegate and paints as a plain container; a look and feel that
+     * maps one (FlatLaf's <code>FlatToolBarUI</code> over
+     * <code>BasicToolBarUI</code>) installs it.
+     *
+     * @see JComponent#updateUI
      */
     public void updateUI() {
+        // UIDefaults.getUI prints an error and a stack trace for an unmapped
+        // class ID; the shadow's default look and feel maps none for tool bars.
+        if (UIManager.get(getUIClassID()) == null) {
+            return;
+        }
+        ComponentUI delegate = UIManager.getUI(this);
+        if (delegate instanceof ToolBarUI) {
+            setUI((ToolBarUI)delegate);
+        }
+        invalidate();
     }
 
     /**

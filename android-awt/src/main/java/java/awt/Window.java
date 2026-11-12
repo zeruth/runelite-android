@@ -33,7 +33,7 @@ package java.awt;
 import java.awt.image.BufferedImage;
 import java.util.concurrent.atomic.AtomicReference;
 
-public class Window extends Container {
+public class Window extends Container implements javax.accessibility.Accessible {
     private static final long serialVersionUID = 4497834738069338734L;
 
     public interface VisibilityHandler { void changed(Window window, boolean visible); }
@@ -247,6 +247,11 @@ public class Window extends Container {
      */
     public BufferedImage renderToBackbuffer() {
         ensureBackbuffer();
+        // The game canvas changes every frame, so the whole buffer is repainted regardless of
+        // what was marked and the region itself is not needed; taking it is what keeps it
+        // from growing between frames. Repaints raised by the layout and paint below land in
+        // the next frame's region.
+        javax.swing.RepaintManager.currentManager(this).hostTakeDirtyRegion(this);
         try {
             // Skip the sweep when the tree is already dirty — it's about to be relaid anyway.
             if (isValid()) {
@@ -612,6 +617,19 @@ public class Window extends Container {
     @Override public boolean isShowing() { return isVisible() && !disposed; }
     /** As on the JDK: displayable from {@code pack()} or the first show until {@code dispose()}. */
     @Override public boolean isDisplayable() { return hasHostPeer(); }
+
+    /**
+     * Indicates if this container is a validate root. {@code Window} objects are the validate
+     * roots, and, therefore, they override this method to return {@code true}.
+     *
+     * @return {@code true}
+     * @since 1.7
+     */
+    @Override
+    public boolean isValidateRoot() {
+        return true;
+    }
+
     public boolean isActive() { return KeyboardFocusManager.getCurrentKeyboardFocusManager().getActiveWindow() == this; }
     public boolean isFocused() { return KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusedWindow() == this; }
 
@@ -838,4 +856,44 @@ public class Window extends Container {
     public void setType(Type type) {}
 
     public enum Type { NORMAL, UTILITY, POPUP }
+
+    /** A window answers the default locale when none was set, instead of asking a parent. */
+    @Override
+    public java.util.Locale getLocale() {
+        java.util.Locale own = locale;
+        return own != null ? own : java.util.Locale.getDefault();
+    }
+
+    /** The focus owner when it lies inside this window: the JDK's "window is active" test. */
+    final boolean ownsFocus() {
+        for (Component c = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
+                c != null; c = c.getParent()) {
+            if (c == this) return true;
+        }
+        return false;
+    }
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleAWTWindow();
+        }
+        return accessibleContext;
+    }
+
+    /** Accessibility support for windows: role WINDOW, ACTIVE while it holds the focus. */
+    protected class AccessibleAWTWindow extends AccessibleAWTContainer {
+        private static final long serialVersionUID = 4215068635060671780L;
+
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.WINDOW;
+        }
+
+        public javax.accessibility.AccessibleStateSet getAccessibleStateSet() {
+            javax.accessibility.AccessibleStateSet states = super.getAccessibleStateSet();
+            if (ownsFocus()) {
+                states.add(javax.accessibility.AccessibleState.ACTIVE);
+            }
+            return states;
+        }
+    }
 }

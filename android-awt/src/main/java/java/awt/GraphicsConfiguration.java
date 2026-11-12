@@ -41,6 +41,9 @@ public abstract class GraphicsConfiguration {
     public java.awt.geom.AffineTransform getNormalizingTransform() { return new java.awt.geom.AffineTransform(); }
     public Rectangle getBounds() { return new Rectangle(0, 0, 0, 0); }
 
+    /** Images live in heap int[] rasters drawn by the software pipeline: never accelerated. */
+    public ImageCapabilities getImageCapabilities() { return new ImageCapabilities(false); }
+
     /**
      * Returns whether this configuration supports per-pixel translucent windows.
      * The JDK default is {@code false}; configurations backed by an ARGB surface override it.

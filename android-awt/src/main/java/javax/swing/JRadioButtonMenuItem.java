@@ -29,7 +29,21 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 package javax.swing;
-public class JRadioButtonMenuItem extends JMenuItem {
+public class JRadioButtonMenuItem extends JMenuItem implements javax.accessibility.Accessible {
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJRadioButtonMenuItem();
+        }
+        return accessibleContext;
+    }
+
+    /** Accessibility support for radio button menu items: role RADIO_BUTTON. */
+    protected class AccessibleJRadioButtonMenuItem extends AccessibleJMenuItem {
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.RADIO_BUTTON;
+        }
+    }
     private static final long serialVersionUID=1L;
     public JRadioButtonMenuItem() { setModel(new JToggleButton.ToggleButtonModel()); }
     public JRadioButtonMenuItem(String text) { this(text,null,false); }

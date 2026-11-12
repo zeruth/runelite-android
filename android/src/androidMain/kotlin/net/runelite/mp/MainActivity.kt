@@ -4,10 +4,12 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.os.Build
 import android.os.Bundle
+import android.view.ViewConfiguration
 import android.view.Window
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -121,7 +123,15 @@ class MainActivity : ComponentActivity() {
         window.decorView.addOnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
             if (view.width > 0 && view.height > 0)
                 net.runelite.awt.impl.HeadlessGraphicsConfiguration.updateDisplay(view.width, view.height, resources.displayMetrics.densityDpi)
+            // Toolkit.getScreenInsets: what the system bars and the cutout cover of the viewport.
+            ViewCompat.getRootWindowInsets(view)
+                ?.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+                ?.let { net.runelite.awt.impl.HeadlessGraphicsConfiguration.updateInsets(it.top, it.left, it.bottom, it.right) }
         }
+        // Toolkit desktop properties and beep, from the platform's own touch and sound settings.
+        net.runelite.awt.impl.HostToolkit.setBeeper(net.runelite.awt.impl.ToneBeeper())
+        net.runelite.awt.impl.HostToolkit.updateDesktopProperty("awt.multiClickInterval", ViewConfiguration.getDoubleTapTimeout())
+        net.runelite.awt.impl.HostToolkit.updateDesktopProperty("DnD.gestureMotionThreshold", ViewConfiguration.get(this).scaledTouchSlop)
 
         // Fullscreen + edge-to-edge, hide system bars (immersive sticky behavior).
         WindowCompat.setDecorFitsSystemWindows(window, false)
