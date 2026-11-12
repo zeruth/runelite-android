@@ -419,23 +419,6 @@ public class JComponent extends Container {
         return false;
     }
 
-    private java.beans.VetoableChangeSupport vetoableChangeSupport;
-    public synchronized void addVetoableChangeListener(java.beans.VetoableChangeListener listener) {
-        if (vetoableChangeSupport == null) vetoableChangeSupport = new java.beans.VetoableChangeSupport(this);
-        vetoableChangeSupport.addVetoableChangeListener(listener);
-    }
-    public synchronized void removeVetoableChangeListener(java.beans.VetoableChangeListener listener) {
-        if (vetoableChangeSupport != null) vetoableChangeSupport.removeVetoableChangeListener(listener);
-    }
-    public synchronized java.beans.VetoableChangeListener[] getVetoableChangeListeners() {
-        return vetoableChangeSupport == null ? new java.beans.VetoableChangeListener[0]
-            : vetoableChangeSupport.getVetoableChangeListeners();
-    }
-    protected void fireVetoableChange(String propertyName, Object oldValue, Object newValue)
-            throws java.beans.PropertyVetoException {
-        if (vetoableChangeSupport != null) vetoableChangeSupport.fireVetoableChange(propertyName, oldValue, newValue);
-    }
-
     private java.util.Map<Object, Object> clientProperties;
     public void putClientProperty(Object key, Object value) {
         if (clientProperties == null) clientProperties = new java.util.HashMap<>();
