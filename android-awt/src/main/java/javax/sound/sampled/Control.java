@@ -31,6 +31,7 @@
 package javax.sound.sampled;
 
 public abstract class Control {
+    /** Control kinds compare by identity, as on the JDK: the constants are the only instances. */
     public static class Type {
         private final String name;
         protected Type(String name) { this.name = name; }
@@ -51,6 +52,6 @@ public abstract class Control {
 
     @Override
     public String toString() {
-        return String.valueOf(type);
+        return getType() + " Control";
     }
 }

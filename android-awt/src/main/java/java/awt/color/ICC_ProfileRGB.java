@@ -23,7 +23,8 @@
  * questions.
  */
 
-/* ********************************************************************
+/*
+ **********************************************************************
  **********************************************************************
  **********************************************************************
  *** COPYRIGHT (c) Eastman Kodak Company, 1997                      ***
@@ -32,9 +33,14 @@
  **********************************************************************
  **********************************************************************
  **********************************************************************/
+
 package java.awt.color;
 
+import sun.java2d.cmm.Profile;
+import sun.java2d.cmm.ProfileDeferralInfo;
+
 /**
+ *
  * The ICC_ProfileRGB class is a subclass of the ICC_Profile class
  * that represents profiles which meet the following criteria:
  * <ul>
@@ -48,22 +54,80 @@ package java.awt.color;
  * return an <code>ICC_ProfileRGB</code> object when these conditions are met.
  * Three-component, matrix-based input profiles and RGB display profiles are
  * examples of this type of profile.
+ * <p>
+ * This profile class provides color transform matrices and lookup tables
+ * that Java or native methods can use directly to
+ * optimize color conversion in some cases.
+ * <p>
+ * To transform from a device profile color space to the CIEXYZ Profile
+ * Connection Space, each device color component is first linearized by
+ * a lookup through the corresponding tone reproduction curve (TRC).
+ * The resulting linear RGB components are converted to the CIEXYZ PCS
+ * using a a 3x3 matrix constructed from the RGB colorants.
+ * <pre>
+ *
+ * &nbsp;               linearR = redTRC[deviceR]
+ *
+ * &nbsp;               linearG = greenTRC[deviceG]
+ *
+ * &nbsp;               linearB = blueTRC[deviceB]
+ *
+ * &nbsp; _      _       _                                             _   _         _
+ * &nbsp;[  PCSX  ]     [  redColorantX  greenColorantX  blueColorantX  ] [  linearR  ]
+ * &nbsp;[        ]     [                                               ] [           ]
+ * &nbsp;[  PCSY  ]  =  [  redColorantY  greenColorantY  blueColorantY  ] [  linearG  ]
+ * &nbsp;[        ]     [                                               ] [           ]
+ * &nbsp;[_ PCSZ _]     [_ redColorantZ  greenColorantZ  blueColorantZ _] [_ linearB _]
+ *
+ * </pre>
+ * The inverse transform is performed by converting PCS XYZ components to linear
+ * RGB components through the inverse of the above 3x3 matrix, and then converting
+ * linear RGB to device RGB through inverses of the TRCs.
  */
-public class ICC_ProfileRGB extends ICC_Profile {
+
+
+
+public class ICC_ProfileRGB
+extends ICC_Profile {
+
     static final long serialVersionUID = 8505067385152579334L;
 
-    /** Used to get a gamma value or TRC for the red component. */
+    /**
+     * Used to get a gamma value or TRC for the red component.
+     */
     public static final int REDCOMPONENT = 0;
 
-    /** Used to get a gamma value or TRC for the green component. */
+    /**
+     * Used to get a gamma value or TRC for the green component.
+     */
     public static final int GREENCOMPONENT = 1;
 
-    /** Used to get a gamma value or TRC for the blue component. */
+    /**
+     * Used to get a gamma value or TRC for the blue component.
+     */
     public static final int BLUECOMPONENT = 2;
 
-    ICC_ProfileRGB(byte[] data, int predefined) {
-        super(data, predefined);
+
+    /**
+     * Constructs an new <code>ICC_ProfileRGB</code> from a CMM ID.
+     *
+     * @param p The CMM ID for the profile.
+     *
+     */
+    ICC_ProfileRGB(Profile p) {
+        super(p);
     }
+
+    /**
+     * Constructs a new <code>ICC_ProfileRGB</code> from a
+     * ProfileDeferralInfo object.
+     *
+     * @param pdi
+     */
+    ICC_ProfileRGB(ProfileDeferralInfo pdi) {
+        super(pdi);
+    }
+
 
     /**
      * Returns an array that contains the components of the profile's
@@ -75,6 +139,7 @@ public class ICC_ProfileRGB extends ICC_Profile {
     public float[] getMediaWhitePoint() {
         return super.getMediaWhitePoint();
     }
+
 
     /**
      * Returns a 3x3 <CODE>float</CODE> matrix constructed from the
@@ -118,7 +183,14 @@ public class ICC_ProfileRGB extends ICC_Profile {
      * as a table rather than a single gamma value, an
      * exception is thrown.  In this case the actual table
      * can be obtained through the {@link #getTRC(int)} method.
+     * When using a gamma value,
+     * the linear component (R, G, or B) is computed as follows:
+     * <pre>
      *
+     * &nbsp;                                         gamma
+     * &nbsp;        linearComponent = deviceComponent
+     *
+     *</pre>
      * @param component The <CODE>ICC_ProfileRGB</CODE> constant that
      * represents the component whose TRC you want to retrieve
      * @return the gamma value as a float.
@@ -126,7 +198,29 @@ public class ICC_ProfileRGB extends ICC_Profile {
      *            the corresponding TRC as a single gamma value.
      */
     public float getGamma(int component) {
-        return super.getGamma(trcTag(component));
+    float theGamma;
+    int theSignature;
+
+        switch (component) {
+        case REDCOMPONENT:
+            theSignature = ICC_Profile.icSigRedTRCTag;
+            break;
+
+        case GREENCOMPONENT:
+            theSignature = ICC_Profile.icSigGreenTRCTag;
+            break;
+
+        case BLUECOMPONENT:
+            theSignature = ICC_Profile.icSigBlueTRCTag;
+            break;
+
+        default:
+            throw new IllegalArgumentException("Must be Red, Green, or Blue");
+        }
+
+        theGamma = super.getGamma(theSignature);
+
+        return theGamma;
     }
 
     /**
@@ -138,7 +232,7 @@ public class ICC_ProfileRGB extends ICC_Profile {
      * is conceptually in the range [0.0, 1.0].  Value 0.0 maps
      * to array index 0 and value 1.0 maps to array index length-1.
      * Interpolation might be used to generate output values for
-     * input values which do not map exactly to an index in the
+     * input values that do not map exactly to an index in the
      * array.  Output values also map linearly to the range [0.0, 1.0].
      * Value 0.0 is represented by an array value of 0x0000 and
      * value 1.0 by 0xFFFF.  In other words, the values are really unsigned
@@ -160,19 +254,29 @@ public class ICC_ProfileRGB extends ICC_Profile {
      *            the corresponding TRC as a table.
      */
     public short[] getTRC(int component) {
-        return super.getTRC(trcTag(component));
+    short[] theTRC;
+    int theSignature;
+
+        switch (component) {
+        case REDCOMPONENT:
+            theSignature = ICC_Profile.icSigRedTRCTag;
+            break;
+
+        case GREENCOMPONENT:
+            theSignature = ICC_Profile.icSigGreenTRCTag;
+            break;
+
+        case BLUECOMPONENT:
+            theSignature = ICC_Profile.icSigBlueTRCTag;
+            break;
+
+        default:
+            throw new IllegalArgumentException("Must be Red, Green, or Blue");
+        }
+
+        theTRC = super.getTRC(theSignature);
+
+        return theTRC;
     }
 
-    private static int trcTag(int component) {
-        switch (component) {
-            case REDCOMPONENT:
-                return ICC_Profile.icSigRedTRCTag;
-            case GREENCOMPONENT:
-                return ICC_Profile.icSigGreenTRCTag;
-            case BLUECOMPONENT:
-                return ICC_Profile.icSigBlueTRCTag;
-            default:
-                throw new IllegalArgumentException("Must be Red, Green, or Blue");
-        }
-    }
 }

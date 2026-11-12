@@ -52,7 +52,8 @@ internal object ClientPrepStatus
 internal object ClientPreparer
 {
     /** Bump whenever a transform or the packaging changes, so cached clients are rebuilt. */
-    private const val TRANSFORM_VERSION = "t2-${RuntimeDexConfiguration.CACHE_VERSION}"
+    // t3: JDK member retargets moved to the JdkRetargets table (net.runelite.mp.compat.jdk).
+    private const val TRANSFORM_VERSION = "t3-${RuntimeDexConfiguration.CACHE_VERSION}"
     private const val REPO = "https://repo.runelite.net/net/runelite/injected-client"
 
     /** Prepares (or reuses) the client for [version] and makes it loadable. Blocking. */

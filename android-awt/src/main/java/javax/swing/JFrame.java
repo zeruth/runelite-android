@@ -34,7 +34,25 @@ import java.awt.Component;
 import java.awt.Container;
 import java.awt.Frame;
 
-public class JFrame extends Frame implements RootPaneContainer {
+public class JFrame extends Frame implements javax.accessibility.Accessible, RootPaneContainer {
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJFrame();
+        }
+        return accessibleContext;
+    }
+
+    /** Accessibility support for Swing frames: a FRAME context named by the title. */
+    protected class AccessibleJFrame extends AccessibleAWTFrame {
+        public String getAccessibleName() {
+            if (accessibleName != null) {
+                return accessibleName;
+            }
+            String title = getTitle();
+            return title == null ? super.getAccessibleName() : title;
+        }
+    }
     private static final long serialVersionUID = 1L;
 
     public static final int EXIT_ON_CLOSE = 3;
@@ -51,6 +69,9 @@ public class JFrame extends Frame implements RootPaneContainer {
     public JFrame(String title, java.awt.GraphicsConfiguration gc) { super(title); initFrame(); }
 
     private void initFrame() {
+        // As JFrame.frameInit: window events must reach processWindowEvent (default close
+        // operation) even with no WindowListener registered.
+        enableEvents(java.awt.AWTEvent.KEY_EVENT_MASK | java.awt.AWTEvent.WINDOW_EVENT_MASK);
         // Real Frame defaults to BorderLayout — ContainableFrame.revalidateMinimumSize()
         // calls frame.getLayout().minimumLayoutSize(this), which NPEs without one and
         // aborts the entire validate cascade (ClientUI.Layout → ContainableFrame.revalidate

@@ -61,6 +61,7 @@ public abstract class Graphics2D extends Graphics {
         drawImage(operation == null ? image : operation.filter(image, null), x, y, null);
     }
     public void drawRenderedImage(java.awt.image.RenderedImage source, AffineTransform transform) {
+        if (source == null) return;
         if (source instanceof BufferedImage) { drawImage((BufferedImage)source, transform, null); return; }
         BufferedImage image = new BufferedImage(source.getWidth(), source.getHeight(), BufferedImage.TYPE_INT_ARGB);
         java.awt.image.Raster raster = source.getData(); java.awt.image.ColorModel model = source.getColorModel(); Object pixel = null;
@@ -71,6 +72,33 @@ public abstract class Graphics2D extends Graphics {
         AffineTransform positioned = new AffineTransform(transform); positioned.translate(source.getMinX(), source.getMinY());
         drawImage(image, positioned, null);
     }
+
+    /**
+     * Renders {@code img} at device resolution: the rendering is requested for the user
+     * transform concatenated with the current one and drawn back through the inverse of
+     * the current transform. Same order of concatenation as desktop's SunGraphics2D, so a
+     * RenderableImage sees the same RenderContext transform; a null rendering draws
+     * nothing.
+     */
+    public void drawRenderableImage(java.awt.image.renderable.RenderableImage img, AffineTransform xform) {
+        if (img == null) {
+            return;
+        }
+        AffineTransform pipeTransform = getTransform();
+        AffineTransform concatTransform = new AffineTransform(xform);
+        concatTransform.concatenate(pipeTransform);
+        AffineTransform reverseTransform;
+        java.awt.image.renderable.RenderContext rc = new java.awt.image.renderable.RenderContext(concatTransform);
+        try {
+            reverseTransform = pipeTransform.createInverse();
+        } catch (java.awt.geom.NoninvertibleTransformException nte) {
+            rc = new java.awt.image.renderable.RenderContext(pipeTransform);
+            reverseTransform = new AffineTransform();
+        }
+        java.awt.image.RenderedImage rendering = img.createRendering(rc);
+        drawRenderedImage(rendering, reverseTransform);
+    }
+
     public boolean hit(Rectangle rectangle, Shape shape, boolean onStroke) {
         Shape rendered = onStroke ? getStroke().createStrokedShape(shape) : shape;
         return getTransform().createTransformedShape(rendered).intersects(rectangle);

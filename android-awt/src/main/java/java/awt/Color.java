@@ -63,7 +63,18 @@ public class Color implements Paint, Serializable {
     public static final Color blue      = new Color(0, 0, 255);
     public static final Color BLUE      = blue;
 
-    private final int value;
+    /* Package-private and non-final as in OpenJDK: desktop natives read it by JNI field ID. */
+    int value;
+
+    /*
+     * OpenJDK 8u keeps the float components a Color was created from, so
+     * getComponents/getRGBComponents return them unquantized; all four are
+     * null/0 for colours made from ints, exactly as on desktop.
+     */
+    private float frgbvalue[] = null;
+    private float fvalue[] = null;
+    private float falpha = 0.0f;
+    private ColorSpace cs = null;
 
     public Color(int r, int g, int b) {
         this(r, g, b, 255);
@@ -87,65 +98,65 @@ public class Color implements Paint, Serializable {
 
     public Color(float r, float g, float b) {
         this((int) (r * 255f + 0.5f), (int) (g * 255f + 0.5f), (int) (b * 255f + 0.5f));
+        frgbvalue = new float[3];
+        frgbvalue[0] = r;
+        frgbvalue[1] = g;
+        frgbvalue[2] = b;
+        falpha = 1.0f;
+        fvalue = frgbvalue;
     }
 
     public Color(float r, float g, float b, float a) {
         this((int) (r * 255f + 0.5f), (int) (g * 255f + 0.5f),
              (int) (b * 255f + 0.5f), (int) (a * 255f + 0.5f));
+        frgbvalue = new float[3];
+        frgbvalue[0] = r;
+        frgbvalue[1] = g;
+        frgbvalue[2] = b;
+        falpha = a;
+        fvalue = frgbvalue;
     }
 
     /**
      * Creates a color in the specified <code>ColorSpace</code>
      * with the color components specified in the <code>float</code>
-     * array and the specified alpha.  The number of components is
-     * determined by the type of the <code>ColorSpace</code>.  For
-     * example, RGB requires 3 components, but CMYK requires 4
-     * components.
-     * @param cspace the <code>ColorSpace</code> to be used to
-     *                  interpret the components
-     * @param components an arbitrary number of color components
-     *                      that is compatible with the <code>ColorSpace</code>
-     * @param alpha alpha value
-     * @throws IllegalArgumentException if any of the values in the
-     *         <code>components</code> array or <code>alpha</code> is
-     *         outside of the range 0.0 to 1.0
+     * array and the specified alpha.
      */
     public Color(ColorSpace cspace, float components[], float alpha) {
-        boolean rangeError = false;
-        String badComponentString = "";
+        this(rgbOf(cspace, components, alpha), true);
         int n = cspace.getNumComponents();
         fvalue = new float[n];
         for (int i = 0; i < n; i++) {
             if (components[i] < 0.0 || components[i] > 1.0) {
-                rangeError = true;
-                badComponentString = badComponentString + "Component " + i + " ";
-            } else {
-                fvalue[i] = components[i];
+                throw new IllegalArgumentException("Color parameter outside of expected range: "
+                    + "Component " + i);
             }
+            fvalue[i] = components[i];
         }
         if (alpha < 0.0 || alpha > 1.0) {
-            rangeError = true;
-            badComponentString = badComponentString + "Alpha";
-        } else {
-            falpha = alpha;
+            throw new IllegalArgumentException("Color parameter outside of "
+                + "expected range: Alpha");
         }
-        if (rangeError) {
-            throw new IllegalArgumentException("Color parameter outside of expected range: " + badComponentString);
-        }
+        falpha = alpha;
         frgbvalue = cspace.toRGB(fvalue);
         cs = cspace;
-        // Truncation, not rounding: desktop computes the packed value this way.
-        value = ((((int) (falpha * 255)) & 0xFF) << 24)
-            | ((((int) (frgbvalue[0] * 255)) & 0xFF) << 16)
-            | ((((int) (frgbvalue[1] * 255)) & 0xFF) << 8)
-            | ((((int) (frgbvalue[2] * 255)) & 0xFF) << 0);
     }
 
-    /** The components in {@link #cs} and their sRGB conversion, set only by the ColorSpace constructor. */
-    private float[] fvalue;
-    private float[] frgbvalue;
-    private float falpha;
-    private ColorSpace cs;
+    /* The packed sRGB value the desktop constructor derives through toRGB. */
+    private static int rgbOf(ColorSpace cspace, float[] components, float alpha) {
+        int n = cspace.getNumComponents();
+        if (components.length < n) {
+            throw new IllegalArgumentException("Components array too short");
+        }
+        float[] comps = new float[n];
+        System.arraycopy(components, 0, comps, 0, n);
+        float[] rgb = cspace.toRGB(comps);
+        return ((int) (alpha * 255 + 0.5) & 0xFF) << 24
+            | ((int) (rgb[0] * 255 + 0.5) & 0xFF) << 16
+            | ((int) (rgb[1] * 255 + 0.5) & 0xFF) << 8
+            | ((int) (rgb[2] * 255 + 0.5) & 0xFF);
+    }
+
 
     public int getRed()   { return (value >> 16) & 0xFF; }
     public int getGreen() { return (value >> 8) & 0xFF; }
@@ -190,12 +201,13 @@ public class Color implements Paint, Serializable {
             f[0] = getRed() / 255f;
             f[1] = getGreen() / 255f;
             f[2] = getBlue() / 255f;
+            f[3] = getAlpha() / 255f;
         } else {
             f[0] = frgbvalue[0];
             f[1] = frgbvalue[1];
             f[2] = frgbvalue[2];
+            f[3] = falpha;
         }
-        f[3] = frgbvalue == null ? getAlpha() / 255f : falpha;
         return f;
     }
 
@@ -213,95 +225,89 @@ public class Color implements Paint, Serializable {
         return f;
     }
 
-    /**
-     * Returns a <code>float</code> array containing the color and alpha
-     * components of the <code>Color</code>, in the
-     * <code>ColorSpace</code> of the <code>Color</code>.
-     * @param compArray an array that this method fills with the color and
-     *          alpha components of this <code>Color</code> in its
-     *          <code>ColorSpace</code> and returns
-     * @return the color and alpha components in a <code>float</code> array.
-     */
     public float[] getComponents(float[] compArray) {
         if (fvalue == null) {
             return getRGBComponents(compArray);
         }
         int n = fvalue.length;
-        float[] f = compArray == null ? new float[n + 1] : compArray;
-        System.arraycopy(fvalue, 0, f, 0, n);
+        float[] f = (compArray == null) ? new float[n + 1] : compArray;
+        for (int i = 0; i < n; i++) {
+            f[i] = fvalue[i];
+        }
         f[n] = falpha;
         return f;
     }
 
-    /**
-     * Returns a <code>float</code> array containing only the color
-     * components of the <code>Color</code>, in the
-     * <code>ColorSpace</code> of the <code>Color</code>.
-     * @param compArray an array that this method fills with the color
-     *          components of this <code>Color</code> in its
-     *          <code>ColorSpace</code> and returns
-     * @return the color components in a <code>float</code> array.
-     */
     public float[] getColorComponents(float[] compArray) {
         if (fvalue == null) {
             return getRGBColorComponents(compArray);
         }
         int n = fvalue.length;
-        float[] f = compArray == null ? new float[n] : compArray;
-        System.arraycopy(fvalue, 0, f, 0, n);
+        float[] f = (compArray == null) ? new float[n] : compArray;
+        for (int i = 0; i < n; i++) {
+            f[i] = fvalue[i];
+        }
         return f;
     }
 
-    /**
-     * Returns a <code>float</code> array containing the color and alpha
-     * components of the <code>Color</code>, in the
-     * <code>ColorSpace</code> specified by the <code>cspace</code>
-     * parameter.
-     * @param cspace a specified <code>ColorSpace</code>
-     * @param compArray an array that this method fills with the
-     *          color and alpha components of this <code>Color</code> in
-     *          the specified <code>ColorSpace</code> and returns
-     * @return the color and alpha components in a <code>float</code>
-     *          array.
-     */
     public float[] getComponents(ColorSpace cspace, float[] compArray) {
-        float[] tmpout = inSpace(cspace);
+        if (cs == null) {
+            cs = ColorSpace.getInstance(ColorSpace.CS_sRGB);
+        }
+        float f[];
+        if (fvalue == null) {
+            f = new float[3];
+            f[0] = getRed() / 255f;
+            f[1] = getGreen() / 255f;
+            f[2] = getBlue() / 255f;
+        } else {
+            f = fvalue;
+        }
+        float tmp[] = cs.toCIEXYZ(f);
+        float tmpout[] = cspace.fromCIEXYZ(tmp);
         if (compArray == null) {
             compArray = new float[tmpout.length + 1];
         }
-        System.arraycopy(tmpout, 0, compArray, 0, tmpout.length);
-        compArray[tmpout.length] = fvalue == null ? getAlpha() / 255f : falpha;
+        for (int i = 0; i < tmpout.length; i++) {
+            compArray[i] = tmpout[i];
+        }
+        if (fvalue == null) {
+            compArray[tmpout.length] = getAlpha() / 255f;
+        } else {
+            compArray[tmpout.length] = falpha;
+        }
         return compArray;
     }
 
-    /**
-     * Returns a <code>float</code> array containing only the color
-     * components of the <code>Color</code> in the
-     * <code>ColorSpace</code> specified by the <code>cspace</code>
-     * parameter.
-     * @param cspace a specified <code>ColorSpace</code>
-     * @param compArray an array that this method fills with the color
-     *          components of this <code>Color</code> in the specified
-     *          <code>ColorSpace</code>
-     * @return the color components in a <code>float</code> array.
-     */
     public float[] getColorComponents(ColorSpace cspace, float[] compArray) {
-        float[] tmpout = inSpace(cspace);
+        if (cs == null) {
+            cs = ColorSpace.getInstance(ColorSpace.CS_sRGB);
+        }
+        float f[];
+        if (fvalue == null) {
+            f = new float[3];
+            f[0] = getRed() / 255f;
+            f[1] = getGreen() / 255f;
+            f[2] = getBlue() / 255f;
+        } else {
+            f = fvalue;
+        }
+        float tmp[] = cs.toCIEXYZ(f);
+        float tmpout[] = cspace.fromCIEXYZ(tmp);
         if (compArray == null) {
             return tmpout;
         }
-        System.arraycopy(tmpout, 0, compArray, 0, tmpout.length);
+        for (int i = 0; i < tmpout.length; i++) {
+            compArray[i] = tmpout[i];
+        }
         return compArray;
     }
 
-    private float[] inSpace(ColorSpace cspace) {
-        float[] f = fvalue != null ? fvalue
-            : new float[] {getRed() / 255f, getGreen() / 255f, getBlue() / 255f};
-        return cspace.fromCIEXYZ(getColorSpace().toCIEXYZ(f));
-    }
-
     public ColorSpace getColorSpace() {
-        return cs != null ? cs : ColorSpace.getInstance(ColorSpace.CS_sRGB);
+        if (cs == null) {
+            cs = ColorSpace.getInstance(ColorSpace.CS_sRGB);
+        }
+        return cs;
     }
 
     public int getTransparency() {

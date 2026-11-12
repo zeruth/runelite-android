@@ -29,10 +29,18 @@ Header options (space separated after ``// host-contract:``):
     args=A,B             program arguments for every run
     patched-args=A,B     program arguments for the patched run only (``shadow`` lets a test guard the
                          checks that assert a documented divergence from the JDK)
+    jvm-args=A,B         JVM options for every run, before the module flags (``--add-exports=...`` for a test
+                         that reaches a JDK-internal class reflectively)
     fixture=keystore     a throw-away PKCS12 keystore (password ``test-only``, CN=localhost) is generated
                          and its path appended to the arguments
+    patched-classpath=okhttp
+                         the patched run also gets okhttp/okio (the versions the APK ships, from the
+                         Gradle cache or Maven Central, checked against gradle/verification-metadata.xml)
+                         and the app's ``OkHttpWebSocketTransport`` compiled against the shadow, so
+                         ``java.net.http.WebSocket`` runs over the transport the APK uses
 """
 import argparse
+import hashlib
 import os
 from pathlib import Path
 import re
@@ -40,11 +48,27 @@ import shutil
 import subprocess
 import sys
 import time
+import urllib.request
 
 REPO = Path(__file__).resolve().parent.parent
 SHADOW = REPO / "android-awt/src/main/java"
 TESTS = REPO / "tools-src"
 KOTLIN_ONLY = ("net.runelite.awt.AwtNative", "net.runelite.awt.AwtCompat")
+JNI_READ_CLASSES = ("java/awt/AlphaComposite", "java/awt/Color", "java/awt/Font")
+# (shadow class or package prefix ending in "/", JDK class, why): the shadow is not patched while the
+# JDK class is loaded by the plain-JDK runs and has no patched shadow of its own.  BufImgSurfaceData
+# loads only when a JDK BufferedImage hands out a Graphics, so contracts that merely build images keep
+# the shadow image classes.
+RUNTIME_COUPLINGS = (
+    ("java/awt/Toolkit", "java/awt/KeyboardFocusManager",
+     "casts the default toolkit to sun.awt.KeyboardFocusManagerPeerProvider in initPeer"),
+    ("java/awt/Image", "sun/awt/image/BufImgSurfaceData",
+     "draws through the image accessor that the JDK's java.awt.Image installs in its static initializer"),
+    ("java/awt/image/", "sun/awt/image/BufImgSurfaceData",
+     "casts a JDK BufferedImage's rasters and color models to its own implementations"),
+    ("java/awt/color/", "sun/awt/image/BufImgSurfaceData",
+     "reads the JDK color spaces behind a JDK BufferedImage's color model"),
+)
 # Fallback for packages the host image lacks entirely (new shadow-only packages).
 MODULE_BY_PREFIX = (
     ("com.sun.net.httpserver", "jdk.httpserver"),
@@ -400,7 +424,8 @@ class Members:
             if header:
                 current = header.group(1)
                 self.declared[current] = {}
-                supertypes = re.findall(r'\b(?:extends|implements)\s+([^{]*)', header.group(2))
+                # Each clause stops at the next keyword: "extends A implements B,C" is A, B and C.
+                supertypes = re.findall(r'\b(?:extends|implements)\s+(.*?)(?=\s+implements\b|\s*$)', header.group(2))
                 self.parents[current] = [p.strip().split("<")[0] for part in supertypes for p in part.split(",") if p.strip()]
                 continue
             stripped = line.strip()
@@ -503,12 +528,29 @@ def drop_in_check(sources, in_jdk, patches, tests_dir, loaded, tool, build):
         # JNI code reaches fields and constructors no constant pool shows: a JDK class with native
         # methods caches its own field IDs (initIDs), and libfontmanager builds 2D geometry itself
         # (GeneralPath's package-private constructor in SunFontManager.initIDs).  Those layouts must match.
-        jni_visible = dotted in jdk.natives or internal.startswith(("java/awt/geom/", "java/awt/image/", "java/awt/font/", "java/awt/color/"))
+        # The 2D loops and font natives cache fields of these too (GraphicsPrimitiveMgr.initIDs reads
+        # AlphaComposite.extraAlpha; SunFontManager.initIDs the Font fields).
+        jni_visible = (dotted in jdk.natives or internal in JNI_READ_CLASSES
+                       or internal.startswith(("java/awt/geom/", "java/awt/image/", "java/awt/font/", "java/awt/color/")))
         layout = sorted((n, d) for (n, d), private in missing[internal].items()
-                        if not private and not n.startswith("$") and (n == "<init>" or not d.startswith("(")))
+                        if (not private or internal in JNI_READ_CLASSES)
+                        and not n.startswith("$") and (n == "<init>" or not d.startswith("(")))
         if layout and jni_visible and not by_internal[top(internal)].runtime_reason:
             by_internal[top(internal)].runtime_reason = (f"JNI-visible layout differs from the JDK's "
                                                          f"{dotted}: lacks {layout[0][0]}{layout[0][1]}")
+    # Couplings no member scan sees: a JDK class that stays live casts to, or reads state installed
+    # by, the JDK twin of a shadow class, so patching the shadow alone fails away from the contract.
+    for shadow_class, jdk_class, why in RUNTIME_COUPLINGS:
+        partner = by_internal.get(jdk_class)
+        partner_patched = jdk_class in files and partner is not None and not partner.runtime_reason
+        if jdk_class not in loaded or partner_patched:
+            continue
+        coupled = [f for f in files if f.startswith(shadow_class)] if shadow_class.endswith("/") \
+            else [shadow_class] if shadow_class in files else []
+        for internal in coupled:
+            source = by_internal[top(internal)]
+            if not source.runtime_reason:
+                source.runtime_reason = f"the JDK's {jdk_class.replace('/', '.')} {why}"
     jdk_refs, own_refs, member_refs = scan_references(
         tool, build, twins, sorted(patches) + [f"dir:{d}" for d in patches.values()] + [f"dir:{tests_dir}"])
     demoted = True
@@ -572,6 +614,9 @@ class Contract:
             arguments.append(str(fixtures[fixture]))
         return arguments
 
+    def jvm_arguments(self):
+        return [a for a in self.options.get("jvm-args", "").split(",") if a]
+
 
 def contracts():
     found = []
@@ -597,6 +642,57 @@ def make_fixtures(needed, tool, build):
             raise SystemExit("keytool failed:\n" + output)
         fixtures["keystore"] = keystore
     return fixtures
+
+
+# The okhttp the APK ships (android/build.gradle.kts) and the app sources that run on it.
+OKHTTP = (("com.squareup.okhttp3", "okhttp", "3.14.9"), ("com.squareup.okio", "okio", "1.17.2"))
+OKHTTP_SOURCES = ("android/src/androidMain/java/net/runelite/mp/http/OkHttpWebSocketTransport.java",)
+
+
+def maven_jar(group, name, version, build):
+    """The jar from the Gradle cache, else Maven Central, only if its sha256 is the verified one."""
+    file = f"{name}-{version}.jar"
+    metadata = (REPO / "gradle/verification-metadata.xml").read_text(encoding="utf-8")
+    match = re.search(rf'<component group="{re.escape(group)}" name="{re.escape(name)}" version="{re.escape(version)}">'
+                      rf'(?:(?!</component>).)*?<artifact name="{re.escape(file)}">\s*<sha256 value="([0-9a-f]+)"', metadata, re.S)
+    if not match:
+        raise SystemExit(f"{group}:{name}:{version} has no sha256 in gradle/verification-metadata.xml")
+    expected = match.group(1)
+
+    def digest(path):
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    gradle_home = Path(os.environ.get("GRADLE_USER_HOME") or Path.home() / ".gradle")
+    downloaded = build / "deps" / file
+    candidates = sorted((gradle_home / "caches/modules-2/files-2.1" / group / name / version).glob(f"*/{file}"))
+    for candidate in [*candidates, downloaded]:
+        if candidate.is_file() and digest(candidate) == expected:
+            return candidate
+    url = f"https://repo.maven.apache.org/maven2/{group.replace('.', '/')}/{name}/{version}/{file}"
+    with urllib.request.urlopen(url, timeout=60) as response:
+        data = response.read()
+    if hashlib.sha256(data).hexdigest() != expected:
+        raise SystemExit(f"{url}: sha256 differs from gradle/verification-metadata.xml")
+    downloaded.parent.mkdir(parents=True, exist_ok=True)
+    downloaded.write_bytes(data)
+    return downloaded
+
+
+def make_classpaths(needed, tool, build, compile_flags):
+    classpaths = {}
+    for name in needed:
+        if name != "okhttp":
+            raise SystemExit(f"unknown patched-classpath={name}")
+        jars = [maven_jar(*coordinate, build) for coordinate in OKHTTP]
+        classes = build / "okhttp-transport"
+        shutil.rmtree(classes, ignore_errors=True)
+        classes.mkdir(parents=True)
+        code, output, _ = run(tool, "javac", ["-encoding", "UTF-8", "-nowarn", "-proc:none", *compile_flags,
+                                              "-cp", os.pathsep.join(map(str, jars)), "-d", classes,
+                                              *(REPO / source for source in OKHTTP_SOURCES)])
+        if code:
+            raise SystemExit("the okhttp WebSocket transport does not compile against the shadow:\n" + output)
+        classpaths[name] = [classes, *jars]
+    return classpaths
 
 
 def main():
@@ -642,6 +738,8 @@ def main():
     # The plain-JDK runs come first: the classes they load tell which JDK classes a patched run can
     # still reach, which decides what may be patched over them.
     fixtures = make_fixtures({c.options.get("fixture") for c in selected}, tool, build)
+    classpaths = make_classpaths({c.options["patched-classpath"] for c in selected if c.options.get("patched-classpath")},
+                                 tool, build, module_flags(compiled, sources))
     results, loaded = [], set()
     logs = build / "class-load"
     shutil.rmtree(logs, ignore_errors=True)
@@ -653,7 +751,11 @@ def main():
             log_option = os.path.relpath(log, REPO).replace("\\", "/")  # a drive letter's colon breaks -Xlog parsing
         except ValueError:
             log_option = str(log)
-        jvm = ["-Djava.awt.headless=true", f"-Xlog:class+load:file={log_option}:none", *flags, "-cp", tests_dir, contract.name]
+        classpath = [tests_dir]
+        if mode == "patched" and contract.options.get("patched-classpath"):
+            classpath += classpaths[contract.options["patched-classpath"]]
+        jvm = ["-Djava.awt.headless=true", f"-Xlog:class+load:file={log_option}:none", *contract.jvm_arguments(), *flags,
+               "-cp", os.pathsep.join(map(str, classpath)), contract.name]
         code, output, elapsed = run(tool, "java", jvm + contract.arguments(mode, fixtures), timeout=180)
         status = "pass" if code == 0 else "error" if code == "timeout" else "fail"
         results.append((contract.name, mode, status, elapsed, output))

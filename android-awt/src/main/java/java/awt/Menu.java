@@ -35,12 +35,15 @@ public class Menu extends MenuItem implements MenuContainer {
     public Menu() { this(""); }
     public Menu(String label) { this(label, false); }
     public Menu(String label, boolean tearOff) { super(label); this.tearOff = tearOff; }
+    private static int nameCounter = 0;
+    @Override String constructComponentName() { synchronized (Menu.class) { return "menu" + nameCounter++; } }
     public boolean isTearOff() { return tearOff; }
     public MenuItem add(MenuItem item) { insert(item, items.size()); return item; }
     public void add(String label) { add(new MenuItem(label)); }
     public void addSeparator() { add("-"); }
     public void insert(MenuItem item, int index) {
         if (index < 0) throw new IllegalArgumentException("negative index");
+        if (item == null) throw new NullPointerException("item");
         for (MenuContainer ancestor = this; ancestor instanceof Menu; ancestor = ((Menu) ancestor).getParent())
             if (ancestor == item) throw new IllegalArgumentException("menu cycle");
         if (item.parent != null) item.parent.remove(item);
@@ -54,6 +57,9 @@ public class Menu extends MenuItem implements MenuContainer {
     public void remove(int index) { MenuItem item = items.remove(index); item.parent = null; }
     @Override public void remove(MenuComponent item) { if (items.remove(item)) item.parent = null; }
     public void removeAll() { for (MenuItem item : items) item.parent = null; items.clear(); }
+    /** There is no native menu peer on Android; the menu is realized as a Swing popup when shown. */
+    public void addNotify() {}
+    @Override public String paramString() { return super.paramString() + ",tearOff=" + tearOff + ",isHelpMenu=" + (getParent() instanceof MenuBar && ((MenuBar) getParent()).getHelpMenu() == this); }
     void fill(javax.swing.JPopupMenu popup) {
         for (MenuItem item : new java.util.ArrayList<>(items)) {
             if ("-".equals(item.getLabel())) popup.addSeparator(); else popup.add(item.swingItem());

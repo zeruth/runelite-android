@@ -1,66 +1,683 @@
 /*
- * Copyright (c) 2026, Tyler Bochard
- * All rights reserved.
+ * Copyright (c) 1997, 2013, Oracle and/or its affiliates. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
- * Part of android-awt, the Android shadow of the desktop JDK surface used by
- * runelite-android. Original work of this project, not derived from OpenJDK;
- * licensed under the BSD 2-Clause License (see the LICENSE file at the
- * repository root). Files ported from OpenJDK carry the OpenJDK header instead;
- * see android-awt/LICENSE.
+ * This code is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 only, as
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
+ * This code is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ * version 2 for more details (a copy is included in the LICENSE file that
+ * accompanied this code).
  *
- * 1. Redistributions of source code must retain the above copyright notice, this
- *    list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright notice,
- *    this list of conditions and the following disclaimer in the documentation
- *    and/or other materials provided with the distribution.
+ * You should have received a copy of the GNU General Public License version
+ * 2 along with this work; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
- * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
+ * or visit www.oracle.com if you need additional information or have any
+ * questions.
  */
 package javax.swing.border;
-import java.awt.*;
-import javax.swing.*;
-/** A border with a measured title and reserved title insets. */
-public class TitledBorder extends AbstractBorder {
-    public static final int DEFAULT_POSITION=0,ABOVE_TOP=1,TOP=2,BELOW_TOP=3,ABOVE_BOTTOM=4,BOTTOM=5,BELOW_BOTTOM=6;
-    public static final int DEFAULT_JUSTIFICATION=0,LEFT=1,CENTER=2,RIGHT=3,LEADING=4,TRAILING=5;
-    protected String title;protected Border border;protected int titlePosition,titleJustification;protected Font titleFont;protected Color titleColor;
-    public TitledBorder(String title){this(null,title);}
-    public TitledBorder(Border border){this(border,"");}
-    public TitledBorder(Border border,String title){this(border,title,LEADING,TOP);}
-    public TitledBorder(Border border,String title,int justification,int position){this(border,title,justification,position,null,null);}
-    public TitledBorder(Border border,String title,int justification,int position,Font font){this(border,title,justification,position,font,null);}
-    public TitledBorder(Border border,String title,int justification,int position,Font font,Color color){this.border=border;this.title=title;setTitleJustification(justification);setTitlePosition(position);titleFont=font;titleColor=color;}
-    public String getTitle(){return title;}public void setTitle(String value){title=value;}
-    public Border getBorder(){return border==null?new EtchedBorder():border;}public void setBorder(Border value){border=value;}
-    public int getTitlePosition(){return titlePosition;}public void setTitlePosition(int value){if(value<0||value>6)throw new IllegalArgumentException("position");titlePosition=value;}
-    public int getTitleJustification(){return titleJustification;}public void setTitleJustification(int value){if(value<0||value>5)throw new IllegalArgumentException("justification");titleJustification=value;}
-    public Font getTitleFont(){return titleFont;}public void setTitleFont(Font value){titleFont=value;}
-    public Color getTitleColor(){return titleColor;}public void setTitleColor(Color value){titleColor=value;}
-    private Font font(Component c){return titleFont==null?c.getFont():titleFont;}
-    private boolean lower(){return titlePosition>=ABOVE_BOTTOM;}
-    public Insets getBorderInsets(Component c){Insets in=getBorder().getBorderInsets(c);Insets result=new Insets(in.top+2,in.left+4,in.bottom+2,in.right+4);if(title!=null&&!title.isEmpty()){int height=c.getFontMetrics(font(c)).getHeight();if(lower())result.bottom+=height;else result.top+=height;}return result;}
-    public Insets getBorderInsets(Component c,Insets in){Insets value=getBorderInsets(c);in.set(value.top,value.left,value.bottom,value.right);return in;}
-    public boolean isBorderOpaque(){return false;}
-    public void paintBorder(Component c,Graphics g,int x,int y,int width,int height){
-        if(title==null||title.isEmpty()){getBorder().paintBorder(c,g,x,y,width,height);return;}
-        FontMetrics metrics=c.getFontMetrics(font(c));int textHeight=metrics.getHeight(),textWidth=metrics.stringWidth(title);int position=titlePosition==DEFAULT_POSITION?TOP:titlePosition;
-        int inset=(position==ABOVE_TOP||position==BELOW_BOTTOM)?textHeight:(position==TOP||position==BOTTOM)?textHeight/2:0;
-        int by=lower()?y:y+inset,bh=height-inset;getBorder().paintBorder(c,g,x,by,width,bh);
-        int tx=x+6;if(titleJustification==CENTER)tx=x+(width-textWidth)/2;else if(titleJustification==RIGHT||titleJustification==TRAILING)tx=x+width-textWidth-6;
-        int baseline=lower()?y+height-metrics.getDescent()-2:y+metrics.getAscent()+2;
-        Color old=g.getColor();Font oldFont=g.getFont();g.setColor(c.getBackground());g.fillRect(tx-2,baseline-metrics.getAscent(),textWidth+4,textHeight);g.setFont(font(c));g.setColor(titleColor==null?c.getForeground():titleColor);g.drawString(title,tx,baseline);g.setColor(old);g.setFont(oldFont);
+
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Dimension;
+import java.awt.Font;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.Insets;
+import java.awt.Rectangle;
+import java.awt.geom.Path2D;
+import java.beans.ConstructorProperties;
+import javax.swing.JComponent;
+import javax.swing.JLabel;
+import javax.swing.UIManager;
+
+/**
+ * A class which implements an arbitrary border
+ * with the addition of a String title in a
+ * specified position and justification.
+ * <p>
+ * If the border, font, or color property values are not
+ * specified in the constructor or by invoking the appropriate
+ * set methods, the property values will be defined by the current
+ * look and feel, using the following property names in the
+ * Defaults Table:
+ * <ul>
+ * <li>&quot;TitledBorder.border&quot;
+ * <li>&quot;TitledBorder.font&quot;
+ * <li>&quot;TitledBorder.titleColor&quot;
+ * </ul>
+ *
+ * @author David Kloba
+ * @author Amy Fowler
+ */
+@SuppressWarnings("serial")
+public class TitledBorder extends AbstractBorder
+{
+    protected String title;
+    protected Border border;
+    protected int titlePosition;
+    protected int titleJustification;
+    protected Font titleFont;
+    protected Color titleColor;
+
+    private final JLabel label;
+
+    /**
+     * Use the default vertical orientation for the title text.
+     */
+    static public final int     DEFAULT_POSITION        = 0;
+    /** Position the title above the border's top line. */
+    static public final int     ABOVE_TOP               = 1;
+    /** Position the title in the middle of the border's top line. */
+    static public final int     TOP                     = 2;
+    /** Position the title below the border's top line. */
+    static public final int     BELOW_TOP               = 3;
+    /** Position the title above the border's bottom line. */
+    static public final int     ABOVE_BOTTOM            = 4;
+    /** Position the title in the middle of the border's bottom line. */
+    static public final int     BOTTOM                  = 5;
+    /** Position the title below the border's bottom line. */
+    static public final int     BELOW_BOTTOM            = 6;
+
+    /**
+     * Use the default justification for the title text.
+     */
+    static public final int     DEFAULT_JUSTIFICATION   = 0;
+    /** Position title text at the left side of the border line. */
+    static public final int     LEFT                    = 1;
+    /** Position title text in the center of the border line. */
+    static public final int     CENTER                  = 2;
+    /** Position title text at the right side of the border line. */
+    static public final int     RIGHT                   = 3;
+    /** Position title text at the left side of the border line
+     *  for left to right orientation, at the right side of the
+     *  border line for right to left orientation.
+     */
+    static public final int     LEADING = 4;
+    /** Position title text at the right side of the border line
+     *  for left to right orientation, at the left side of the
+     *  border line for right to left orientation.
+     */
+    static public final int     TRAILING = 5;
+
+    /** Space between the border and the component's edge */
+    static protected final int EDGE_SPACING = 2;
+
+    /** Space between the border and text */
+    static protected final int TEXT_SPACING = 2;
+
+    /** Horizontal inset of text that is left or right justified */
+    static protected final int TEXT_INSET_H = 5;
+
+    /**
+     * Creates a TitledBorder instance.
+     *
+     * @param title  the title the border should display
+     */
+    public TitledBorder(String title) {
+        this(null, title, LEADING, DEFAULT_POSITION, null, null);
     }
-    public Dimension getMinimumSize(Component c){Insets in=getBorderInsets(c);return new Dimension(in.left+in.right+(title==null?0:c.getFontMetrics(font(c)).stringWidth(title)),in.top+in.bottom);}
+
+    /**
+     * Creates a TitledBorder instance with the specified border
+     * and an empty title.
+     *
+     * @param border  the border
+     */
+    public TitledBorder(Border border) {
+        this(border, "", LEADING, DEFAULT_POSITION, null, null);
+    }
+
+    /**
+     * Creates a TitledBorder instance with the specified border
+     * and title.
+     *
+     * @param border  the border
+     * @param title  the title the border should display
+     */
+    public TitledBorder(Border border, String title) {
+        this(border, title, LEADING, DEFAULT_POSITION, null, null);
+    }
+
+    /**
+     * Creates a TitledBorder instance with the specified border,
+     * title, title-justification, and title-position.
+     */
+    public TitledBorder(Border border,
+                        String title,
+                        int titleJustification,
+                        int titlePosition) {
+        this(border, title, titleJustification,
+             titlePosition, null, null);
+    }
+
+    /**
+     * Creates a TitledBorder instance with the specified border,
+     * title, title-justification, title-position, and title-font.
+     */
+    public TitledBorder(Border border,
+                        String title,
+                        int titleJustification,
+                        int titlePosition,
+                        Font titleFont) {
+        this(border, title, titleJustification,
+             titlePosition, titleFont, null);
+    }
+
+    /**
+     * Creates a TitledBorder instance with the specified border,
+     * title, title-justification, title-position, title-font, and
+     * title-color.
+     *
+     * @throws IllegalArgumentException if the value of title justification
+     *         or title position is invalid
+     */
+    @ConstructorProperties({"border", "title", "titleJustification", "titlePosition", "titleFont", "titleColor"})
+    public TitledBorder(Border border,
+                        String title,
+                        int titleJustification,
+                        int titlePosition,
+                        Font titleFont,
+                        Color titleColor) {
+        this.title = title;
+        this.border = border;
+        this.titleFont = titleFont;
+        this.titleColor = titleColor;
+
+        setTitleJustification(titleJustification);
+        setTitlePosition(titlePosition);
+
+        this.label = new JLabel();
+        this.label.setOpaque(false);
+        // BasicHTML.propertyKey: the title is rendered as plain text until the label renders it
+        this.label.putClientProperty("html", null);
+    }
+
+    /**
+     * Paints the border for the specified component with the
+     * specified position and size.
+     */
+    public void paintBorder(Component c, Graphics g, int x, int y, int width, int height) {
+        Border border = getBorder();
+        String title = getTitle();
+        if ((title != null) && !title.isEmpty()) {
+            int edge = (border instanceof TitledBorder) ? 0 : EDGE_SPACING;
+            JLabel label = getLabel(c);
+            Dimension size = label.getPreferredSize();
+            Insets insets = getBorderInsets(border, c, new Insets(0, 0, 0, 0));
+
+            int borderX = x + edge;
+            int borderY = y + edge;
+            int borderW = width - edge - edge;
+            int borderH = height - edge - edge;
+
+            int labelY = y;
+            int labelH = size.height;
+            int position = getPosition();
+            switch (position) {
+                case ABOVE_TOP:
+                    insets.left = 0;
+                    insets.right = 0;
+                    borderY += labelH - edge;
+                    borderH -= labelH - edge;
+                    break;
+                case TOP:
+                    insets.top = edge + insets.top/2 - labelH/2;
+                    if (insets.top < edge) {
+                        borderY -= insets.top;
+                        borderH += insets.top;
+                    }
+                    else {
+                        labelY += insets.top;
+                    }
+                    break;
+                case BELOW_TOP:
+                    labelY += insets.top + edge;
+                    break;
+                case ABOVE_BOTTOM:
+                    labelY += height - labelH - insets.bottom - edge;
+                    break;
+                case BOTTOM:
+                    labelY += height - labelH;
+                    insets.bottom = edge + (insets.bottom - labelH) / 2;
+                    if (insets.bottom < edge) {
+                        borderH += insets.bottom;
+                    }
+                    else {
+                        labelY -= insets.bottom;
+                    }
+                    break;
+                case BELOW_BOTTOM:
+                    insets.left = 0;
+                    insets.right = 0;
+                    labelY += height - labelH;
+                    borderH -= labelH - edge;
+                    break;
+            }
+            insets.left += edge + TEXT_INSET_H;
+            insets.right += edge + TEXT_INSET_H;
+
+            int labelX = x;
+            int labelW = width - insets.left - insets.right;
+            if (labelW > size.width) {
+                labelW = size.width;
+            }
+            switch (getJustification(c)) {
+                case LEFT:
+                    labelX += insets.left;
+                    break;
+                case RIGHT:
+                    labelX += width - insets.right - labelW;
+                    break;
+                case CENTER:
+                    labelX += (width - labelW) / 2;
+                    break;
+            }
+
+            if (border != null) {
+                if ((position != TOP) && (position != BOTTOM)) {
+                    border.paintBorder(c, g, borderX, borderY, borderW, borderH);
+                }
+                else {
+                    Graphics g2 = g.create();
+                    if (g2 instanceof Graphics2D) {
+                        Graphics2D g2d = (Graphics2D) g2;
+                        Path2D path = new Path2D.Float();
+                        path.append(new Rectangle(borderX, borderY, borderW, labelY - borderY), false);
+                        path.append(new Rectangle(borderX, labelY, labelX - borderX - TEXT_SPACING, labelH), false);
+                        path.append(new Rectangle(labelX + labelW + TEXT_SPACING, labelY, borderX - labelX + borderW - labelW - TEXT_SPACING, labelH), false);
+                        path.append(new Rectangle(borderX, labelY + labelH, borderW, borderY - labelY + borderH - labelH), false);
+                        g2d.clip(path);
+                    }
+                    border.paintBorder(c, g2, borderX, borderY, borderW, borderH);
+                    g2.dispose();
+                }
+            }
+            g.translate(labelX, labelY);
+            label.setSize(labelW, labelH);
+            label.paint(g);
+            g.translate(-labelX, -labelY);
+        }
+        else if (border != null) {
+            int edge = (border instanceof TitledBorder) ? 0 : EDGE_SPACING;
+            border.paintBorder(c, g, x + edge, y + edge, width - edge - edge, height - edge - edge);
+        }
+    }
+
+    /**
+     * Reinitialize the insets parameter with this Border's current Insets.
+     * @param c the component for which this border insets value applies
+     * @param insets the object to be reinitialized
+     */
+    public Insets getBorderInsets(Component c, Insets insets) {
+        Border border = getBorder();
+        insets = getBorderInsets(border, c, insets);
+
+        String title = getTitle();
+        if ((title != null) && !title.isEmpty()) {
+            int edge = (border instanceof TitledBorder) ? 0 : EDGE_SPACING;
+            JLabel label = getLabel(c);
+            Dimension size = label.getPreferredSize();
+
+            switch (getPosition()) {
+                case ABOVE_TOP:
+                    insets.top += size.height - edge;
+                    break;
+                case TOP: {
+                    if (insets.top < size.height) {
+                        insets.top = size.height - edge;
+                    }
+                    break;
+                }
+                case BELOW_TOP:
+                    insets.top += size.height;
+                    break;
+                case ABOVE_BOTTOM:
+                    insets.bottom += size.height;
+                    break;
+                case BOTTOM: {
+                    if (insets.bottom < size.height) {
+                        insets.bottom = size.height - edge;
+                    }
+                    break;
+                }
+                case BELOW_BOTTOM:
+                    insets.bottom += size.height - edge;
+                    break;
+            }
+            insets.top += edge + TEXT_SPACING;
+            insets.left += edge + TEXT_SPACING;
+            insets.right += edge + TEXT_SPACING;
+            insets.bottom += edge + TEXT_SPACING;
+        }
+        return insets;
+    }
+
+    /**
+     * Returns whether or not the border is opaque.
+     */
+    public boolean isBorderOpaque() {
+        return false;
+    }
+
+    /**
+     * Returns the title of the titled border.
+     */
+    public String getTitle() {
+        return title;
+    }
+
+    /**
+     * Returns the border of the titled border.
+     */
+    public Border getBorder() {
+        return border != null
+                ? border
+                : UIManager.getBorder("TitledBorder.border");
+    }
+
+    /**
+     * Returns the title-position of the titled border.
+     */
+    public int getTitlePosition() {
+        return titlePosition;
+    }
+
+    /**
+     * Returns the title-justification of the titled border.
+     */
+    public int getTitleJustification() {
+        return titleJustification;
+    }
+
+    /**
+     * Returns the title-font of the titled border.
+     */
+    public Font getTitleFont() {
+        return titleFont == null
+                ? UIManager.getFont("TitledBorder.font")
+                : titleFont;
+    }
+
+    /**
+     * Returns the title-color of the titled border.
+     */
+    public Color getTitleColor() {
+        return titleColor == null
+                ? UIManager.getColor("TitledBorder.titleColor")
+                : titleColor;
+    }
+
+
+    // REMIND(aim): remove all or some of these set methods?
+
+    /**
+     * Sets the title of the titled border.
+     */
+    public void setTitle(String title) {
+        this.title = title;
+    }
+
+    /**
+     * Sets the border of the titled border.
+     */
+    public void setBorder(Border border) {
+        this.border = border;
+    }
+
+    /**
+     * Sets the title-position of the titled border.
+     * @throws IllegalArgumentException if the value is not a valid position
+     */
+    public void setTitlePosition(int titlePosition) {
+        switch (titlePosition) {
+            case ABOVE_TOP:
+            case TOP:
+            case BELOW_TOP:
+            case ABOVE_BOTTOM:
+            case BOTTOM:
+            case BELOW_BOTTOM:
+            case DEFAULT_POSITION:
+                this.titlePosition = titlePosition;
+                break;
+            default:
+                throw new IllegalArgumentException(titlePosition +
+                        " is not a valid title position.");
+        }
+    }
+
+    /**
+     * Sets the title-justification of the titled border.
+     * @throws IllegalArgumentException if the value is not a valid justification
+     */
+    public void setTitleJustification(int titleJustification) {
+        switch (titleJustification) {
+            case DEFAULT_JUSTIFICATION:
+            case LEFT:
+            case CENTER:
+            case RIGHT:
+            case LEADING:
+            case TRAILING:
+                this.titleJustification = titleJustification;
+                break;
+            default:
+                throw new IllegalArgumentException(titleJustification +
+                        " is not a valid title justification.");
+        }
+    }
+
+    /**
+     * Sets the title-font of the titled border.
+     */
+    public void setTitleFont(Font titleFont) {
+        this.titleFont = titleFont;
+    }
+
+    /**
+     * Sets the title-color of the titled border.
+     */
+    public void setTitleColor(Color titleColor) {
+        this.titleColor = titleColor;
+    }
+
+    /**
+     * Returns the minimum dimensions this border requires
+     * in order to fully display the border and title.
+     * @param c the component where this border will be drawn
+     * @return the {@code Dimension} object
+     */
+    public Dimension getMinimumSize(Component c) {
+        Insets insets = getBorderInsets(c);
+        Dimension minSize = new Dimension(insets.right+insets.left,
+                                          insets.top+insets.bottom);
+        String title = getTitle();
+        if ((title != null) && !title.isEmpty()) {
+            JLabel label = getLabel(c);
+            Dimension size = label.getPreferredSize();
+
+            int position = getPosition();
+            if ((position != ABOVE_TOP) && (position != BELOW_BOTTOM)) {
+                minSize.width += size.width;
+            }
+            else if (minSize.width < size.width) {
+                minSize.width += size.width;
+            }
+        }
+        return minSize;
+    }
+
+    /**
+     * Returns the baseline.
+     *
+     * @throws NullPointerException {@inheritDoc}
+     * @throws IllegalArgumentException {@inheritDoc}
+     * @since 1.6
+     */
+    public int getBaseline(Component c, int width, int height) {
+        if (c == null) {
+            throw new NullPointerException("Must supply non-null component");
+        }
+        if (width < 0) {
+            throw new IllegalArgumentException("Width must be >= 0");
+        }
+        if (height < 0) {
+            throw new IllegalArgumentException("Height must be >= 0");
+        }
+        Border border = getBorder();
+        String title = getTitle();
+        if ((title != null) && !title.isEmpty()) {
+            int edge = (border instanceof TitledBorder) ? 0 : EDGE_SPACING;
+            JLabel label = getLabel(c);
+            Dimension size = label.getPreferredSize();
+            Insets insets = getBorderInsets(border, c, new Insets(0, 0, 0, 0));
+
+            int baseline = label.getBaseline(size.width, size.height);
+            switch (getPosition()) {
+                case ABOVE_TOP:
+                    return baseline;
+                case TOP:
+                    insets.top = edge + (insets.top - size.height) / 2;
+                    return (insets.top < edge)
+                            ? baseline
+                            : baseline + insets.top;
+                case BELOW_TOP:
+                    return baseline + insets.top + edge;
+                case ABOVE_BOTTOM:
+                    return baseline + height - size.height - insets.bottom - edge;
+                case BOTTOM:
+                    insets.bottom = edge + (insets.bottom - size.height) / 2;
+                    return (insets.bottom < edge)
+                            ? baseline + height - size.height
+                            : baseline + height - size.height + insets.bottom;
+                case BELOW_BOTTOM:
+                    return baseline + height - size.height;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Returns an enum indicating how the baseline of the border
+     * changes as the size changes.
+     *
+     * @throws NullPointerException {@inheritDoc}
+     * @since 1.6
+     */
+    public Component.BaselineResizeBehavior getBaselineResizeBehavior(
+            Component c) {
+        super.getBaselineResizeBehavior(c);
+        switch (getPosition()) {
+            case TitledBorder.ABOVE_TOP:
+            case TitledBorder.TOP:
+            case TitledBorder.BELOW_TOP:
+                return Component.BaselineResizeBehavior.CONSTANT_ASCENT;
+            case TitledBorder.ABOVE_BOTTOM:
+            case TitledBorder.BOTTOM:
+            case TitledBorder.BELOW_BOTTOM:
+                return JComponent.BaselineResizeBehavior.CONSTANT_DESCENT;
+        }
+        return Component.BaselineResizeBehavior.OTHER;
+    }
+
+    private int getPosition() {
+        int position = getTitlePosition();
+        if (position != DEFAULT_POSITION) {
+            return position;
+        }
+        Object value = UIManager.get("TitledBorder.position");
+        if (value instanceof Integer) {
+            int i = (Integer) value;
+            if ((0 < i) && (i <= 6)) {
+                return i;
+            }
+        }
+        else if (value instanceof String) {
+            String s = (String) value;
+            if (s.equalsIgnoreCase("ABOVE_TOP")) {
+                return ABOVE_TOP;
+            }
+            if (s.equalsIgnoreCase("TOP")) {
+                return TOP;
+            }
+            if (s.equalsIgnoreCase("BELOW_TOP")) {
+                return BELOW_TOP;
+            }
+            if (s.equalsIgnoreCase("ABOVE_BOTTOM")) {
+                return ABOVE_BOTTOM;
+            }
+            if (s.equalsIgnoreCase("BOTTOM")) {
+                return BOTTOM;
+            }
+            if (s.equalsIgnoreCase("BELOW_BOTTOM")) {
+                return BELOW_BOTTOM;
+            }
+        }
+        return TOP;
+    }
+
+    private int getJustification(Component c) {
+        int justification = getTitleJustification();
+        if ((justification == LEADING) || (justification == DEFAULT_JUSTIFICATION)) {
+            return c.getComponentOrientation().isLeftToRight() ? LEFT : RIGHT;
+        }
+        if (justification == TRAILING) {
+            return c.getComponentOrientation().isLeftToRight() ? RIGHT : LEFT;
+        }
+        return justification;
+    }
+
+    protected Font getFont(Component c) {
+        Font font = getTitleFont();
+        if (font != null) {
+            return font;
+        }
+        if (c != null) {
+            font = c.getFont();
+            if (font != null) {
+                return font;
+            }
+        }
+        return new Font(Font.DIALOG, Font.PLAIN, 12);
+    }
+
+    private Color getColor(Component c) {
+        Color color = getTitleColor();
+        if (color != null) {
+            return color;
+        }
+        return (c != null)
+                ? c.getForeground()
+                : null;
+    }
+
+    private JLabel getLabel(Component c) {
+        this.label.setText(getTitle());
+        this.label.setFont(getFont(c));
+        this.label.setForeground(getColor(c));
+        this.label.setComponentOrientation(c.getComponentOrientation());
+        this.label.setEnabled(c.isEnabled());
+        return this.label;
+    }
+
+    private static Insets getBorderInsets(Border border, Component c, Insets insets) {
+        if (border == null) {
+            insets.set(0, 0, 0, 0);
+        }
+        else if (border instanceof AbstractBorder) {
+            AbstractBorder ab = (AbstractBorder) border;
+            insets = ab.getBorderInsets(c, insets);
+        }
+        else {
+            Insets i = border.getBorderInsets(c);
+            insets.set(i.top, i.left, i.bottom, i.right);
+        }
+        return insets;
+    }
 }

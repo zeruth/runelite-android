@@ -1,147 +1,1715 @@
 /*
- * Copyright (c) 2026, Tyler Bochard
- * All rights reserved.
+ * Copyright (c) 1997, 2015, Oracle and/or its affiliates. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
- * Part of android-awt, the Android shadow of the desktop JDK surface used by
- * runelite-android. Original work of this project, not derived from OpenJDK;
- * licensed under the BSD 2-Clause License (see the LICENSE file at the
- * repository root). Files ported from OpenJDK carry the OpenJDK header instead;
- * see android-awt/LICENSE.
+ * This code is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 only, as
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
+ * This code is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ * version 2 for more details (a copy is included in the LICENSE file that
+ * accompanied this code).
  *
- * 1. Redistributions of source code must retain the above copyright notice, this
- *    list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright notice,
- *    this list of conditions and the following disclaimer in the documentation
- *    and/or other materials provided with the distribution.
+ * You should have received a copy of the GNU General Public License version
+ * 2 along with this work; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
- * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
+ * or visit www.oracle.com if you need additional information or have any
+ * questions.
  */
 package javax.swing;
 
+import java.applet.Applet;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.EventQueue;
+import java.awt.FontMetrics;
+import java.awt.Graphics;
+import java.awt.Insets;
+import java.awt.KeyboardFocusManager;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.Window;
+import java.awt.event.ActionEvent;
+import java.awt.event.InputEvent;
+import java.awt.event.KeyEvent;
 import java.awt.event.MouseEvent;
+import java.awt.event.MouseWheelEvent;
+import java.lang.reflect.InvocationTargetException;
+import javax.accessibility.Accessible;
+import javax.swing.plaf.UIResource;
+import javax.swing.text.View;
 
+/**
+ * A collection of utility methods for Swing.
+ *
+ * <p>Ported from OpenJDK 8u. Where the shadow AWT core is thinner than the JDK's
+ * (no ComponentOrientation, no glyph outlines, an AccessibleContext without
+ * a child model) the method says what it answers instead.
+ *
+ * @author unknown
+ */
 public class SwingUtilities implements SwingConstants {
-    private SwingUtilities() {}
+    // BasicHTML.propertyKey and View.X_AXIS / Y_AXIS, which the shadow tree does not declare.
+    private static final String HTML_PROPERTY_KEY = "html";
+    private static final int VIEW_X_AXIS = 0;
+    private static final int VIEW_Y_AXIS = 1;
 
-    public static boolean isEventDispatchThread() { return EventQueue.isDispatchThread(); }
-    public static void invokeLater(Runnable doRun) { EventQueue.invokeLater(doRun); }
-    public static void invokeAndWait(Runnable doRun) throws InterruptedException, java.lang.reflect.InvocationTargetException {
-        EventQueue.invokeAndWait(doRun);
+    private SwingUtilities() {
+        throw new Error("SwingUtilities is just a container for static methods");
     }
 
+    /**
+     * Return true if <code>a</code> contains <code>b</code>
+     */
+    public static final boolean isRectangleContainingRectangle(Rectangle a, Rectangle b) {
+        return b.x >= a.x && (b.x + b.width) <= (a.x + a.width) &&
+                b.y >= a.y && (b.y + b.height) <= (a.y + a.height);
+    }
+
+    /**
+     * Return the rectangle (0,0,bounds.width,bounds.height) for the component <code>aComponent</code>
+     */
+    public static Rectangle getLocalBounds(Component aComponent) {
+        Rectangle b = new Rectangle(aComponent.getBounds());
+        b.x = b.y = 0;
+        return b;
+    }
+
+    /**
+     * Returns the first <code>Window </code> ancestor of <code>c</code>, or
+     * {@code null} if <code>c</code> is not contained inside a <code>Window</code>.
+     *
+     * @param c <code>Component</code> to get <code>Window</code> ancestor of.
+     * @return the first <code>Window </code> ancestor of <code>c</code>, or
+     *         {@code null} if <code>c</code> is not contained inside a <code>Window</code>.
+     * @since 1.3
+     */
     public static Window getWindowAncestor(Component c) {
-        Container p = c == null ? null : c.getParent();
-        while (p != null && !(p instanceof Window)) p = p.getParent();
-        return (Window) p;
+        for (Container p = c.getParent(); p != null; p = p.getParent()) {
+            if (p instanceof Window) {
+                return (Window) p;
+            }
+        }
+        return null;
     }
 
-    public static <T extends Container> T getAncestorOfClass(Class<T> c, Component comp) {
-        if (comp == null || c == null) return null;
-        Container p = comp.getParent();
-        while (p != null && !c.isInstance(p)) p = p.getParent();
-        @SuppressWarnings("unchecked")
-        T result = (T) p;
+    /**
+     * Converts the location <code>x</code> <code>y</code> to the
+     * parents coordinate system, returning the location.
+     */
+    static Point convertScreenLocationToParent(Container parent, int x, int y) {
+        for (Container p = parent; p != null; p = p.getParent()) {
+            if (p instanceof Window) {
+                Point point = new Point(x, y);
+                SwingUtilities.convertPointFromScreen(point, parent);
+                return point;
+            }
+        }
+        throw new Error("convertScreenLocationToParent: no window ancestor");
+    }
+
+    /**
+     * Convert a <code>aPoint</code> in <code>source</code> coordinate system to
+     * <code>destination</code> coordinate system.
+     * If <code>source</code> is {@code null}, <code>aPoint</code> is assumed to be in <code>destination</code>'s
+     * root component coordinate system.
+     * If <code>destination</code> is {@code null}, <code>aPoint</code> will be converted to <code>source</code>'s
+     * root component coordinate system.
+     * If both <code>source</code> and <code>destination</code> are {@code null}, return <code>aPoint</code>
+     * without any conversion.
+     */
+    public static Point convertPoint(Component source, Point aPoint, Component destination) {
+        Point p;
+
+        if (source == null && destination == null) {
+            return aPoint;
+        }
+        if (source == null) {
+            source = rootOf(destination);
+        }
+        p = new Point(aPoint);
+        convertPointToScreen(p, source);
+        if (destination == null) {
+            destination = rootOf(source);
+        }
+        convertPointFromScreen(p, destination);
+        return p;
+    }
+
+    /**
+     * The JDK falls back to the window ancestor and throws an Error when there is none.
+     * The sidebar host roots Swing panels outside any Window, so the topmost ancestor
+     * stands in for it there; with a Window present the answer is the JDK's.
+     */
+    private static Component rootOf(Component c) {
+        Window window = getWindowAncestor(c);
+        if (window != null) {
+            return window;
+        }
+        Component root = c;
+        while (root.getParent() != null) {
+            root = root.getParent();
+        }
+        return root;
+    }
+
+    /**
+     * Convert the point <code>(x,y)</code> in <code>source</code> coordinate system to
+     * <code>destination</code> coordinate system.
+     * If <code>source</code> is {@code null}, <code>(x,y)</code> is assumed to be in <code>destination</code>'s
+     * root component coordinate system.
+     * If <code>destination</code> is {@code null}, <code>(x,y)</code> will be converted to <code>source</code>'s
+     * root component coordinate system.
+     * If both <code>source</code> and <code>destination</code> are {@code null}, return <code>(x,y)</code>
+     * without any conversion.
+     */
+    public static Point convertPoint(Component source, int x, int y, Component destination) {
+        Point point = new Point(x, y);
+        return convertPoint(source, point, destination);
+    }
+
+    /**
+     * Convert the rectangle <code>aRectangle</code> in <code>source</code> coordinate system to
+     * <code>destination</code> coordinate system.
+     * If <code>source</code> is {@code null}, <code>aRectangle</code> is assumed to be in <code>destination</code>'s
+     * root component coordinate system.
+     * If <code>destination</code> is {@code null}, <code>aRectangle</code> will be converted to <code>source</code>'s
+     * root component coordinate system.
+     * If both <code>source</code> and <code>destination</code> are {@code null}, return <code>aRectangle</code>
+     * without any conversion.
+     */
+    public static Rectangle convertRectangle(Component source, Rectangle aRectangle, Component destination) {
+        Point point = new Point(aRectangle.x, aRectangle.y);
+        point = convertPoint(source, point, destination);
+        return new Rectangle(point.x, point.y, aRectangle.width, aRectangle.height);
+    }
+
+    /**
+     * Convenience method for searching above <code>comp</code> in the
+     * component hierarchy and returns the first object of class <code>c</code> it
+     * finds. Can return {@code null}, if a class <code>c</code> cannot be found.
+     */
+    public static Container getAncestorOfClass(Class<?> c, Component comp) {
+        if (comp == null || c == null) {
+            return null;
+        }
+
+        Container parent = comp.getParent();
+        while (parent != null && !(c.isInstance(parent))) {
+            parent = parent.getParent();
+        }
+        return parent;
+    }
+
+    /**
+     * Convenience method for searching above <code>comp</code> in the
+     * component hierarchy and returns the first object of <code>name</code> it
+     * finds. Can return {@code null}, if <code>name</code> cannot be found.
+     */
+    public static Container getAncestorNamed(String name, Component comp) {
+        if (comp == null || name == null) {
+            return null;
+        }
+
+        Container parent = comp.getParent();
+        while (parent != null && !(name.equals(parent.getName()))) {
+            parent = parent.getParent();
+        }
+        return parent;
+    }
+
+    /**
+     * Returns the deepest visible descendent Component of <code>parent</code>
+     * that contains the location <code>x</code>, <code>y</code>.
+     * If <code>parent</code> does not contain the specified location,
+     * then <code>null</code> is returned.  If <code>parent</code> is not a
+     * container, or none of <code>parent</code>'s visible descendents
+     * contain the specified location, <code>parent</code> is returned.
+     *
+     * @param parent the root component to begin the search
+     * @param x the x target location
+     * @param y the y target location
+     */
+    public static Component getDeepestComponentAt(Component parent, int x, int y) {
+        if (!contains(parent, x, y)) {
+            return null;
+        }
+        if (parent instanceof Container) {
+            Component components[] = ((Container) parent).getComponents();
+            for (Component comp : components) {
+                if (comp != null && comp.isVisible()) {
+                    Point loc = comp.getLocation();
+                    if (comp instanceof Container) {
+                        comp = getDeepestComponentAt(comp, x - loc.x, y - loc.y);
+                    } else {
+                        // Component.getComponentAt for a leaf.
+                        comp = contains(comp, x - loc.x, y - loc.y) ? comp : null;
+                    }
+                    if (comp != null && comp.isVisible()) {
+                        return comp;
+                    }
+                }
+            }
+        }
+        return parent;
+    }
+
+    // Component.contains, which the shadow Component spells only as the deprecated inside().
+    @SuppressWarnings("deprecation")
+    private static boolean contains(Component c, int x, int y) {
+        return c.inside(x, y);
+    }
+
+    /**
+     * Returns a MouseEvent similar to <code>sourceEvent</code> except that its x
+     * and y members have been converted to <code>destination</code>'s coordinate
+     * system.  If <code>source</code> is {@code null}, <code>sourceEvent</code> x and y members
+     * are assumed to be into <code>destination</code>'s root component coordinate system.
+     * If <code>destination</code> is <code>null</code>, the
+     * returned MouseEvent will be in <code>source</code>'s coordinate system.
+     * <code>sourceEvent</code> will not be changed. A new event is returned.
+     * the <code>source</code> field of the returned event will be set
+     * to <code>destination</code> if destination is non-{@code null}
+     * use the translateMouseEvent() method to translate a mouse event from
+     * one component to another without changing the source.
+     */
+    public static MouseEvent convertMouseEvent(Component source, MouseEvent sourceEvent, Component destination) {
+        Point p = convertPoint(source, new Point(sourceEvent.getX(), sourceEvent.getY()), destination);
+        Component newSource;
+
+        if (destination != null) {
+            newSource = destination;
+        } else {
+            newSource = source;
+        }
+
+        // The JDK also rebuilds MenuDragMouseEvents; the shadow tree has no such class.
+        MouseEvent newEvent;
+        if (sourceEvent instanceof MouseWheelEvent) {
+            MouseWheelEvent sourceWheelEvent = (MouseWheelEvent) sourceEvent;
+            newEvent = new MouseWheelEvent(newSource,
+                    sourceWheelEvent.getID(),
+                    sourceWheelEvent.getWhen(),
+                    sourceWheelEvent.getModifiers()
+                            | sourceWheelEvent.getModifiersEx(),
+                    p.x, p.y,
+                    sourceWheelEvent.getXOnScreen(),
+                    sourceWheelEvent.getYOnScreen(),
+                    sourceWheelEvent.getClickCount(),
+                    sourceWheelEvent.isPopupTrigger(),
+                    sourceWheelEvent.getScrollType(),
+                    sourceWheelEvent.getScrollAmount(),
+                    sourceWheelEvent.getWheelRotation(),
+                    sourceWheelEvent.getPreciseWheelRotation());
+        } else {
+            newEvent = new MouseEvent(newSource,
+                    sourceEvent.getID(),
+                    sourceEvent.getWhen(),
+                    sourceEvent.getModifiers()
+                            | sourceEvent.getModifiersEx(),
+                    p.x, p.y,
+                    sourceEvent.getXOnScreen(),
+                    sourceEvent.getYOnScreen(),
+                    sourceEvent.getClickCount(),
+                    sourceEvent.isPopupTrigger(),
+                    sourceEvent.getButton());
+        }
+        return newEvent;
+    }
+
+    /**
+     * Convert a point from a component's coordinate system to
+     * screen coordinates.
+     *
+     * @param p  a Point object (converted to the new coordinate system)
+     * @param c  a Component object
+     */
+    public static void convertPointToScreen(Point p, Component c) {
+        int x, y;
+
+        do {
+            if (c instanceof JComponent) {
+                x = c.getX();
+                y = c.getY();
+            } else if (c instanceof Applet || c instanceof Window) {
+                try {
+                    Point pp = c.getLocationOnScreen();
+                    x = pp.x;
+                    y = pp.y;
+                } catch (java.awt.IllegalComponentStateException icse) {
+                    x = c.getX();
+                    y = c.getY();
+                }
+            } else {
+                x = c.getX();
+                y = c.getY();
+            }
+
+            p.x += x;
+            p.y += y;
+
+            if (c instanceof Window || c instanceof Applet) {
+                break;
+            }
+            c = c.getParent();
+        } while (c != null);
+    }
+
+    /**
+     * Convert a point from a screen coordinates to a component's
+     * coordinate system
+     *
+     * @param p  a Point object (converted to the new coordinate system)
+     * @param c  a Component object
+     */
+    public static void convertPointFromScreen(Point p, Component c) {
+        int x, y;
+
+        do {
+            if (c instanceof JComponent) {
+                x = c.getX();
+                y = c.getY();
+            } else if (c instanceof Applet || c instanceof Window) {
+                try {
+                    Point pp = c.getLocationOnScreen();
+                    x = pp.x;
+                    y = pp.y;
+                } catch (java.awt.IllegalComponentStateException icse) {
+                    x = c.getX();
+                    y = c.getY();
+                }
+            } else {
+                x = c.getX();
+                y = c.getY();
+            }
+
+            p.x -= x;
+            p.y -= y;
+
+            if (c instanceof Window || c instanceof Applet) {
+                break;
+            }
+            c = c.getParent();
+        } while (c != null);
+    }
+
+    /**
+     * Returns the first <code>Window </code> ancestor of <code>c</code>, or
+     * {@code null} if <code>c</code> is not contained inside a <code>Window</code>.
+     * <p>
+     * Note: This method provides the same functionality as
+     * <code>getWindowAncestor</code>.
+     *
+     * @param c <code>Component</code> to get <code>Window</code> ancestor of.
+     * @return the first <code>Window </code> ancestor of <code>c</code>, or
+     *         {@code null} if <code>c</code> is not contained inside a <code>Window</code>.
+     */
+    public static Window windowForComponent(Component c) {
+        return getWindowAncestor(c);
+    }
+
+    /**
+     * Return <code>true</code> if a component <code>a</code> descends from a component <code>b</code>
+     */
+    public static boolean isDescendingFrom(Component a, Component b) {
+        if (a == b) {
+            return true;
+        }
+        for (Container p = a.getParent(); p != null; p = p.getParent()) {
+            if (p == b) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Convenience to calculate the intersection of two rectangles
+     * without allocating a new rectangle.
+     * If the two rectangles don't intersect,
+     * then the returned rectangle begins at (0,0)
+     * and has zero width and height.
+     *
+     * @param x       the X coordinate of the first rectangle's top-left point
+     * @param y       the Y coordinate of the first rectangle's top-left point
+     * @param width   the width of the first rectangle
+     * @param height  the height of the first rectangle
+     * @param dest    the second rectangle
+     *
+     * @return <code>dest</code>, modified to specify the intersection
+     */
+    public static Rectangle computeIntersection(int x, int y, int width, int height, Rectangle dest) {
+        int x1 = (x > dest.x) ? x : dest.x;
+        int x2 = ((x + width) < (dest.x + dest.width)) ? (x + width) : (dest.x + dest.width);
+        int y1 = (y > dest.y) ? y : dest.y;
+        int y2 = ((y + height) < (dest.y + dest.height) ? (y + height) : (dest.y + dest.height));
+
+        dest.x = x1;
+        dest.y = y1;
+        dest.width = x2 - x1;
+        dest.height = y2 - y1;
+
+        // If rectangles don't intersect, return zero'd intersection.
+        if (dest.width < 0 || dest.height < 0) {
+            dest.x = dest.y = dest.width = dest.height = 0;
+        }
+
+        return dest;
+    }
+
+    /**
+     * Convenience method that calculates the union of two rectangles
+     * without allocating a new rectangle.
+     *
+     * @param x the x-coordinate of the first rectangle
+     * @param y the y-coordinate of the first rectangle
+     * @param width the width of the first rectangle
+     * @param height the height of the first rectangle
+     * @param dest  the coordinates of the second rectangle; the union
+     *    of the two rectangles is returned in this rectangle
+     * @return the <code>dest</code> <code>Rectangle</code>
+     */
+    public static Rectangle computeUnion(int x, int y, int width, int height, Rectangle dest) {
+        int x1 = (x < dest.x) ? x : dest.x;
+        int x2 = ((x + width) > (dest.x + dest.width)) ? (x + width) : (dest.x + dest.width);
+        int y1 = (y < dest.y) ? y : dest.y;
+        int y2 = ((y + height) > (dest.y + dest.height)) ? (y + height) : (dest.y + dest.height);
+
+        dest.x = x1;
+        dest.y = y1;
+        dest.width = (x2 - x1);
+        dest.height = (y2 - y1);
+        return dest;
+    }
+
+    /**
+     * Convenience returning an array of rect representing the regions within
+     * <code>rectA</code> that do not overlap with <code>rectB</code>. If the
+     * two Rects do not overlap, returns an empty array
+     */
+    public static Rectangle[] computeDifference(Rectangle rectA, Rectangle rectB) {
+        if (rectB == null || !rectA.intersects(rectB) || isRectangleContainingRectangle(rectB, rectA)) {
+            return new Rectangle[0];
+        }
+
+        Rectangle t = new Rectangle();
+        Rectangle a = null, b = null, c = null, d = null;
+        Rectangle result[];
+        int rectCount = 0;
+
+        /* rectA contains rectB */
+        if (isRectangleContainingRectangle(rectA, rectB)) {
+            t.x = rectA.x; t.y = rectA.y; t.width = rectB.x - rectA.x; t.height = rectA.height;
+            if (t.width > 0 && t.height > 0) {
+                a = new Rectangle(t);
+                rectCount++;
+            }
+
+            t.x = rectB.x; t.y = rectA.y; t.width = rectB.width; t.height = rectB.y - rectA.y;
+            if (t.width > 0 && t.height > 0) {
+                b = new Rectangle(t);
+                rectCount++;
+            }
+
+            t.x = rectB.x; t.y = rectB.y + rectB.height; t.width = rectB.width;
+            t.height = rectA.y + rectA.height - (rectB.y + rectB.height);
+            if (t.width > 0 && t.height > 0) {
+                c = new Rectangle(t);
+                rectCount++;
+            }
+
+            t.x = rectB.x + rectB.width; t.y = rectA.y; t.width = rectA.x + rectA.width - (rectB.x + rectB.width);
+            t.height = rectA.height;
+            if (t.width > 0 && t.height > 0) {
+                d = new Rectangle(t);
+                rectCount++;
+            }
+        } else {
+            /* 1 */
+            if (rectB.x <= rectA.x && rectB.y <= rectA.y) {
+                if ((rectB.x + rectB.width) > (rectA.x + rectA.width)) {
+
+                    t.x = rectA.x; t.y = rectB.y + rectB.height;
+                    t.width = rectA.width; t.height = rectA.y + rectA.height - (rectB.y + rectB.height);
+                    if (t.width > 0 && t.height > 0) {
+                        a = t;
+                        rectCount++;
+                    }
+                } else if ((rectB.y + rectB.height) > (rectA.y + rectA.height)) {
+                    t.setBounds((rectB.x + rectB.width), rectA.y,
+                                (rectA.x + rectA.width) - (rectB.x + rectB.width), rectA.height);
+                    if (t.width > 0 && t.height > 0) {
+                        a = t;
+                        rectCount++;
+                    }
+                } else {
+                    t.setBounds((rectB.x + rectB.width), rectA.y,
+                                (rectA.x + rectA.width) - (rectB.x + rectB.width),
+                                (rectB.y + rectB.height) - rectA.y);
+                    if (t.width > 0 && t.height > 0) {
+                        a = new Rectangle(t);
+                        rectCount++;
+                    }
+
+                    t.setBounds(rectA.x, (rectB.y + rectB.height), rectA.width,
+                                (rectA.y + rectA.height) - (rectB.y + rectB.height));
+                    if (t.width > 0 && t.height > 0) {
+                        b = new Rectangle(t);
+                        rectCount++;
+                    }
+                }
+            } else if (rectB.x <= rectA.x && (rectB.y + rectB.height) >= (rectA.y + rectA.height)) {
+                if ((rectB.x + rectB.width) > (rectA.x + rectA.width)) {
+                    t.setBounds(rectA.x, rectA.y, rectA.width, rectB.y - rectA.y);
+                    if (t.width > 0 && t.height > 0) {
+                        a = t;
+                        rectCount++;
+                    }
+                } else {
+                    t.setBounds(rectA.x, rectA.y, rectA.width, rectB.y - rectA.y);
+                    if (t.width > 0 && t.height > 0) {
+                        a = new Rectangle(t);
+                        rectCount++;
+                    }
+                    t.setBounds((rectB.x + rectB.width), rectB.y,
+                                (rectA.x + rectA.width) - (rectB.x + rectB.width),
+                                (rectA.y + rectA.height) - rectB.y);
+                    if (t.width > 0 && t.height > 0) {
+                        b = new Rectangle(t);
+                        rectCount++;
+                    }
+                }
+            } else if (rectB.x <= rectA.x) {
+                if ((rectB.x + rectB.width) >= (rectA.x + rectA.width)) {
+                    t.setBounds(rectA.x, rectA.y, rectA.width, rectB.y - rectA.y);
+                    if (t.width > 0 && t.height > 0) {
+                        a = new Rectangle(t);
+                        rectCount++;
+                    }
+
+                    t.setBounds(rectA.x, (rectB.y + rectB.height), rectA.width,
+                                (rectA.y + rectA.height) - (rectB.y + rectB.height));
+                    if (t.width > 0 && t.height > 0) {
+                        b = new Rectangle(t);
+                        rectCount++;
+                    }
+                } else {
+                    t.setBounds(rectA.x, rectA.y, rectA.width, rectB.y - rectA.y);
+                    if (t.width > 0 && t.height > 0) {
+                        a = new Rectangle(t);
+                        rectCount++;
+                    }
+
+                    t.setBounds((rectB.x + rectB.width), rectB.y,
+                                (rectA.x + rectA.width) - (rectB.x + rectB.width),
+                                rectB.height);
+                    if (t.width > 0 && t.height > 0) {
+                        b = new Rectangle(t);
+                        rectCount++;
+                    }
+
+                    t.setBounds(rectA.x, (rectB.y + rectB.height), rectA.width,
+                                (rectA.y + rectA.height) - (rectB.y + rectB.height));
+                    if (t.width > 0 && t.height > 0) {
+                        c = new Rectangle(t);
+                        rectCount++;
+                    }
+                }
+            } else if (rectB.x <= (rectA.x + rectA.width) && (rectB.x + rectB.width) > (rectA.x + rectA.width)) {
+                if (rectB.y <= rectA.y && (rectB.y + rectB.height) > (rectA.y + rectA.height)) {
+                    t.setBounds(rectA.x, rectA.y, rectB.x - rectA.x, rectA.height);
+                    if (t.width > 0 && t.height > 0) {
+                        a = t;
+                        rectCount++;
+                    }
+                } else if (rectB.y <= rectA.y) {
+                    t.setBounds(rectA.x, rectA.y, rectB.x - rectA.x,
+                                (rectB.y + rectB.height) - rectA.y);
+                    if (t.width > 0 && t.height > 0) {
+                        a = new Rectangle(t);
+                        rectCount++;
+                    }
+
+                    t.setBounds(rectA.x, (rectB.y + rectB.height), rectA.width,
+                                (rectA.y + rectA.height) - (rectB.y + rectB.height));
+                    if (t.width > 0 && t.height > 0) {
+                        b = new Rectangle(t);
+                        rectCount++;
+                    }
+                } else if ((rectB.y + rectB.height) > (rectA.y + rectA.height)) {
+                    t.setBounds(rectA.x, rectA.y, rectA.width, rectB.y - rectA.y);
+                    if (t.width > 0 && t.height > 0) {
+                        a = new Rectangle(t);
+                        rectCount++;
+                    }
+
+                    t.setBounds(rectA.x, rectB.y, rectB.x - rectA.x,
+                                (rectA.y + rectA.height) - rectB.y);
+                    if (t.width > 0 && t.height > 0) {
+                        b = new Rectangle(t);
+                        rectCount++;
+                    }
+                } else {
+                    t.setBounds(rectA.x, rectA.y, rectA.width, rectB.y - rectA.y);
+                    if (t.width > 0 && t.height > 0) {
+                        a = new Rectangle(t);
+                        rectCount++;
+                    }
+
+                    t.setBounds(rectA.x, rectB.y, rectB.x - rectA.x,
+                                rectB.height);
+                    if (t.width > 0 && t.height > 0) {
+                        b = new Rectangle(t);
+                        rectCount++;
+                    }
+
+                    t.setBounds(rectA.x, (rectB.y + rectB.height), rectA.width,
+                                (rectA.y + rectA.height) - (rectB.y + rectB.height));
+                    if (t.width > 0 && t.height > 0) {
+                        c = new Rectangle(t);
+                        rectCount++;
+                    }
+                }
+            } else if (rectB.x >= rectA.x && (rectB.x + rectB.width) <= (rectA.x + rectA.width)) {
+                if (rectB.y <= rectA.y && (rectB.y + rectB.height) > (rectA.y + rectA.height)) {
+                    t.setBounds(rectA.x, rectA.y, rectB.x - rectA.x, rectA.height);
+                    if (t.width > 0 && t.height > 0) {
+                        a = new Rectangle(t);
+                        rectCount++;
+                    }
+                    t.setBounds((rectB.x + rectB.width), rectA.y,
+                                (rectA.x + rectA.width) - (rectB.x + rectB.width), rectA.height);
+                    if (t.width > 0 && t.height > 0) {
+                        b = new Rectangle(t);
+                        rectCount++;
+                    }
+                } else if (rectB.y <= rectA.y) {
+                    t.setBounds(rectA.x, rectA.y, rectB.x - rectA.x, rectA.height);
+                    if (t.width > 0 && t.height > 0) {
+                        a = new Rectangle(t);
+                        rectCount++;
+                    }
+
+                    t.setBounds(rectB.x, (rectB.y + rectB.height),
+                                rectB.width,
+                                (rectA.y + rectA.height) - (rectB.y + rectB.height));
+                    if (t.width > 0 && t.height > 0) {
+                        b = new Rectangle(t);
+                        rectCount++;
+                    }
+
+                    t.setBounds((rectB.x + rectB.width), rectA.y,
+                                (rectA.x + rectA.width) - (rectB.x + rectB.width), rectA.height);
+                    if (t.width > 0 && t.height > 0) {
+                        c = new Rectangle(t);
+                        rectCount++;
+                    }
+                } else {
+                    t.setBounds(rectA.x, rectA.y, rectB.x - rectA.x, rectA.height);
+                    if (t.width > 0 && t.height > 0) {
+                        a = new Rectangle(t);
+                        rectCount++;
+                    }
+
+                    t.setBounds(rectB.x, rectA.y, rectB.width,
+                                rectB.y - rectA.y);
+                    if (t.width > 0 && t.height > 0) {
+                        b = new Rectangle(t);
+                        rectCount++;
+                    }
+
+                    t.setBounds((rectB.x + rectB.width), rectA.y,
+                                (rectA.x + rectA.width) - (rectB.x + rectB.width), rectA.height);
+                    if (t.width > 0 && t.height > 0) {
+                        c = new Rectangle(t);
+                        rectCount++;
+                    }
+                }
+            }
+        }
+
+        result = new Rectangle[rectCount];
+        rectCount = 0;
+        if (a != null) {
+            result[rectCount++] = a;
+        }
+        if (b != null) {
+            result[rectCount++] = b;
+        }
+        if (c != null) {
+            result[rectCount++] = c;
+        }
+        if (d != null) {
+            result[rectCount++] = d;
+        }
         return result;
     }
 
-    public static JRootPane getRootPane(Component c) { return getAncestorOfClass(JRootPane.class, c); }
-    public static Container getRoot(Component c) {
-        Container p = c instanceof Container ? (Container) c : (c == null ? null : c.getParent());
-        while (p != null && !(p instanceof Window) && !(p instanceof java.applet.Applet)) p = p.getParent();
-        return p;
+    /**
+     * Returns true if the mouse event specifies the left mouse button.
+     *
+     * @param anEvent  a MouseEvent object
+     * @return true if the left mouse button was active
+     */
+    public static boolean isLeftMouseButton(MouseEvent anEvent) {
+        return ((anEvent.getModifiersEx() & InputEvent.BUTTON1_DOWN_MASK) != 0 ||
+                anEvent.getButton() == MouseEvent.BUTTON1);
     }
 
-    public static boolean isLeftMouseButton(MouseEvent e) { return e.getButton() == MouseEvent.BUTTON1; }
-    public static boolean isMiddleMouseButton(MouseEvent e) { return e.getButton() == MouseEvent.BUTTON2; }
-    public static boolean isRightMouseButton(MouseEvent e) { return e.getButton() == MouseEvent.BUTTON3; }
-
-    // Conversions go through Component.getLocationOnScreen, whose "screen" is the topmost
-    // ancestor's space, so they agree with MouseEvent.getLocationOnScreen. A null end is
-    // the other end's root, as the JDK falls back to the window ancestor.
-    public static Point convertPoint(Component src, Point pt, Component dest) {
-        return convertPoint(src, pt.x, pt.y, dest);
+    /**
+     * Returns true if the mouse event specifies the middle mouse button.
+     *
+     * @param anEvent  a MouseEvent object
+     * @return true if the middle mouse button was active
+     */
+    public static boolean isMiddleMouseButton(MouseEvent anEvent) {
+        return ((anEvent.getModifiersEx() & InputEvent.BUTTON2_DOWN_MASK) != 0 ||
+                anEvent.getButton() == MouseEvent.BUTTON2);
     }
 
-    public static Point convertPoint(Component src, int x, int y, Component dest) {
-        Point p = new Point(x, y);
-        if (src == dest || (src == null && dest == null)) return p;
-        convertPointToScreen(p, src != null ? src : topmost(dest));
-        convertPointFromScreen(p, dest != null ? dest : topmost(src));
-        return p;
+    /**
+     * Returns true if the mouse event specifies the right mouse button.
+     *
+     * @param anEvent  a MouseEvent object
+     * @return true if the right mouse button was active
+     */
+    public static boolean isRightMouseButton(MouseEvent anEvent) {
+        return ((anEvent.getModifiersEx() & InputEvent.BUTTON3_DOWN_MASK) != 0 ||
+                anEvent.getButton() == MouseEvent.BUTTON3);
     }
 
-    public static Rectangle convertRectangle(Component src, Rectangle r, Component dest) {
-        Point p = convertPoint(src, r.x, r.y, dest);
-        return new Rectangle(p.x, p.y, r.width, r.height);
+    /**
+     * Compute the width of the string using a font with the specified
+     * "metrics" (sizes).
+     *
+     * @param fm   a FontMetrics object to compute with
+     * @param str  the String to compute
+     * @return an int containing the string width
+     */
+    public static int computeStringWidth(FontMetrics fm, String str) {
+        return stringWidth(fm, str);
     }
 
-    public static MouseEvent convertMouseEvent(Component src, MouseEvent ev, Component dest) {
-        Point p = convertPoint(src, ev.getX(), ev.getY(), dest);
-        Component source = dest != null ? dest : src;
-        if (ev instanceof java.awt.event.MouseWheelEvent) {
-            java.awt.event.MouseWheelEvent we = (java.awt.event.MouseWheelEvent) ev;
-            return new java.awt.event.MouseWheelEvent(source, we.getID(), we.getWhen(), we.getModifiers(),
-                p.x, p.y, we.getXOnScreen(), we.getYOnScreen(), we.getClickCount(), we.isPopupTrigger(),
-                we.getScrollType(), we.getScrollAmount(), we.getWheelRotation(), we.getPreciseWheelRotation());
+    /**
+     * Compute and return the location of the icons origin, the
+     * location of origin of the text baseline, and a possibly clipped
+     * version of the compound labels string.  Locations are computed
+     * relative to the viewR rectangle.
+     * The JComponents orientation (LEADING/TRAILING) will also be taken
+     * into account and translated into LEFT/RIGHT values accordingly.
+     * The shadow Component has no ComponentOrientation, so LEADING is LEFT.
+     */
+    public static String layoutCompoundLabel(JComponent c,
+                                             FontMetrics fm,
+                                             String text,
+                                             Icon icon,
+                                             int verticalAlignment,
+                                             int horizontalAlignment,
+                                             int verticalTextPosition,
+                                             int horizontalTextPosition,
+                                             Rectangle viewR,
+                                             Rectangle iconR,
+                                             Rectangle textR,
+                                             int textIconGap) {
+        boolean orientationIsLeftToRight = true;
+        int hAlign = horizontalAlignment;
+        int hTextPos = horizontalTextPosition;
+
+        // Translate LEADING/TRAILING values in horizontalAlignment
+        // to LEFT/RIGHT values depending on the components orientation
+        switch (horizontalAlignment) {
+        case LEADING:
+            hAlign = (orientationIsLeftToRight) ? LEFT : RIGHT;
+            break;
+        case TRAILING:
+            hAlign = (orientationIsLeftToRight) ? RIGHT : LEFT;
+            break;
         }
-        return new MouseEvent(source, ev.getID(), ev.getWhen(), ev.getModifiers(), p.x, p.y,
-            ev.getXOnScreen(), ev.getYOnScreen(), ev.getClickCount(), ev.isPopupTrigger(), ev.getButton());
+
+        // Translate LEADING/TRAILING values in horizontalTextPosition
+        // to LEFT/RIGHT values depending on the components orientation
+        switch (horizontalTextPosition) {
+        case LEADING:
+            hTextPos = (orientationIsLeftToRight) ? LEFT : RIGHT;
+            break;
+        case TRAILING:
+            hTextPos = (orientationIsLeftToRight) ? RIGHT : LEFT;
+            break;
+        }
+
+        return layoutCompoundLabelImpl(c,
+                                       fm,
+                                       text,
+                                       icon,
+                                       verticalAlignment,
+                                       hAlign,
+                                       verticalTextPosition,
+                                       hTextPos,
+                                       viewR,
+                                       iconR,
+                                       textR,
+                                       textIconGap);
     }
 
-    public static void convertPointFromScreen(Point p, Component c) {
-        if (c == null) return;
-        Point origin = c.getLocationOnScreen();
-        p.x -= origin.x;
-        p.y -= origin.y;
+    /**
+     * Compute and return the location of the icons origin, the
+     * location of origin of the text baseline, and a possibly clipped
+     * version of the compound labels string.  Locations are computed
+     * relative to the viewR rectangle.
+     * This layoutCompoundLabel() does not know how to handle LEADING/TRAILING
+     * values in horizontalTextPosition (they will default to RIGHT) and in
+     * horizontalAlignment (they will default to CENTER).
+     * Use the other version of layoutCompoundLabel() instead.
+     */
+    public static String layoutCompoundLabel(FontMetrics fm,
+                                             String text,
+                                             Icon icon,
+                                             int verticalAlignment,
+                                             int horizontalAlignment,
+                                             int verticalTextPosition,
+                                             int horizontalTextPosition,
+                                             Rectangle viewR,
+                                             Rectangle iconR,
+                                             Rectangle textR,
+                                             int textIconGap) {
+        return layoutCompoundLabelImpl(null, fm, text, icon,
+                                       verticalAlignment,
+                                       horizontalAlignment,
+                                       verticalTextPosition,
+                                       horizontalTextPosition,
+                                       viewR, iconR, textR, textIconGap);
     }
 
-    public static void convertPointToScreen(Point p, Component c) {
-        if (c == null) return;
-        Point origin = c.getLocationOnScreen();
-        p.x += origin.x;
-        p.y += origin.y;
+    /**
+     * Compute and return the location of the icons origin, the
+     * location of origin of the text baseline, and a possibly clipped
+     * version of the compound labels string.  Locations are computed
+     * relative to the viewR rectangle.
+     * This layoutCompoundLabel() does not know how to handle LEADING/TRAILING
+     * values in horizontalTextPosition (they will default to RIGHT) and in
+     * horizontalAlignment (they will default to CENTER).
+     */
+    private static String layoutCompoundLabelImpl(JComponent c,
+                                                  FontMetrics fm,
+                                                  String text,
+                                                  Icon icon,
+                                                  int verticalAlignment,
+                                                  int horizontalAlignment,
+                                                  int verticalTextPosition,
+                                                  int horizontalTextPosition,
+                                                  Rectangle viewR,
+                                                  Rectangle iconR,
+                                                  Rectangle textR,
+                                                  int textIconGap) {
+        /* Initialize the icon bounds rectangle iconR.
+         */
+
+        if (icon != null) {
+            iconR.width = icon.getIconWidth();
+            iconR.height = icon.getIconHeight();
+        } else {
+            iconR.width = iconR.height = 0;
+        }
+
+        /* Initialize the text bounds rectangle textR.  If a null
+         * or and empty String was specified we substitute "" here
+         * and use 0,0,0,0 for textR.
+         */
+
+        boolean textIsEmpty = (text == null) || text.equals("");
+        // The JDK measures a left side bearing only for a leading 'W', from glyph
+        // outlines the shadow font backend does not expose; it is 0 for every other text.
+        int lsb = 0;
+        int rsb = 0;
+        /* Unless both text and icon are non-null, we effectively ignore
+         * the value of textIconGap.
+         */
+        int gap;
+
+        View v;
+        if (textIsEmpty) {
+            textR.width = textR.height = 0;
+            text = "";
+            gap = 0;
+        } else {
+            int availTextWidth;
+            gap = (icon == null) ? 0 : textIconGap;
+
+            if (horizontalTextPosition == CENTER) {
+                availTextWidth = viewR.width;
+            } else {
+                availTextWidth = viewR.width - (iconR.width + gap);
+            }
+            Object html = (c != null) ? c.getClientProperty(HTML_PROPERTY_KEY) : null;
+            v = html instanceof View ? (View) html : null;
+            if (v != null) {
+                textR.width = Math.min(availTextWidth,
+                                       (int) v.getPreferredSpan(VIEW_X_AXIS));
+                textR.height = (int) v.getPreferredSpan(VIEW_Y_AXIS);
+            } else {
+                textR.width = stringWidth(fm, text);
+                if (lsb < 0) {
+                    // If lsb is negative, add it to the width and later
+                    // adjust the x location. This gives more space than is
+                    // actually needed.
+                    textR.width -= lsb;
+                }
+                if (textR.width > availTextWidth) {
+                    text = clipString(fm, text, availTextWidth);
+                    textR.width = stringWidth(fm, text);
+                }
+                textR.height = fm.getHeight();
+            }
+        }
+
+        /* Compute textR.x,y given the verticalTextPosition and
+         * horizontalTextPosition properties
+         */
+
+        if (verticalTextPosition == TOP) {
+            if (horizontalTextPosition != CENTER) {
+                textR.y = 0;
+            } else {
+                textR.y = -(textR.height + gap);
+            }
+        } else if (verticalTextPosition == CENTER) {
+            textR.y = (iconR.height / 2) - (textR.height / 2);
+        } else { // (verticalTextPosition == BOTTOM)
+            if (horizontalTextPosition != CENTER) {
+                textR.y = iconR.height - textR.height;
+            } else {
+                textR.y = (iconR.height + gap);
+            }
+        }
+
+        if (horizontalTextPosition == LEFT) {
+            textR.x = -(textR.width + gap);
+        } else if (horizontalTextPosition == CENTER) {
+            textR.x = (iconR.width / 2) - (textR.width / 2);
+        } else { // (horizontalTextPosition == RIGHT)
+            textR.x = (iconR.width + gap);
+        }
+
+        /* labelR is the rectangle that contains iconR and textR.
+         * Move it to its proper position given the labelAlignment
+         * properties.
+         *
+         * To avoid actually allocating a Rectangle, Rectangle.union
+         * has been inlined below.
+         */
+        int labelR_x = Math.min(iconR.x, textR.x);
+        int labelR_width = Math.max(iconR.x + iconR.width,
+                                    textR.x + textR.width) - labelR_x;
+        int labelR_y = Math.min(iconR.y, textR.y);
+        int labelR_height = Math.max(iconR.y + iconR.height,
+                                     textR.y + textR.height) - labelR_y;
+
+        int dx, dy;
+
+        if (verticalAlignment == TOP) {
+            dy = viewR.y - labelR_y;
+        } else if (verticalAlignment == CENTER) {
+            dy = (viewR.y + (viewR.height / 2)) - (labelR_y + (labelR_height / 2));
+        } else { // (verticalAlignment == BOTTOM)
+            dy = (viewR.y + viewR.height) - (labelR_y + labelR_height);
+        }
+
+        if (horizontalAlignment == LEFT) {
+            dx = viewR.x - labelR_x;
+        } else if (horizontalAlignment == RIGHT) {
+            dx = (viewR.x + viewR.width) - (labelR_x + labelR_width);
+        } else { // (horizontalAlignment == CENTER)
+            dx = (viewR.x + (viewR.width / 2)) -
+                 (labelR_x + (labelR_width / 2));
+        }
+
+        /* Translate textR and glypyR by dx,dy.
+         */
+
+        textR.x += dx;
+        textR.y += dy;
+
+        iconR.x += dx;
+        iconR.y += dy;
+
+        if (lsb < 0) {
+            // lsb is negative. Shift the x location so that the text is
+            // visually drawn at the right location.
+            textR.x -= lsb;
+
+            textR.width += lsb;
+        }
+        if (rsb > 0) {
+            textR.width -= rsb;
+        }
+
+        return text;
     }
 
-    private static Component topmost(Component c) {
-        while (c != null && c.getParent() != null) c = c.getParent();
-        return c;
+    // SwingUtilities2.stringWidth without the NUMERIC_SHAPING TextLayout path.
+    private static int stringWidth(FontMetrics fm, String string) {
+        if (string == null || string.equals("")) {
+            return 0;
+        }
+        return fm.stringWidth(string);
     }
 
-    public static Rectangle computeUnion(int x, int y, int w, int h, Rectangle dest) {
-        if (dest == null) return new Rectangle(x, y, w, h);
-        dest.add(new Rectangle(x, y, w, h));
-        return dest;
-    }
-    public static Rectangle[] computeDifference(Rectangle rectA, Rectangle rectB) { return new Rectangle[0]; }
-    public static Rectangle computeIntersection(int x, int y, int width, int height, Rectangle dest) {
-        Rectangle r = dest == null ? new Rectangle() : dest;
-        Rectangle other = new Rectangle(x, y, width, height);
-        Rectangle intersect = r.intersection(other);
-        r.setBounds(intersect.x, intersect.y, intersect.width, intersect.height);
-        return r;
+    /**
+     * SwingUtilities2.clipString: the longest prefix whose per-char advances fit in
+     * the room left after "...". The JDK measures complex scripts with a
+     * LineBreakMeasurer instead; the shadow tree has none, so they take the same loop.
+     */
+    private static String clipString(FontMetrics fm, String string, int availTextWidth) {
+        String clipString = "...";
+        availTextWidth -= stringWidth(fm, clipString);
+        if (availTextWidth <= 0) {
+            // can not fit any characters
+            return clipString;
+        }
+        int width = 0;
+        for (int nChars = 0, stringLength = string.length(); nChars < stringLength; nChars++) {
+            width += fm.charWidth(string.charAt(nChars));
+            if (width > availTextWidth) {
+                string = string.substring(0, nChars);
+                break;
+            }
+        }
+        return string + clipString;
     }
 
-    public static String layoutCompoundLabel(java.awt.FontMetrics fm, String text, Icon icon, int verticalAlignment,
-                                              int horizontalAlignment, int verticalTextPosition, int horizontalTextPosition,
-                                              Rectangle viewR, Rectangle iconR, Rectangle textR, int textIconGap) {
-        return text == null ? "" : text;
+    /**
+     * Paints a component to the specified <code>Graphics</code>.
+     * This method is primarily useful to render
+     * <code>Component</code>s that don't exist as part of the visible
+     * containment hierarchy, but are used for rendering.
+     * <p>
+     * This method makes use of <code>CellRendererPane</code> to handle
+     * the actual painting, and is only recommended if you use one
+     * component for rendering. If you make use of multiple components
+     * to handle the rendering, as <code>JTable</code> does, use
+     * <code>CellRendererPane</code> directly. Otherwise, as described
+     * below, you could end up with a <code>CellRendererPane</code>
+     * per <code>Component</code>.
+     * <p>
+     * If <code>c</code>'s parent is not a <code>CellRendererPane</code>,
+     * a new <code>CellRendererPane</code> is created, <code>c</code> is
+     * added to it, and the <code>CellRendererPane</code> is added to
+     * <code>p</code>.  If <code>c</code>'s parent is a
+     * <code>CellRendererPane</code> and the <code>CellRendererPane</code>s
+     * parent is not <code>p</code>, it is added to <code>p</code>.
+     *
+     * @param g  the <code>Graphics</code> object to draw on
+     * @param c  the <code>Component</code> to draw
+     * @param p  the intermediate <code>Container</code>
+     * @param x  an int specifying the left side of the area draw in, in pixels,
+     *           measured from the left edge of the graphics context
+     * @param y  an int specifying the top of the area to draw in, in pixels
+     *           measured down from the top edge of the graphics context
+     * @param w  an int specifying the width of the area draw in, in pixels
+     * @param h  an int specifying the height of the area draw in, in pixels
+     *
+     * @see CellRendererPane
+     * @see java.awt.Component#isLightweight
+     */
+    public static void paintComponent(Graphics g, Component c, Container p, int x, int y, int w, int h) {
+        getCellRendererPane(c, p).paintComponent(g, c, p, x, y, w, h, false);
+    }
+
+    /**
+     * Paints a component to the specified <code>Graphics</code>.  This
+     * is a cover method for
+     * {@link #paintComponent(Graphics,Component,Container,int,int,int,int)}.
+     * Refer to it for more information.
+     *
+     * @param g  the <code>Graphics</code> object to draw on
+     * @param c  the <code>Component</code> to draw
+     * @param p  the intermediate <code>Container</code>
+     * @param r  the <code>Rectangle</code> to draw in
+     *
+     * @see #paintComponent(Graphics,Component,Container,int,int,int,int)
+     * @see CellRendererPane
+     */
+    public static void paintComponent(Graphics g, Component c, Container p, Rectangle r) {
+        paintComponent(g, c, p, r.x, r.y, r.width, r.height);
+    }
+
+    /*
+     * Ensures that cell renderer <code>c</code> has a
+     * <code>ComponentShell</code> parent and that
+     * the shell's parent is p.
+     */
+    private static CellRendererPane getCellRendererPane(Component c, Container p) {
+        Container shell = c.getParent();
+        if (shell instanceof CellRendererPane) {
+            if (shell.getParent() != p) {
+                p.add(shell);
+            }
+        } else {
+            shell = new CellRendererPane();
+            shell.add(c);
+            p.add(shell);
+        }
+        return (CellRendererPane) shell;
+    }
+
+    /**
+     * A simple minded look and feel change: ask each node in the tree
+     * to <code>updateUI()</code> -- that is, to initialize its UI property
+     * with the current look and feel.
+     */
+    public static void updateComponentTreeUI(Component c) {
+        updateComponentTreeUI0(c);
+        c.invalidate();
+        c.validate();
+        c.repaint();
+    }
+
+    /**
+     * Updates the UI of a renderer or editor that is not in the component
+     * hierarchy (JTree's cell renderer and editor) on a look and feel change.
+     */
+    static void updateRendererOrEditorUI(Object rendererOrEditor) {
+        if (rendererOrEditor == null) {
+            return;
+        }
+
+        Component component = null;
+
+        if (rendererOrEditor instanceof Component) {
+            component = (Component)rendererOrEditor;
+        }
+        if (rendererOrEditor instanceof DefaultCellEditor) {
+            component = ((DefaultCellEditor)rendererOrEditor).getComponent();
+        }
+
+        if (component != null) {
+            SwingUtilities.updateComponentTreeUI(component);
+        }
+    }
+
+    private static void updateComponentTreeUI0(Component c) {
+        if (c instanceof JComponent) {
+            JComponent jc = (JComponent) c;
+            jc.updateUI();
+            JPopupMenu jpm = jc.getComponentPopupMenu();
+            if (jpm != null) {
+                updateComponentTreeUI(jpm);
+            }
+        }
+        Component[] children = null;
+        if (c instanceof JMenu) {
+            children = ((JMenu) c).getMenuComponents();
+        } else if (c instanceof Container) {
+            children = ((Container) c).getComponents();
+        }
+        if (children != null) {
+            for (Component child : children) {
+                updateComponentTreeUI0(child);
+            }
+        }
+    }
+
+    /**
+     * Causes <i>doRun.run()</i> to be executed asynchronously on the
+     * AWT event dispatching thread.  This will happen after all
+     * pending AWT events have been processed.
+     *
+     * @see #invokeAndWait
+     */
+    public static void invokeLater(Runnable doRun) {
+        EventQueue.invokeLater(doRun);
+    }
+
+    /**
+     * Causes <code>doRun.run()</code> to be executed synchronously on the
+     * AWT event dispatching thread.  This call blocks until
+     * all pending AWT events have been processed and (then)
+     * <code>doRun.run()</code> returns. An exception thrown by
+     * <code>doRun.run()</code> is rethrown as the cause of an
+     * <code>InvocationTargetException</code>.
+     *
+     * @exception  InterruptedException if we're interrupted while waiting for
+     *             the event dispatching thread to finish executing
+     *             <code>doRun.run()</code>
+     * @exception  InvocationTargetException  if an exception is thrown
+     *             while running <code>doRun</code>
+     *
+     * @see #invokeLater
+     */
+    public static void invokeAndWait(final Runnable doRun) throws InterruptedException, InvocationTargetException {
+        EventQueue.invokeAndWait(doRun);
+    }
+
+    /**
+     * Returns true if the current thread is an AWT event dispatching thread.
+     * <p>
+     * As of 1.3 this method is just a cover for
+     * <code>java.awt.EventQueue.isDispatchThread()</code>.
+     *
+     * @return true if the current thread is an AWT event dispatching thread
+     */
+    public static boolean isEventDispatchThread() {
+        return EventQueue.isDispatchThread();
+    }
+
+    /*
+     * The shadow AccessibleContext carries no child or component model, so the
+     * getAccessible* methods answer from the component tree with the rules of the JDK's
+     * AccessibleAWTContainer (children are the Accessible child components).
+     * getAccessibleStateSet is absent until javax.accessibility.AccessibleStateSet is
+     * shadowed.
+     */
+
+    /**
+     * Get the index of this object in its accessible parent.<p>
+     *
+     * @return -1 of this object does not have an accessible parent.
+     * Otherwise, the index of the child in its accessible parent.
+     */
+    public static int getAccessibleIndexInParent(Component c) {
+        int index = -1;
+        Container parent = c.getParent();
+        if (parent != null && parent instanceof Accessible) {
+            Component ca[] = parent.getComponents();
+            for (int i = 0; i < ca.length; i++) {
+                if (ca[i] instanceof Accessible) {
+                    index++;
+                }
+                if (c.equals(ca[i])) {
+                    return index;
+                }
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Returns the <code>Accessible</code> child contained at the
+     * local coordinate <code>Point</code>, if one exists.
+     * Otherwise returns <code>null</code>.
+     *
+     * @return the <code>Accessible</code> at the specified location,
+     *    if it exists; otherwise <code>null</code>
+     */
+    public static Accessible getAccessibleAt(Component c, Point p) {
+        if (c instanceof Accessible) {
+            if (c instanceof Container) {
+                for (Component child : ((Container) c).getComponents()) {
+                    if (child instanceof Accessible && child.isShowing()) {
+                        Point location = child.getLocation();
+                        if (contains(child, p.x - location.x, p.y - location.y)) {
+                            return (Accessible) child;
+                        }
+                    }
+                }
+            }
+            return (Accessible) c;
+        }
+        if (c instanceof Container) {
+            Component ret = c;
+            if (!contains(c, p.x, p.y)) {
+                ret = null;
+            } else {
+                for (Component comp : ((Container) c).getComponents()) {
+                    if (comp != null && comp.isShowing()) {
+                        Point location = comp.getLocation();
+                        if (contains(comp, p.x - location.x, p.y - location.y)) {
+                            ret = comp;
+                        }
+                    }
+                }
+            }
+            if (ret instanceof Accessible) {
+                return (Accessible) ret;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Returns the number of accessible children in the object.  If all
+     * of the children of this object implement <code>Accessible</code>,
+     * then this method should return the number of children of this object.
+     *
+     * @return the number of accessible children in the object.
+     */
+    public static int getAccessibleChildrenCount(Component c) {
+        int count = 0;
+        if (c instanceof Container) {
+            for (Component child : ((Container) c).getComponents()) {
+                if (child instanceof Accessible) {
+                    count++;
+                }
+            }
+        }
+        return count;
+    }
+
+    /**
+     * Return the nth Accessible child of the object.
+     *
+     * @param i zero-based index of child
+     * @return the nth Accessible child of the object
+     */
+    public static Accessible getAccessibleChild(Component c, int i) {
+        if (c instanceof Container) {
+            int count = 0;
+            for (Component child : ((Container) c).getComponents()) {
+                if (child instanceof Accessible) {
+                    if (count == i) {
+                        return (Accessible) child;
+                    }
+                    count++;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Return the child <code>Component</code> of the specified
+     * <code>Component</code> that is the focus owner, if any.
+     *
+     * @param c the root of the <code>Component</code> hierarchy to
+     *        search for the focus owner
+     * @return the focus owner, or <code>null</code> if there is no focus
+     *         owner, or if the focus owner is not <code>comp</code>, or a
+     *         descendant of <code>comp</code>
+     *
+     * @deprecated As of 1.4, replaced by
+     *   <code>KeyboardFocusManager.getFocusOwner()</code>.
+     */
+    @Deprecated
+    public static Component findFocusOwner(Component c) {
+        Component focusOwner = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
+
+        // verify focusOwner is a descendant of c
+        for (Component temp = focusOwner; temp != null;
+             temp = (temp instanceof Window) ? null : temp.getParent()) {
+            if (temp == c) {
+                return focusOwner;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * If c is a JRootPane descendant return its JRootPane ancestor.
+     * If c is a RootPaneContainer then return its JRootPane.
+     * @return the JRootPane for Component c or {@code null}.
+     */
+    public static JRootPane getRootPane(Component c) {
+        if (c instanceof RootPaneContainer) {
+            return ((RootPaneContainer) c).getRootPane();
+        }
+        for ( ; c != null; c = c.getParent()) {
+            if (c instanceof JRootPane) {
+                return (JRootPane) c;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Returns the root component for the current component tree.
+     * @return the first ancestor of c that's a Window or the last Applet ancestor
+     */
+    public static Component getRoot(Component c) {
+        Component applet = null;
+        for (Component p = c; p != null; p = p.getParent()) {
+            if (p instanceof Window) {
+                return p;
+            }
+            if (p instanceof Applet) {
+                applet = p;
+            }
+        }
+        return applet;
+    }
+
+    /**
+     * Process the key bindings for the <code>Component</code> associated with
+     * <code>event</code>. This method is only useful if
+     * <code>event.getComponent()</code> does not descend from
+     * <code>JComponent</code>, or your are not invoking
+     * <code>super.processKeyEvent</code> from within your
+     * <code>JComponent</code> subclass. <code>JComponent</code>
+     * automatically processes bindings from within its
+     * <code>processKeyEvent</code> method, hence you rarely need
+     * to directly invoke this method.
+     *
+     * @param event KeyEvent used to identify which bindings to process, as
+     *              well as which Component has focus.
+     * @return true if a binding has found and processed
+     * @since 1.4
+     */
+    public static boolean processKeyBindings(KeyEvent event) {
+        if (event != null) {
+            if (event.isConsumed()) {
+                return false;
+            }
+
+            Component component = event.getComponent();
+            boolean pressed = (event.getID() == KeyEvent.KEY_PRESSED);
+
+            if (!isValidKeyEventForKeyBindings(event)) {
+                return false;
+            }
+            // Find the first JComponent in the ancestor hierarchy, and
+            // invoke processKeyBindings on it
+            while (component != null) {
+                if (component instanceof JComponent) {
+                    return ((JComponent) component).processKeyBindings(event, pressed);
+                }
+                if ((component instanceof Applet) || (component instanceof Window)) {
+                    // No JComponents, if Window or Applet parent, process
+                    // WHEN_IN_FOCUSED_WINDOW bindings.
+                    return JComponent.processKeyBindingsForAllComponents(event, (Container) component, pressed);
+                }
+                component = component.getParent();
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Returns true if the <code>e</code> is a valid KeyEvent to use in
+     * processing the key bindings associated with JComponents.
+     */
+    static boolean isValidKeyEventForKeyBindings(KeyEvent e) {
+        if (e.getID() == KeyEvent.KEY_TYPED) {
+            int mod = e.getModifiers();
+            if (((mod & java.awt.event.ActionEvent.ALT_MASK) != 0)
+                    && ((mod & java.awt.event.ActionEvent.CTRL_MASK) == 0)) {
+                // filter out ALT-KEY_TYPED events
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Invokes <code>actionPerformed</code> on <code>action</code> if
+     * <code>action</code> is enabled (and non-{@code null}). The command for the
+     * ActionEvent is determined by:
+     * <ol>
+     *   <li>If the action was registered via
+     *       <code>registerKeyboardAction</code>, then the command string
+     *       passed in ({@code null} will be used if {@code null} was passed in).
+     *   <li>Action value with name Action.ACTION_COMMAND_KEY, unless {@code null}.
+     *   <li>String value of the KeyEvent, unless <code>getKeyChar</code>
+     *       returns KeyEvent.CHAR_UNDEFINED..
+     * </ol>
+     * This will return true if <code>action</code> is non-{@code null} and
+     * actionPerformed is invoked on it.
+     *
+     * @since 1.3
+     */
+    public static boolean notifyAction(Action action, KeyStroke ks, KeyEvent event, Object sender, int modifiers) {
+        if (action == null) {
+            return false;
+        }
+        // The JDK asks sun.swing.UIAction.isEnabled(sender) first; the shadow tree has no UIAction.
+        if (!action.isEnabled()) {
+            return false;
+        }
+        Object commandO;
+        boolean stayNull;
+
+        // Get the command object.
+        commandO = action.getValue(Action.ACTION_COMMAND_KEY);
+        if (commandO == null && (action instanceof JComponent.ActionStandin)) {
+            // ActionStandin is used for historical reasons to support
+            // registerKeyboardAction with a null value.
+            stayNull = true;
+        } else {
+            stayNull = false;
+        }
+
+        // Convert it to a string.
+        String command;
+
+        if (commandO != null) {
+            command = commandO.toString();
+        } else if (!stayNull && event.getKeyChar() != KeyEvent.CHAR_UNDEFINED) {
+            command = String.valueOf(event.getKeyChar());
+        } else {
+            // Do null for undefined chars, or if registerKeyboardAction
+            // was called with a null.
+            command = null;
+        }
+        action.actionPerformed(new ActionEvent(sender,
+                ActionEvent.ACTION_PERFORMED, command, event.getWhen(),
+                modifiers));
+        return true;
+    }
+
+    /**
+     * Convenience method to change the UI InputMap for <code>component</code>
+     * to <code>uiInputMap</code>. If <code>uiInputMap</code> is {@code null},
+     * this removes any previously installed UI InputMap.
+     *
+     * @since 1.3
+     */
+    public static void replaceUIInputMap(JComponent component, int type, InputMap uiInputMap) {
+        InputMap map = component.getInputMap(type, (uiInputMap != null));
+
+        while (map != null) {
+            InputMap parent = map.getParent();
+            if (parent == null || (parent instanceof UIResource)) {
+                map.setParent(uiInputMap);
+                return;
+            }
+            map = parent;
+        }
+    }
+
+    /**
+     * Convenience method to change the UI ActionMap for <code>component</code>
+     * to <code>uiActionMap</code>. If <code>uiActionMap</code> is {@code null},
+     * this removes any previously installed UI ActionMap.
+     *
+     * @since 1.3
+     */
+    public static void replaceUIActionMap(JComponent component, ActionMap uiActionMap) {
+        ActionMap map = component.getActionMap((uiActionMap != null));
+
+        while (map != null) {
+            ActionMap parent = map.getParent();
+            if (parent == null || (parent instanceof UIResource)) {
+                map.setParent(uiActionMap);
+                return;
+            }
+            map = parent;
+        }
+    }
+
+    /**
+     * Returns the InputMap provided by the UI for condition
+     * <code>condition</code> in component <code>component</code>.
+     * <p>This will return {@code null} if the UI has not installed a InputMap
+     * of the specified type.
+     *
+     * @since 1.3
+     */
+    public static InputMap getUIInputMap(JComponent component, int condition) {
+        InputMap map = component.getInputMap(condition, false);
+        while (map != null) {
+            InputMap parent = map.getParent();
+            if (parent instanceof UIResource) {
+                return parent;
+            }
+            map = parent;
+        }
+        return null;
+    }
+
+    /**
+     * Returns the ActionMap provided by the UI
+     * in component <code>component</code>.
+     * <p>This will return {@code null} if the UI has not installed an ActionMap.
+     *
+     * @since 1.3
+     */
+    public static ActionMap getUIActionMap(JComponent component) {
+        ActionMap map = component.getActionMap(false);
+        while (map != null) {
+            ActionMap parent = map.getParent();
+            if (parent instanceof UIResource) {
+                return parent;
+            }
+            map = parent;
+        }
+        return null;
+    }
+
+    /**
+     * Stores the position and size of
+     * the inner painting area of the specified component
+     * in <code>r</code> and returns <code>r</code>.
+     * The position and size specify the bounds of the component,
+     * adjusted so as not to include the border area (the insets).
+     * This method is useful for classes
+     * that implement painting code.
+     *
+     * @param c  the JComponent in question; if {@code null}, this method returns {@code null}
+     * @param r  the Rectangle instance to be modified;
+     *           may be {@code null}
+     * @return {@code null} if the Component is {@code null};
+     *         otherwise, returns the passed-in rectangle (if non-{@code null})
+     *         or a new rectangle specifying position and size information
+     *
+     * @since 1.4
+     */
+    public static Rectangle calculateInnerArea(JComponent c, Rectangle r) {
+        if (c == null) {
+            return null;
+        }
+        Rectangle rect = r;
+        Insets insets = c.getInsets();
+
+        if (rect == null) {
+            rect = new Rectangle();
+        }
+
+        rect.x = insets.left;
+        rect.y = insets.top;
+        rect.width = c.getWidth() - insets.left - insets.right;
+        rect.height = c.getHeight() - insets.top - insets.bottom;
+
+        return rect;
+    }
+
+    /**
+     * Returns the first ancestor of the {@code component}
+     * which is not an instance of {@code JLayer}.
+     *
+     * @param component {@code Component} to get
+     * the first ancestor of, which is not a {@code JLayer} instance.
+     *
+     * @return the first ancestor of the {@code component}
+     * which is not an instance of {@code JLayer}.
+     * If such an ancestor can not be found, {@code null} is returned.
+     *
+     * @throws NullPointerException if {@code component} is {@code null}
+     *
+     * @since 1.7
+     */
+    public static Container getUnwrappedParent(Component component) {
+        Container parent = component.getParent();
+        while (parent instanceof JLayer) {
+            parent = parent.getParent();
+        }
+        return parent;
+    }
+
+    /**
+     * Returns the first {@code JViewport}'s descendant
+     * which is not an instance of {@code JLayer}.
+     *
+     * @param viewport {@code JViewport} to get the first descendant of,
+     * which in not a {@code JLayer} instance.
+     *
+     * @return the first {@code JViewport}'s descendant
+     * which is not an instance of {@code JLayer}.
+     * If such a descendant can not be found, {@code null} is returned.
+     *
+     * @throws NullPointerException if {@code viewport} is {@code null}
+     *
+     * @since 1.7
+     */
+    public static Component getUnwrappedView(JViewport viewport) {
+        Component view = viewport.getView();
+        while (view instanceof JLayer) {
+            view = ((JLayer) view).getView();
+        }
+        return view;
     }
 }

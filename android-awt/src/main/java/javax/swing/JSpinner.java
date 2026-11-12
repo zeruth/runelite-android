@@ -32,7 +32,25 @@ package javax.swing;
 
 import javax.swing.event.ChangeListener;
 
-public class JSpinner extends JComponent {
+public class JSpinner extends JComponent implements javax.accessibility.Accessible {
+    private static final String uiClassID = "SpinnerUI";
+    public javax.swing.plaf.SpinnerUI getUI() { return (javax.swing.plaf.SpinnerUI) ui; }
+    public void setUI(javax.swing.plaf.SpinnerUI ui) { super.setUI(ui); }
+    public String getUIClassID() { return uiClassID; }
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJSpinner();
+        }
+        return accessibleContext;
+    }
+
+    /** Accessibility support for spinners: role SPIN_BOX. */
+    protected class AccessibleJSpinner extends AccessibleJComponent {
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.SPIN_BOX;
+        }
+    }
     private static final long serialVersionUID = 1L;
 
     public static class DefaultEditor extends JPanel implements ChangeListener, java.beans.PropertyChangeListener {

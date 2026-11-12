@@ -34,8 +34,36 @@ import javax.swing.text.Document;
 import javax.swing.text.Element;
 
 public interface DocumentEvent {
-    enum EventType {
-        INSERT, REMOVE, CHANGE
+    /**
+     * Enumeration for document event types. A typesafe-enum class rather than a Java
+     * enum, as in the JDK: plugins compiled against the JDK reference the constants
+     * as static fields of a final class and call its {@code toString}.
+     */
+    final class EventType {
+
+        private EventType(String s) {
+            typeString = s;
+        }
+
+        /** Insert type. */
+        public static final EventType INSERT = new EventType("INSERT");
+
+        /** Remove type. */
+        public static final EventType REMOVE = new EventType("REMOVE");
+
+        /** Change type. */
+        public static final EventType CHANGE = new EventType("CHANGE");
+
+        /**
+         * Converts the type to a string.
+         *
+         * @return the string
+         */
+        public String toString() {
+            return typeString;
+        }
+
+        private String typeString;
     }
 
     int getOffset();

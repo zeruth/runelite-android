@@ -1,5 +1,4 @@
 /*
- * Copyright (c) 1997, 1999, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -22,22 +21,38 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
+
+/*
+    Created by gbp, October 25, 1997
+
+ *
+ */
+/*
+ **********************************************************************
+ **********************************************************************
+ **********************************************************************
+ *** COPYRIGHT (c) Eastman Kodak Company, 1997                      ***
+ *** As  an unpublished  work pursuant to Title 17 of the United    ***
+ *** States Code.  All rights reserved.                             ***
+ **********************************************************************
+ **********************************************************************
+ **********************************************************************/
+
+
 package java.awt.color;
+
 
 /**
  * This exception is thrown if the native CMM returns an error.
- * On Android there is no native CMM; the matrix approximation in
- * {@code net.runelite.awt.impl.MatrixCMM} throws it for profiles it
- * cannot model (LUT-based and device link profiles).
  */
+
 public class CMMException extends java.lang.RuntimeException {
-    private static final long serialVersionUID = 5775558044142994965L;
 
     /**
-     * Constructs a CMMException with the specified detail message.
-     * @param s the specified detail message
+     *  Constructs a CMMException with the specified detail message.
+     *  @param s the specified detail message
      */
-    public CMMException(String s) {
-        super(s);
+    public CMMException (String s) {
+        super (s);
     }
 }

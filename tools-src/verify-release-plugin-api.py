@@ -7,10 +7,42 @@ import struct
 import zipfile
 
 
-PREFIXES = ("joptsimple/", "com/google/protobuf/")
+# The host libraries hub plugins link by name (android/build.gradle.kts verifyReleasePluginApi
+# passes their jars): R8 must keep every public/protected member, including the guava-jre
+# default methods and the Discord binding types DiscordService exposes.
+PREFIXES = ("joptsimple/", "com/google/protobuf/", "com/google/common/", "com/google/gson/",
+            "okhttp3/", "okio/", "org/slf4j/", "net/runelite/discord/")
 # Runtime D8 can introduce these interfaces even when APK code never names them.
 RUNTIME_CLASSES = ("j$/util/Collection", "j$/util/concurrent/Flow$Publisher",
                    "j$/util/concurrent/Flow$Subscriber", "j$/util/concurrent/Flow$Subscription")
+# Guava-jre-only default methods hub plugins call. Both the library jar and the APK must have
+# them: the jar check fails when Gradle resolved the guava-android variant under the same
+# module id (the generic comparison would then pass against the wrong flavour), the APK
+# check fails when R8 or desugaring dropped or rewrote them.
+JRE_FLAVOUR_MEMBERS = (
+    ("com/google/common/collect/Multiset", ("method", "forEachEntry", "(Ljava/util/function/ObjIntConsumer;)V")),
+    ("com/google/common/collect/Multimap", ("method", "forEach", "(Ljava/util/function/BiConsumer;)V")),
+)
+# The Cache/LoadingCache java.util.function members (andThen, compose, test, get) are not
+# declared by guava: the JRE flavour's base types extend the java.util.function interfaces and
+# inherit their defaults, so the supertype edge is what must exist in the jar and survive R8.
+JRE_FLAVOUR_INTERFACES = (
+    ("com/google/common/base/Function", "java/util/function/Function"),
+    ("com/google/common/base/Predicate", "java/util/function/Predicate"),
+    ("com/google/common/base/Supplier", "java/util/function/Supplier"),
+    ("com/google/common/cache/LoadingCache", "com/google/common/base/Function"),
+)
+# JDK classes newer than minSdk 26 (ClassValue API 34, VarHandle API 33). Guava classes naming
+# them load on older devices only behind guava's own fallbacks; the verifier lists them so
+# each run shows which guava paths that device check has to exercise.
+ABOVE_MIN_SDK = ("java/lang/ClassValue", "java/lang/invoke/VarHandle")
+# Client members hub plugins call that come from code generation (Lombok @Getter), so no
+# library jar states them; the APK alone must carry them.
+APK_MEMBERS = (
+    ("net/runelite/client/discord/DiscordService",
+     ("method", "getCurrentUser", "()Lnet/runelite/discord/DiscordUser;")),
+)
+APK_CLASSES = frozenset(name for name, _ in APK_MEMBERS)
 
 
 def class_api(data):
@@ -44,8 +76,10 @@ def class_api(data):
         index += 1
     access, owner, _ = read("HHH")
     name = pool[pool[owner]]
-    interfaces = read("H")
-    pos += 2 * interfaces
+    interfaces = tuple(pool[pool[read("H")]] for _ in range(read("H")))
+    # Utf8 entries carry every class, descriptor and signature the class names.
+    newer = tuple(api for api in ABOVE_MIN_SDK
+                  if any(isinstance(entry, str) and api in entry for entry in pool))
     members = {}
     for kind in ("field", "method"):
         for _ in range(read("H")):
@@ -58,7 +92,7 @@ def class_api(data):
                 read("H")
                 size = read("I")
                 pos += size
-    return name, access, members
+    return name, access, members, interfaces, newer
 
 
 def dex_api(data):
@@ -97,9 +131,10 @@ def dex_api(data):
     for i in range(u4(96)):
         offset = u4(100) + i * 32
         name = types[u4(offset)][1:-1]
-        if not name.startswith(PREFIXES) and name not in RUNTIME_CLASSES:
+        if not name.startswith(PREFIXES) and name not in RUNTIME_CLASSES and name not in APK_CLASSES:
             continue
         access = u4(offset + 4)
+        interfaces = tuple(entry[1:-1] for entry in typelist(u4(offset + 12)))
         pos = u4(offset + 24)
         members = {}
         if pos:
@@ -116,7 +151,7 @@ def dex_api(data):
                     if group >= 2:
                         _, pos = leb(pos)
                     members[(fields if group < 2 else methods)[index]] = flags
-        result[name] = access, members
+        result[name] = access, members, interfaces
     return result
 
 
@@ -126,14 +161,19 @@ def main():
     parser.add_argument("--library-jar", type=pathlib.Path, action="append", required=True)
     args = parser.parse_args()
     expected = {}
+    expected_interfaces = {}
+    above_min_sdk = {}
     for jar in args.library_jar:
         with zipfile.ZipFile(jar) as archive:
             for entry in archive.namelist():
                 if entry.startswith(PREFIXES) and entry.endswith(".class"):
-                    name, access, members = class_api(archive.read(entry))
+                    name, access, members, interfaces, newer = class_api(archive.read(entry))
                     if name in expected and expected[name] != (access, members):
                         raise ValueError("Conflicting input API for " + name)
                     expected[name] = access, members
+                    expected_interfaces[name] = interfaces
+                    if newer and name.startswith("com/google/common/"):
+                        above_min_sdk[name] = newer
     for prefix in PREFIXES:
         if not any(name.startswith(prefix) for name in expected):
             raise ValueError("No reference classes found for " + prefix)
@@ -143,12 +183,28 @@ def main():
             if re.fullmatch(r"classes\d*\.dex", entry):
                 actual.update(dex_api(archive.read(entry)))
     failures = ["Missing runtime class " + name for name in RUNTIME_CLASSES if name not in actual]
+    for name, member in JRE_FLAVOUR_MEMBERS:
+        signature = name + "." + member[1] + member[2]
+        if member not in expected.get(name, (0, {}))[1]:
+            failures.append("Library guava is not the -jre flavour, lacks " + signature)
+        if member not in actual.get(name, (0, {}))[1]:
+            failures.append("APK lacks guava-jre member " + signature)
+    for name, interface in JRE_FLAVOUR_INTERFACES:
+        edge = name + " extends " + interface
+        if interface not in expected_interfaces.get(name, ()):
+            failures.append("Library guava is not the -jre flavour, lacks " + edge)
+        if name not in actual or interface not in actual[name][2]:
+            failures.append("APK lacks guava-jre supertype " + edge)
+    for name, member in APK_MEMBERS:
+        received = actual.get(name, (0, {}))[1].get(member)
+        if received is None or not received & 1:
+            failures.append("APK lacks public " + name + "." + member[1] + member[2])
     member_count = 0
     for name, (access, members) in expected.items():
         if name not in actual:
             failures.append("Missing class " + name)
             continue
-        actual_access, actual_members = actual[name]
+        actual_access, actual_members = actual[name][:2]
         if access & 1 and not actual_access & 1:
             failures.append("Class no longer public " + name)
         for member, flags in members.items():
@@ -158,6 +214,8 @@ def main():
                 failures.append("Missing " + name + "." + member[1] + member[2])
             elif (flags & 8) != (received & 8) or (flags & 1 and not received & 1) or not received & 5:
                 failures.append("Incompatible access/static kind " + name + "." + member[1] + member[2])
+    for name in sorted(above_min_sdk):
+        print("NOTE: %s names %s (above minSdk 26)" % (name, ", ".join(above_min_sdk[name])))
     if failures:
         print("\n".join(failures[:80]))
         raise SystemExit("FAIL: %d external API mismatches" % len(failures))

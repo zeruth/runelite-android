@@ -2,6 +2,7 @@ import java.security.KeyStore
 import java.security.MessageDigest
 import java.security.cert.X509Certificate
 import java.util.Properties
+import org.gradle.api.attributes.java.TargetJvmEnvironment
 
 // Android target is opt-in: it requires the Android SDK plus either ANDROID_HOME (or
 // ANDROID_SDK_ROOT) or an sdk.dir entry in local.properties. When opted in, you also
@@ -89,9 +90,17 @@ tasks.register("writeReleaseVersion") {
     }
 }
 
+// Guava's JRE flavour: hub plugins compile against runelite-client's guava-jre and call the
+// default methods guava-android leaves out (Multiset.forEachEntry, Multimap.forEach, the
+// java.util.function Cache/LoadingCache members). minSdk 26 has java.util.function and
+// streams natively. Guava's module metadata picks the flavour from
+// org.gradle.jvm.environment, which AGP sets to android, so the version string alone would
+// still resolve the android jar; the constraint in the dependencies block below asks for
+// the standard-jvm variant.
+val guavaJre = "com.google.guava:guava:33.6.0-jre"
 configurations.all {
     resolutionStrategy.force(
-        "com.google.guava:guava:33.6.0-android",
+        guavaJre,
         // Guava's own placeholder for the ListenableFuture split artifact. AGP 9 no longer adds
         // dependency constraints (android.dependency.useConstraints defaults to false), so the
         // real listenablefuture:1.0 some transitive dependency asks for surfaced as a duplicate
@@ -99,6 +108,35 @@ configurations.all {
         "com.google.guava:listenablefuture:9999.0-empty-to-avoid-conflict-with-guava"
     )
 }
+
+// Hub plugins link these by name against the host, as they do against runelite-client's
+// classpath on desktop, so the APK ships the versions runelite-client resolves: okhttp
+// through http-api, slf4j/logback from the catalog. None of the app's other dependencies
+// (Compose, Firebase, play-services, r8, asm, tomlj, flatlaf, sqlite-jdbc) asks for okhttp 4
+// or slf4j 2, so the force only holds them if a future dependency does. Only the app's own
+// classpaths: AGP's tool configurations (lint, R8) bring their own.
+// tools-src/hub-compat-scan.py takes each host version from build/hub-compat/
+// releaseRuntimeClasspath.txt (`:android:dependencies --configuration releaseRuntimeClasspath`
+// output) when that file exists; without it, from the literal "group:artifact:version"
+// strings in this file (guavaJre, okhttp), then libs.versions.toml (slf4j, logback), then the
+// newest jar in the gradle cache.
+//
+// okio is not forced. Firebase sessions persist through androidx DataStore, which needs
+// okio 3, and `-dontwarn okio.**` would let R8 pass a forced okio 1 and break DataStore
+// at run time. okio 2+ keeps okio 1's public Java API. What it drops (Buffer.writableSegment,
+// AsyncTimeout.exit(boolean)/exit(IOException)) is package-private, so only classes in
+// package okio call it: a plugin's shaded okio copy, whose classes are either shadowed by
+// the host's or never load. okhttp 3.14.9 asks for okio 1.17.2 and DataStore raises it;
+// only the dependency report gives hub-compat-scan.py the okio that wins, since nothing above
+// names one; without the report it scans whatever okio jar the gradle cache offers.
+val hostLibraryPins = listOf(
+    "com.squareup.okhttp3:okhttp:3.14.9",
+    "org.slf4j:slf4j-api:${libs.versions.slf4j.get()}",
+    "ch.qos.logback:logback-classic:${libs.versions.logback.get()}",
+    "ch.qos.logback:logback-core:${libs.versions.logback.get()}",
+)
+configurations.matching { it.name.endsWith("CompileClasspath") || it.name.endsWith("RuntimeClasspath") }
+    .configureEach { resolutionStrategy.force(*hostLibraryPins.toTypedArray()) }
 
 // Built-in Kotlin takes its jvmTarget from android.compileOptions.targetCompatibility (17 below),
 // so there is no kotlin { } block to configure here.
@@ -196,6 +234,10 @@ if (androidSdkAvailable) {
         // resource-packs plugin needs — without it it dies at injector creation with
         // NoClassDefFoundError: org/tomlj/TomlTable.
         "implementation"("org.tomlj:tomlj:1.1.1")
+        // okhttp3 is already in the APK through runelite-client's http-api; named here because the
+        // app's own OkHttpWebSocketTransport (the wire under android-awt's java.net.http.WebSocket)
+        // compiles against it. Same version, so it resolves to the artifact already verified.
+        "implementation"("com.squareup.okhttp3:okhttp:3.14.9")
         // D8, run in-process by PluginDexer to convert upstream hub jars (JVM bytecode) to
         // dex on the device. Pure Java; kept whole in proguard-rules.pro.
         "implementation"("com.android.tools:r8:9.5.28")
@@ -207,7 +249,13 @@ if (androidSdkAvailable) {
         // Fallback for ClientPreparer's BaseDexClassLoader.addDexPath call (hidden API).
         "implementation"("org.lsposed.hiddenapibypass:hiddenapibypass:4.3")
 
-        "implementation"("com.google.guava:guava:33.6.0-android")
+        "implementation"(guavaJre)
+        constraints.add("implementation", guavaJre) {
+            attributes {
+                attribute(TargetJvmEnvironment.TARGET_JVM_ENVIRONMENT_ATTRIBUTE,
+                    objects.named(TargetJvmEnvironment::class.java, TargetJvmEnvironment.STANDARD_JVM))
+            }
+        }
     }
 }
 
@@ -220,12 +268,39 @@ if (androidSdkAvailable) {
             val apk = layout.buildDirectory.dir("outputs/apk/release").get().asFile
                 .listFiles { file -> file.extension == "apk" }?.singleOrNull()
                 ?: error("Expected exactly one release APK")
-            val libraries = configurations.getByName("releaseRuntimeClasspath").incoming.artifactView {
+            // The libraries hub plugins link by name; tools-src/verify-release-plugin-api.py
+            // lists the same packages in PREFIXES.
+            val pluginApiModules = setOf(
+                "net.sf.jopt-simple:jopt-simple", "com.google.protobuf:protobuf-javalite",
+                "com.google.guava:guava", "com.google.guava:failureaccess", "com.google.code.gson:gson",
+                // okio 3 resolves to its okio-jvm variant when a dependency raises it.
+                "com.squareup.okhttp3:okhttp", "com.squareup.okio:okio", "com.squareup.okio:okio-jvm",
+                "org.slf4j:slf4j-api",
+                "net.runelite:discord"
+            )
+            val artifacts = configurations.getByName("releaseRuntimeClasspath").incoming.artifactView {
                 attributes.attribute(org.gradle.api.attributes.Attribute.of("artifactType", String::class.java), "jar")
                 componentFilter { id -> id is org.gradle.api.artifacts.component.ModuleComponentIdentifier &&
-                    (id.module == "jopt-simple" || id.module == "protobuf-javalite") }
-            }.files.files
-                .filter { it.extension == "jar" && (it.name.startsWith("jopt-simple-") || it.name.startsWith("protobuf-javalite-")) }
+                    "${id.group}:${id.module}" in pluginApiModules }
+            }.artifacts.artifacts
+            // A module missing from the classpath would hand the verifier no jar for its
+            // prefix and pass silently; fail instead. okio counts once, under either name.
+            val resolved = artifacts.mapNotNull {
+                (it.id.componentIdentifier as? org.gradle.api.artifacts.component.ModuleComponentIdentifier)
+                    ?.let { id -> "${id.group}:${id.module}" }
+            }.toSet()
+            val okioModules = setOf("com.squareup.okio:okio", "com.squareup.okio:okio-jvm")
+            val missing = (pluginApiModules - okioModules).filter { it !in resolved } +
+                (if (resolved.none { it in okioModules }) listOf("com.squareup.okio:okio") else emptyList())
+            if (missing.isNotEmpty()) {
+                error("releaseRuntimeClasspath lacks plugin API modules: ${missing.joinToString()}")
+            }
+            val libraries = artifacts.map { it.file }.filter { it.extension == "jar" }
+            // guava-android and guava-jre share one module id; only the variant's file tells them apart.
+            val guavaJars = libraries.filter { it.name.startsWith("guava-") && !it.name.startsWith("guava-listenablefuture") }
+            if (guavaJars.isEmpty() || guavaJars.any { !it.name.endsWith("-jre.jar") }) {
+                error("releaseRuntimeClasspath resolved guava as ${guavaJars.map { it.name }}, expected the -jre variant")
+            }
             val python = providers.environmentVariable("PYTHON").orNull
                 ?: if (System.getProperty("os.name").startsWith("Windows")) "python" else "python3"
             commandLine(listOf(python, rootProject.file("tools-src/verify-release-plugin-api.py").absolutePath,
@@ -289,6 +364,29 @@ if (androidSdkAvailable) {
                 archive.getInputStream(archive.getEntry("META-INF/desugar/d8/desugar.json")).use {
                     out.resolve("desugar.json").writeBytes(it.readBytes())
                 }
+            }
+            // android-awt's java.net.http (and com.sun.net.httpserver) is built on
+            // java.util.concurrent.Flow, which android.jar only has from API 30. Below that it
+            // must come from the desugared library or from a shadow class; neither means
+            // NoClassDefFoundError on the first HttpClient call on an API 26-29 device.
+            // desugar.json abbreviates packages through its package_map (2.1.4 maps
+            // "java.util.concurrent" to "h$"), so Flow shows up as "h$Flow" in a rewrite_type entry.
+            val desugarJson = out.resolve("desugar.json").readText()
+            val concurrentPrefix = Regex("\"java\\.util\\.concurrent\"\\s*:\\s*\"([^\"]+)\"")
+                .find(desugarJson)?.groupValues?.get(1)
+            val flowDesugared = desugarJson.contains("\"java.util.concurrent.Flow\"") ||
+                (concurrentPrefix != null && desugarJson.contains("\"" + concurrentPrefix + "Flow\""))
+            val flowShadowed = hostApi.get().resolve("java/util/concurrent/Flow.class").isFile
+            println("java.util.concurrent.Flow below API 30: " + when {
+                flowDesugared -> "desugar_jdk_libs $coreLibraryVersion"
+                flowShadowed -> "android-awt shadow"
+                else -> "missing"
+            })
+            if (!flowDesugared && !flowShadowed) {
+                throw GradleException(
+                    "desugar_jdk_libs $coreLibraryVersion does not provide java.util.concurrent.Flow and " +
+                        "android-awt has no shadow of it; minSdk 26 needs one for java.net.http"
+                )
             }
             // These are compiler API inputs, never loaded as application code. The
             // platform JDK surface and host compatibility hierarchy are enough for D8
@@ -381,6 +479,84 @@ if (androidSdkAvailable) {
     }
     tasks.configureEach {
         if (name == "assembleRelease") dependsOn(checkReleaseShadowMapping)
+    }
+
+    // JdkRetargeter rewrites only the downloaded client and hub jars, so android-awt and the app
+    // itself must never call a JdkRetargets member: on API 26-35 that is a NoSuchMethodError no
+    // pass would catch. The rows are read from the table's source (one onStatic/onVirtual/
+    // onInterface call per row, owner, name and descriptor first) and matched against the
+    // method references and class constants in the compiled classes' constant pools.
+    // The method references (`owner.namedescriptor`) and class constants (`class owner`) of a
+    // class file, read from its constant pool so the check needs no bytecode library.
+    fun constantPoolRefs(bytes: ByteArray): List<String> {
+        val buf = java.nio.ByteBuffer.wrap(bytes)
+        if (buf.int != 0xCAFEBABE.toInt()) return emptyList()
+        buf.int // minor and major version
+        fun u2() = buf.short.toInt() and 0xffff
+        val count = u2()
+        val utf = arrayOfNulls<String>(count)
+        val classNames = IntArray(count)
+        val natNames = IntArray(count)
+        val natDescriptors = IntArray(count)
+        val methodRefs = mutableListOf<Pair<Int, Int>>()
+        var i = 1
+        while (i < count) {
+            val tag = buf.get().toInt()
+            when (tag) {
+                1 -> { val raw = ByteArray(u2()); buf.get(raw); utf[i] = String(raw, Charsets.UTF_8) }
+                3, 4, 9, 17, 18 -> buf.position(buf.position() + 4)
+                5, 6 -> { buf.position(buf.position() + 8); i++ }
+                7 -> classNames[i] = u2()
+                8, 16, 19, 20 -> buf.position(buf.position() + 2)
+                10, 11 -> { val owner = u2(); val nat = u2(); methodRefs.add(owner to nat) }
+                12 -> { natNames[i] = u2(); natDescriptors[i] = u2() }
+                15 -> buf.position(buf.position() + 3)
+                else -> throw GradleException("unknown constant pool tag $tag")
+            }
+            i++
+        }
+        return methodRefs.map { (owner, nat) -> "${utf[classNames[owner]]}.${utf[natNames[nat]]}${utf[natDescriptors[nat]]}" } +
+            classNames.filter { it != 0 }.map { "class ${utf[it]}" }
+    }
+    val retargetTable = file("src/androidMain/java/net/runelite/mp/compat/jdk/JdkRetargets.java")
+    val appCompileTasks = tasks.matching { it.name == "compileDebugJavaWithJavac" || it.name == "compileDebugKotlin" }
+    val jdkRetargetCheck = tasks.register("jdkRetargetCheck") {
+        group = "verification"
+        description = "Fail when android-awt or the app calls a JDK member the JdkRetargets table retargets."
+        dependsOn(":android-awt:compileReleaseJavaWithJavac", appCompileTasks)
+        inputs.file(retargetTable)
+        inputs.dir(hostApi)
+        inputs.files(provider { appCompileTasks.flatMap { it.outputs.files.files } })
+        doLast {
+            val source = retargetTable.readText()
+            val rows = Regex("""on(?:Static|Virtual|Interface)\("([^"]+)", "([^"]+)", "([^"]+)"""")
+                .findAll(source).map { "${it.groupValues[1]}.${it.groupValues[2]}${it.groupValues[3]}" }.toSet()
+            val relocated = Regex("""relocate\("([^"]+)"""").findAll(source).map { "class ${it.groupValues[1]}" }.toSet()
+            if (rows.isEmpty()) throw GradleException("no rows parsed from $retargetTable; keep the one-call-per-row shape")
+            val roots = listOf(hostApi.get()) + appCompileTasks.flatMap { it.outputs.files.files }.filter { it.isDirectory }
+            val hits = sortedSetOf<String>()
+            var scanned = 0
+            for (root in roots) {
+                root.walkTopDown().filter { it.isFile && it.extension == "class" }.forEach { file ->
+                    val name = file.relativeTo(root).invariantSeparatorsPath.removeSuffix(".class")
+                    // The shims are the one place allowed to name what they stand in for.
+                    if (name.startsWith("net/runelite/mp/compat/jdk/")) return@forEach
+                    scanned++
+                    for (ref in constantPoolRefs(file.readBytes())) {
+                        if (ref in rows || ref in relocated) hits += "$name -> $ref"
+                    }
+                }
+            }
+            println("== JDK retarget check: ${rows.size} rows, ${relocated.size} relocated types, $scanned classes ==")
+            hits.forEach { println("  $it") }
+            if (hits.isNotEmpty()) {
+                throw GradleException("${hits.size} call(s) to JdkRetargets members in android-awt or the app; " +
+                    "call the net.runelite.mp.compat.jdk shim instead")
+            }
+        }
+    }
+    tasks.configureEach {
+        if (name == "assembleDebug" || name == "check") dependsOn(jdkRetargetCheck)
     }
 }
 

@@ -36,6 +36,24 @@ import javax.swing.text.Document;
 import javax.swing.text.JTextComponent;
 
 public class JTextField extends JTextComponent {
+    private static final String uiClassID = "TextFieldUI";
+    public String getUIClassID() { return uiClassID; }
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJTextField();
+        }
+        return accessibleContext;
+    }
+
+    /** Accessibility support for text fields: a TEXT context that is SINGLE_LINE. */
+    protected class AccessibleJTextField extends AccessibleJTextComponent {
+        public javax.accessibility.AccessibleStateSet getAccessibleStateSet() {
+            javax.accessibility.AccessibleStateSet states = super.getAccessibleStateSet();
+            states.add(javax.accessibility.AccessibleState.SINGLE_LINE);
+            return states;
+        }
+    }
     private static final long serialVersionUID = 353936840712925302L;
 
     public static final String notifyAction = "notify-field-accept";
@@ -106,6 +124,7 @@ public class JTextField extends JTextComponent {
                 : in.left + 4);
         int baseline = in.top + (getHeight() - in.top - in.bottom - fm.getHeight()) / 2 + fm.getAscent();
         g.drawString(s, x, baseline);
+        paintComposedUnderline(g, s, 0, null, x, baseline);
         if (saved != null) g.setColor(saved);
     }
 }

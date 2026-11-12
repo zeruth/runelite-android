@@ -1,136 +1,1878 @@
 /*
- * Copyright (c) 2026, Tyler Bochard
- * All rights reserved.
+ * Copyright (c) 2000, 2013, Oracle and/or its affiliates. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
- * Part of android-awt, the Android shadow of the desktop JDK surface used by
- * runelite-android. Original work of this project, not derived from OpenJDK;
- * licensed under the BSD 2-Clause License (see the LICENSE file at the
- * repository root). Files ported from OpenJDK carry the OpenJDK header instead;
- * see android-awt/LICENSE.
+ * This code is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 only, as
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
+ * This code is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ * version 2 for more details (a copy is included in the LICENSE file that
+ * accompanied this code).
  *
- * 1. Redistributions of source code must retain the above copyright notice, this
- *    list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright notice,
- *    this list of conditions and the following disclaimer in the documentation
- *    and/or other materials provided with the distribution.
+ * You should have received a copy of the GNU General Public License version
+ * 2 along with this work; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
- * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
+ * or visit www.oracle.com if you need additional information or have any
+ * questions.
  */
+
 package javax.imageio;
 
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
-
 import java.awt.image.BufferedImage;
+import java.awt.image.RenderedImage;
 import java.io.File;
-import java.io.IOException;
 import java.io.InputStream;
+import java.io.IOException;
 import java.io.OutputStream;
+import java.lang.reflect.Method;
 import java.net.URL;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Iterator;
+import javax.imageio.spi.IIORegistry;
+import javax.imageio.spi.ImageReaderSpi;
+import javax.imageio.spi.ImageReaderWriterSpi;
+import javax.imageio.spi.ImageWriterSpi;
+import javax.imageio.spi.ImageInputStreamSpi;
+import javax.imageio.spi.ImageOutputStreamSpi;
+import javax.imageio.spi.ImageTranscoderSpi;
+import javax.imageio.spi.ServiceRegistry;
+import javax.imageio.stream.ImageInputStream;
+import javax.imageio.stream.ImageOutputStream;
+import net.runelite.awt.impl.AndroidImageCodec;
 
 /**
- * Subset of {@code javax.imageio.ImageIO} backed by {@link android.graphics.BitmapFactory}.
- * Decodes PNG/JPEG/WEBP/etc. into a fresh {@link BufferedImage} of TYPE_INT_ARGB. The
- * Bitmap is recycled before we return — the caller owns the int[] in the BufferedImage.
+ * A class containing static convenience methods for locating
+ * <code>ImageReader</code>s and <code>ImageWriter</code>s, and
+ * performing simple encoding and decoding.
+ *
+ * <p> On Android the <code>read</code> and <code>write</code> methods fall
+ * back to the platform codecs ({@code BitmapFactory} / {@code Bitmap.compress},
+ * through {@code net.runelite.awt.impl.AndroidImageCodec}) when no registered
+ * reader or writer accepts the data, so PNG/JPEG/WEBP decode the way they do on
+ * the desktop before (and regardless of) the ported plugins.
  */
 public final class ImageIO {
-    private ImageIO() {
+
+    private static final IIORegistry theRegistry =
+        IIORegistry.getDefaultInstance();
+
+    /**
+     * Constructor is private to prevent instantiation.
+     */
+    private ImageIO() {}
+
+    /**
+     * Scans for plugins on the application class path,
+     * loads their service provider classes, and registers a service
+     * provider instance for each one found with the
+     * <code>IIORegistry</code>.
+     *
+     * <p>This method is needed because the application class path can
+     * theoretically change, or additional plug-ins may become available.
+     * Rather than re-scanning the classpath on every invocation of the
+     * API, the class path is scanned automatically only on the first
+     * invocation. Clients can call this method to prompt a re-scan.
+     * Thus this method need only be invoked by sophisticated applications
+     * which dynamically make new plug-ins available at runtime.
+     */
+    public static void scanForPlugins() {
+        theRegistry.registerApplicationClasspathSpis();
     }
 
+    // ImageInputStreams
+
+    /**
+     * A class to hold information about caching.  Each
+     * <code>ThreadGroup</code> will have its own copy
+     * via the <code>AppContext</code> mechanism.
+     */
+    static class CacheInfo {
+        boolean useCache = true;
+        File cacheDirectory = null;
+        Boolean hasPermission = null;
+
+        public CacheInfo() {}
+
+        public boolean getUseCache() {
+            return useCache;
+        }
+
+        public void setUseCache(boolean useCache) {
+            this.useCache = useCache;
+        }
+
+        public File getCacheDirectory() {
+            return cacheDirectory;
+        }
+
+        public void setCacheDirectory(File cacheDirectory) {
+            this.cacheDirectory = cacheDirectory;
+        }
+
+        public Boolean getHasPermission() {
+            return hasPermission;
+        }
+
+        public void setHasPermission(Boolean hasPermission) {
+            this.hasPermission = hasPermission;
+        }
+    }
+
+    // There is no AppContext on Android: one process, one cache setting.
+    private static final CacheInfo cacheInfo = new CacheInfo();
+
+    /**
+     * Returns the <code>CacheInfo</code> object associated with this
+     * <code>ThreadGroup</code>.
+     */
+    private static CacheInfo getCacheInfo() {
+        return cacheInfo;
+    }
+
+    /**
+     * Returns the default temporary (cache) directory as defined by the
+     * java.io.tmpdir system property.  On Android the framework points it
+     * at the application's cache directory.
+     */
+    private static String getTempDir() {
+        return System.getProperty("java.io.tmpdir");
+    }
+
+    /**
+     * Determines whether the caller has write access to the cache
+     * directory, stores the result in the <code>CacheInfo</code> object,
+     * and returns the decision.  This method helps to prevent mysterious
+     * SecurityExceptions to be thrown when this convenience class is used
+     * in an applet, for example.
+     */
+    private static boolean hasCachePermission() {
+        Boolean hasPermission = getCacheInfo().getHasPermission();
+
+        if (hasPermission != null) {
+            return hasPermission.booleanValue();
+        } else {
+            try {
+                File cachedir = getCacheDirectory();
+                String cachepath;
+
+                if (cachedir != null) {
+                    cachepath = cachedir.getPath();
+                } else {
+                    cachepath = getTempDir();
+
+                    if (cachepath == null || cachepath.isEmpty()) {
+                        getCacheInfo().setHasPermission(Boolean.FALSE);
+                        return false;
+                    }
+                }
+
+                // A security manager is never installed on Android; what decides
+                // whether a cache file can be made is whether the directory is
+                // writable, which the JDK learns only when createTempFile fails.
+                File dir = new File(cachepath);
+                if (!dir.isDirectory() || !dir.canWrite()) {
+                    getCacheInfo().setHasPermission(Boolean.FALSE);
+                    return false;
+                }
+
+                getCacheInfo().setHasPermission(Boolean.TRUE);
+                return true;
+            } catch (SecurityException e) {
+                getCacheInfo().setHasPermission(Boolean.FALSE);
+                return false;
+            }
+        }
+    }
+
+    /**
+     * Sets a flag indicating whether a disk-based cache file should
+     * be used when creating <code>ImageInputStream</code>s and
+     * <code>ImageOutputStream</code>s.
+     *
+     * <p> When reading from a standard <code>InputStream</code>, it
+     * may be necessary to save previously read information in a cache
+     * since the underlying stream does not allow data to be re-read.
+     * Similarly, when writing to a standard
+     * <code>OutputStream</code>, a cache may be used to allow a
+     * previously written value to be changed before flushing it to
+     * the final destination.
+     *
+     * <p> The cache may reside in main memory or on disk.  Setting
+     * this flag to <code>false</code> disallows the use of disk for
+     * future streams, which may be advantageous when working with
+     * small images, as the overhead of creating and destroying files
+     * is removed.
+     *
+     * <p> On startup, the value is set to <code>true</code>.
+     *
+     * @param useCache a <code>boolean</code> indicating whether a
+     * cache file should be used, in cases where it is optional.
+     *
+     * @see #getUseCache
+     */
     public static void setUseCache(boolean useCache) {
-        net.runelite.awt.AwtUnsupported.noop("javax.imageio.ImageIO.setUseCache(boolean)", "BitmapFactory has no disk-cache toggle");
+        getCacheInfo().setUseCache(useCache);
     }
 
+    /**
+     * Returns the current value set by <code>setUseCache</code>, or
+     * <code>true</code> if no explicit setting has been made.
+     *
+     * @return true if a disk-based cache may be used for
+     * <code>ImageInputStream</code>s and
+     * <code>ImageOutputStream</code>s.
+     *
+     * @see #setUseCache
+     */
     public static boolean getUseCache() {
+        return getCacheInfo().getUseCache();
+    }
+
+    /**
+     * Sets the directory where cache files are to be created.  A
+     * value of <code>null</code> indicates that the system-dependent
+     * default temporary-file directory is to be used.  If
+     * <code>getUseCache</code> returns false, this value is ignored.
+     *
+     * @param cacheDirectory a <code>File</code> specifying a directory.
+     *
+     * @see File#createTempFile(String, String, File)
+     *
+     * @exception SecurityException if the security manager denies
+     * access to the directory.
+     * @exception IllegalArgumentException if <code>cacheDir</code> is
+     * non-<code>null</code> but is not a directory.
+     *
+     * @see #getCacheDirectory
+     */
+    public static void setCacheDirectory(File cacheDirectory) {
+        if ((cacheDirectory != null) && !(cacheDirectory.isDirectory())) {
+            throw new IllegalArgumentException("Not a directory!");
+        }
+        getCacheInfo().setCacheDirectory(cacheDirectory);
+        getCacheInfo().setHasPermission(null);
+    }
+
+    /**
+     * Returns the current value set by
+     * <code>setCacheDirectory</code>, or <code>null</code> if no
+     * explicit setting has been made.
+     *
+     * @return a <code>File</code> indicating the directory where
+     * cache files will be created, or <code>null</code> to indicate
+     * the system-dependent default temporary-file directory.
+     *
+     * @see #setCacheDirectory
+     */
+    public static File getCacheDirectory() {
+        return getCacheInfo().getCacheDirectory();
+    }
+
+    /**
+     * Returns an <code>ImageInputStream</code> that will take its
+     * input from the given <code>Object</code>.  The set of
+     * <code>ImageInputStreamSpi</code>s registered with the
+     * <code>IIORegistry</code> class is queried and the first one
+     * that is able to take input from the supplied object is used to
+     * create the returned <code>ImageInputStream</code>.  If no
+     * suitable <code>ImageInputStreamSpi</code> exists,
+     * <code>null</code> is returned.
+     *
+     * <p> The current cache settings from <code>getUseCache</code>and
+     * <code>getCacheDirectory</code> will be used to control caching.
+     *
+     * @param input an <code>Object</code> to be used as an input
+     * source, such as a <code>File</code>, readable
+     * <code>RandomAccessFile</code>, or <code>InputStream</code>.
+     *
+     * @return an <code>ImageInputStream</code>, or <code>null</code>.
+     *
+     * @exception IllegalArgumentException if <code>input</code>
+     * is <code>null</code>.
+     * @exception IOException if a cache file is needed but cannot be
+     * created.
+     *
+     * @see javax.imageio.spi.ImageInputStreamSpi
+     */
+    public static ImageInputStream createImageInputStream(Object input)
+        throws IOException {
+        if (input == null) {
+            throw new IllegalArgumentException("input == null!");
+        }
+
+        Iterator iter;
+        // Ensure category is present
+        try {
+            iter = theRegistry.getServiceProviders(ImageInputStreamSpi.class,
+                                                   true);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+
+        boolean usecache = getUseCache() && hasCachePermission();
+
+        while (iter.hasNext()) {
+            ImageInputStreamSpi spi = (ImageInputStreamSpi)iter.next();
+            if (spi.getInputClass().isInstance(input)) {
+                try {
+                    return spi.createInputStreamInstance(input,
+                                                         usecache,
+                                                         getCacheDirectory());
+                } catch (IOException e) {
+                    throw new IIOException("Can't create cache file!", e);
+                }
+            }
+        }
+
+        return null;
+    }
+
+    // ImageOutputStreams
+
+    /**
+     * Returns an <code>ImageOutputStream</code> that will send its
+     * output to the given <code>Object</code>.  The set of
+     * <code>ImageOutputStreamSpi</code>s registered with the
+     * <code>IIORegistry</code> class is queried and the first one
+     * that is able to send output from the supplied object is used to
+     * create the returned <code>ImageOutputStream</code>.  If no
+     * suitable <code>ImageOutputStreamSpi</code> exists,
+     * <code>null</code> is returned.
+     *
+     * <p> The current cache settings from <code>getUseCache</code>and
+     * <code>getCacheDirectory</code> will be used to control caching.
+     *
+     * @param output an <code>Object</code> to be used as an output
+     * destination, such as a <code>File</code>, writable
+     * <code>RandomAccessFile</code>, or <code>OutputStream</code>.
+     *
+     * @return an <code>ImageOutputStream</code>, or
+     * <code>null</code>.
+     *
+     * @exception IllegalArgumentException if <code>output</code> is
+     * <code>null</code>.
+     * @exception IOException if a cache file is needed but cannot be
+     * created.
+     *
+     * @see javax.imageio.spi.ImageOutputStreamSpi
+     */
+    public static ImageOutputStream createImageOutputStream(Object output)
+        throws IOException {
+        if (output == null) {
+            throw new IllegalArgumentException("output == null!");
+        }
+
+        Iterator iter;
+        // Ensure category is present
+        try {
+            iter = theRegistry.getServiceProviders(ImageOutputStreamSpi.class,
+                                                   true);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+
+        boolean usecache = getUseCache() && hasCachePermission();
+
+        while (iter.hasNext()) {
+            ImageOutputStreamSpi spi = (ImageOutputStreamSpi)iter.next();
+            if (spi.getOutputClass().isInstance(output)) {
+                try {
+                    return spi.createOutputStreamInstance(output,
+                                                          usecache,
+                                                          getCacheDirectory());
+                } catch (IOException e) {
+                    throw new IIOException("Can't create cache file!", e);
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static enum SpiInfo {
+        FORMAT_NAMES {
+            @Override
+            String[] info(ImageReaderWriterSpi spi) {
+                return spi.getFormatNames();
+            }
+        },
+        MIME_TYPES {
+            @Override
+            String[] info(ImageReaderWriterSpi spi) {
+                return spi.getMIMETypes();
+            }
+        },
+        FILE_SUFFIXES {
+            @Override
+            String[] info(ImageReaderWriterSpi spi) {
+                return spi.getFileSuffixes();
+            }
+        };
+
+        abstract String[] info(ImageReaderWriterSpi spi);
+    }
+
+    private static <S extends ImageReaderWriterSpi>
+        String[] getReaderWriterInfo(Class<S> spiClass, SpiInfo spiInfo)
+    {
+        // Ensure category is present
+        Iterator<S> iter;
+        try {
+            iter = theRegistry.getServiceProviders(spiClass, true);
+        } catch (IllegalArgumentException e) {
+            return new String[0];
+        }
+
+        HashSet<String> s = new HashSet<String>();
+        while (iter.hasNext()) {
+            ImageReaderWriterSpi spi = iter.next();
+            String[] info = spiInfo.info(spi);
+            if (info != null) {
+                Collections.addAll(s, info);
+            }
+        }
+
+        return s.toArray(new String[s.size()]);
+    }
+
+    // Readers
+
+    /**
+     * Returns an array of <code>String</code>s listing all of the
+     * informal format names understood by the current set of registered
+     * readers.
+     *
+     * @return an array of <code>String</code>s.
+     */
+    public static String[] getReaderFormatNames() {
+        return getReaderWriterInfo(ImageReaderSpi.class,
+                                   SpiInfo.FORMAT_NAMES);
+    }
+
+    /**
+     * Returns an array of <code>String</code>s listing all of the
+     * MIME types understood by the current set of registered
+     * readers.
+     *
+     * @return an array of <code>String</code>s.
+     */
+    public static String[] getReaderMIMETypes() {
+        return getReaderWriterInfo(ImageReaderSpi.class,
+                                   SpiInfo.MIME_TYPES);
+    }
+
+    /**
+     * Returns an array of <code>String</code>s listing all of the
+     * file suffixes associated with the formats understood
+     * by the current set of registered readers.
+     *
+     * @return an array of <code>String</code>s.
+     * @since 1.6
+     */
+    public static String[] getReaderFileSuffixes() {
+        return getReaderWriterInfo(ImageReaderSpi.class,
+                                   SpiInfo.FILE_SUFFIXES);
+    }
+
+    static class ImageReaderIterator implements Iterator<ImageReader> {
+        // Contains ImageReaderSpis
+        public Iterator iter;
+
+        public ImageReaderIterator(Iterator iter) {
+            this.iter = iter;
+        }
+
+        public boolean hasNext() {
+            return iter.hasNext();
+        }
+
+        public ImageReader next() {
+            ImageReaderSpi spi = null;
+            try {
+                spi = (ImageReaderSpi)iter.next();
+                return spi.createReaderInstance();
+            } catch (IOException e) {
+                // Deregister the spi in this case, but only as
+                // an ImageReaderSpi
+                theRegistry.deregisterServiceProvider(spi, ImageReaderSpi.class);
+            }
+            return null;
+        }
+
+        public void remove() {
+            throw new UnsupportedOperationException();
+        }
+    }
+
+    static class CanDecodeInputFilter
+        implements ServiceRegistry.Filter {
+
+        Object input;
+
+        public CanDecodeInputFilter(Object input) {
+            this.input = input;
+        }
+
+        public boolean filter(Object elt) {
+            try {
+                ImageReaderSpi spi = (ImageReaderSpi)elt;
+                ImageInputStream stream = null;
+                if (input instanceof ImageInputStream) {
+                    stream = (ImageInputStream)input;
+                }
+
+                // Perform mark/reset as a defensive measure
+                // even though plug-ins are supposed to take
+                // care of it.
+                boolean canDecode = false;
+                if (stream != null) {
+                    stream.mark();
+                }
+                canDecode = spi.canDecodeInput(input);
+                if (stream != null) {
+                    stream.reset();
+                }
+
+                return canDecode;
+            } catch (IOException e) {
+                return false;
+            }
+        }
+    }
+
+    static class CanEncodeImageFilter
+        implements ServiceRegistry.Filter {
+
+        ImageTypeSpecifier type;
+        String formatName;
+
+        public CanEncodeImageFilter(ImageTypeSpecifier type,
+                                    String formatName) {
+            this.type = type;
+            this.formatName = formatName;
+        }
+
+        public boolean filter(Object elt) {
+            ImageWriterSpi spi = (ImageWriterSpi)elt;
+            return Arrays.asList(spi.getFormatNames()).contains(formatName) &&
+                spi.canEncodeImage(type);
+        }
+    }
+
+    static class ContainsFilter
+        implements ServiceRegistry.Filter {
+
+        Method method;
+        String name;
+
+        // method returns an array of Strings
+        public ContainsFilter(Method method,
+                              String name) {
+            this.method = method;
+            this.name = name;
+        }
+
+        public boolean filter(Object elt) {
+            try {
+                return contains((String[])method.invoke(elt), name);
+            } catch (Exception e) {
+                return false;
+            }
+        }
+    }
+
+    /**
+     * Returns an <code>Iterator</code> containing all currently
+     * registered <code>ImageReader</code>s that claim to be able to
+     * decode the supplied <code>Object</code>, typically an
+     * <code>ImageInputStream</code>.
+     *
+     * <p> The stream position is left at its prior position upon
+     * exit from this method.
+     *
+     * @param input an <code>ImageInputStream</code> or other
+     * <code>Object</code> containing encoded image data.
+     *
+     * @return an <code>Iterator</code> containing <code>ImageReader</code>s.
+     *
+     * @exception IllegalArgumentException if <code>input</code> is
+     * <code>null</code>.
+     *
+     * @see javax.imageio.spi.ImageReaderSpi#canDecodeInput
+     */
+    public static Iterator<ImageReader> getImageReaders(Object input) {
+        if (input == null) {
+            throw new IllegalArgumentException("input == null!");
+        }
+        Iterator iter;
+        // Ensure category is present
+        try {
+            iter = theRegistry.getServiceProviders(ImageReaderSpi.class,
+                                              new CanDecodeInputFilter(input),
+                                              true);
+        } catch (IllegalArgumentException e) {
+            return Collections.<ImageReader>emptyIterator();
+        }
+
+        return new ImageReaderIterator(iter);
+    }
+
+    private static Method readerFormatNamesMethod;
+    private static Method readerFileSuffixesMethod;
+    private static Method readerMIMETypesMethod;
+    private static Method writerFormatNamesMethod;
+    private static Method writerFileSuffixesMethod;
+    private static Method writerMIMETypesMethod;
+
+    static {
+        try {
+            readerFormatNamesMethod =
+                ImageReaderSpi.class.getMethod("getFormatNames");
+            readerFileSuffixesMethod =
+                ImageReaderSpi.class.getMethod("getFileSuffixes");
+            readerMIMETypesMethod =
+                ImageReaderSpi.class.getMethod("getMIMETypes");
+
+            writerFormatNamesMethod =
+                ImageWriterSpi.class.getMethod("getFormatNames");
+            writerFileSuffixesMethod =
+                ImageWriterSpi.class.getMethod("getFileSuffixes");
+            writerMIMETypesMethod =
+                ImageWriterSpi.class.getMethod("getMIMETypes");
+        } catch (NoSuchMethodException e) {
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * Returns an <code>Iterator</code> containing all currently
+     * registered <code>ImageReader</code>s that claim to be able to
+     * decode the named format.
+     *
+     * @param formatName a <code>String</code> containing the informal
+     * name of a format (<i>e.g.</i>, "jpeg" or "tiff".
+     *
+     * @return an <code>Iterator</code> containing
+     * <code>ImageReader</code>s.
+     *
+     * @exception IllegalArgumentException if <code>formatName</code>
+     * is <code>null</code>.
+     *
+     * @see javax.imageio.spi.ImageReaderSpi#getFormatNames
+     */
+    public static Iterator<ImageReader>
+        getImageReadersByFormatName(String formatName)
+    {
+        if (formatName == null) {
+            throw new IllegalArgumentException("formatName == null!");
+        }
+        Iterator iter;
+        // Ensure category is present
+        try {
+            iter = theRegistry.getServiceProviders(ImageReaderSpi.class,
+                                    new ContainsFilter(readerFormatNamesMethod,
+                                                       formatName),
+                                                true);
+        } catch (IllegalArgumentException e) {
+            return Collections.<ImageReader>emptyIterator();
+        }
+        return new ImageReaderIterator(iter);
+    }
+
+    /**
+     * Returns an <code>Iterator</code> containing all currently
+     * registered <code>ImageReader</code>s that claim to be able to
+     * decode files with the given suffix.
+     *
+     * @param fileSuffix a <code>String</code> containing a file
+     * suffix (<i>e.g.</i>, "jpg" or "tiff").
+     *
+     * @return an <code>Iterator</code> containing
+     * <code>ImageReader</code>s.
+     *
+     * @exception IllegalArgumentException if <code>fileSuffix</code>
+     * is <code>null</code>.
+     *
+     * @see javax.imageio.spi.ImageReaderSpi#getFileSuffixes
+     */
+    public static Iterator<ImageReader>
+        getImageReadersBySuffix(String fileSuffix)
+    {
+        if (fileSuffix == null) {
+            throw new IllegalArgumentException("fileSuffix == null!");
+        }
+        // Ensure category is present
+        Iterator iter;
+        try {
+            iter = theRegistry.getServiceProviders(ImageReaderSpi.class,
+                                   new ContainsFilter(readerFileSuffixesMethod,
+                                                      fileSuffix),
+                                              true);
+        } catch (IllegalArgumentException e) {
+            return Collections.<ImageReader>emptyIterator();
+        }
+        return new ImageReaderIterator(iter);
+    }
+
+    /**
+     * Returns an <code>Iterator</code> containing all currently
+     * registered <code>ImageReader</code>s that claim to be able to
+     * decode files with the given MIME type.
+     *
+     * @param MIMEType a <code>String</code> containing a file
+     * suffix (<i>e.g.</i>, "image/jpeg" or "image/x-bmp").
+     *
+     * @return an <code>Iterator</code> containing
+     * <code>ImageReader</code>s.
+     *
+     * @exception IllegalArgumentException if <code>MIMEType</code> is
+     * <code>null</code>.
+     *
+     * @see javax.imageio.spi.ImageReaderSpi#getMIMETypes
+     */
+    public static Iterator<ImageReader>
+        getImageReadersByMIMEType(String MIMEType)
+    {
+        if (MIMEType == null) {
+            throw new IllegalArgumentException("MIMEType == null!");
+        }
+        // Ensure category is present
+        Iterator iter;
+        try {
+            iter = theRegistry.getServiceProviders(ImageReaderSpi.class,
+                                      new ContainsFilter(readerMIMETypesMethod,
+                                                         MIMEType),
+                                              true);
+        } catch (IllegalArgumentException e) {
+            return Collections.<ImageReader>emptyIterator();
+        }
+        return new ImageReaderIterator(iter);
+    }
+
+    // Writers
+
+    /**
+     * Returns an array of <code>String</code>s listing all of the
+     * informal format names understood by the current set of registered
+     * writers.
+     *
+     * @return an array of <code>String</code>s.
+     */
+    public static String[] getWriterFormatNames() {
+        return getReaderWriterInfo(ImageWriterSpi.class,
+                                   SpiInfo.FORMAT_NAMES);
+    }
+
+    /**
+     * Returns an array of <code>String</code>s listing all of the
+     * MIME types understood by the current set of registered
+     * writers.
+     *
+     * @return an array of <code>String</code>s.
+     */
+    public static String[] getWriterMIMETypes() {
+        return getReaderWriterInfo(ImageWriterSpi.class,
+                                   SpiInfo.MIME_TYPES);
+    }
+
+    /**
+     * Returns an array of <code>String</code>s listing all of the
+     * file suffixes associated with the formats understood
+     * by the current set of registered writers.
+     *
+     * @return an array of <code>String</code>s.
+     * @since 1.6
+     */
+    public static String[] getWriterFileSuffixes() {
+        return getReaderWriterInfo(ImageWriterSpi.class,
+                                   SpiInfo.FILE_SUFFIXES);
+    }
+
+    static class ImageWriterIterator implements Iterator<ImageWriter> {
+        // Contains ImageWriterSpis
+        public Iterator iter;
+
+        public ImageWriterIterator(Iterator iter) {
+            this.iter = iter;
+        }
+
+        public boolean hasNext() {
+            return iter.hasNext();
+        }
+
+        public ImageWriter next() {
+            ImageWriterSpi spi = null;
+            try {
+                spi = (ImageWriterSpi)iter.next();
+                return spi.createWriterInstance();
+            } catch (IOException e) {
+                // Deregister the spi in this case, but only as a writerSpi
+                theRegistry.deregisterServiceProvider(spi, ImageWriterSpi.class);
+            }
+            return null;
+        }
+
+        public void remove() {
+            throw new UnsupportedOperationException();
+        }
+    }
+
+    private static boolean contains(String[] names, String name) {
+        if (names == null) {
+            return false;
+        }
+        for (int i = 0; i < names.length; i++) {
+            if (name.equalsIgnoreCase(names[i])) {
+                return true;
+            }
+        }
+
         return false;
     }
 
-    public static BufferedImage read(InputStream input) throws IOException {
-        if (input == null) throw new IllegalArgumentException("null InputStream");
-        Bitmap bitmap = BitmapFactory.decodeStream(input);
-        return bitmapToBufferedImage(bitmap);
-    }
-
-    public static BufferedImage read(File input) throws IOException {
-        if (input == null) throw new IllegalArgumentException("null File");
-        if (!input.isFile() || !input.canRead()) throw new IOException("Cannot read image file: " + input);
-        Bitmap bitmap = BitmapFactory.decodeFile(input.getAbsolutePath());
-        return bitmapToBufferedImage(bitmap);
-    }
-
-    public static BufferedImage read(URL input) throws IOException {
-        if (input == null) throw new IllegalArgumentException("null URL");
-        try (InputStream is = input.openStream()) {
-            return read(is);
+    /**
+     * Returns an <code>Iterator</code> containing all currently
+     * registered <code>ImageWriter</code>s that claim to be able to
+     * encode the named format.
+     *
+     * @param formatName a <code>String</code> containing the informal
+     * name of a format (<i>e.g.</i>, "jpeg" or "tiff".
+     *
+     * @return an <code>Iterator</code> containing
+     * <code>ImageWriter</code>s.
+     *
+     * @exception IllegalArgumentException if <code>formatName</code> is
+     * <code>null</code>.
+     *
+     * @see javax.imageio.spi.ImageWriterSpi#getFormatNames
+     */
+    public static Iterator<ImageWriter>
+        getImageWritersByFormatName(String formatName)
+    {
+        if (formatName == null) {
+            throw new IllegalArgumentException("formatName == null!");
         }
-    }
-
-    public static boolean write(java.awt.image.RenderedImage im, String formatName, OutputStream output) throws IOException {
-        if (output == null || im == null) throw new IllegalArgumentException("Image and output are required");
-        Bitmap.CompressFormat fmt = formatFor(formatName);
-        if(fmt==null)return false;
-        int width=im.getWidth(),height=im.getHeight();
-        int[] pixels;
-        if(im instanceof BufferedImage) pixels=((BufferedImage)im).getRGB(0,0,width,height,null,0,width);
-        else {
-            pixels=new int[width*height];java.awt.image.Raster raster=im.getData();java.awt.image.ColorModel model=im.getColorModel();Object element=null;
-            for(int y=0;y<height;y++)for(int x=0;x<width;x++){
-                element=raster.getDataElements(im.getMinX()+x,im.getMinY()+y,element);pixels[y*width+x]=model.getRGB(element);
-            }
-        }
-        Bitmap bmp=Bitmap.createBitmap(width,height,Bitmap.Config.ARGB_8888);
-        bmp.setPixels(pixels,0,width,0,0,width,height);
+        Iterator iter;
+        // Ensure category is present
         try {
-            return bmp.compress(fmt, 100, output);
-        } finally {
-            bmp.recycle();
+            iter = theRegistry.getServiceProviders(ImageWriterSpi.class,
+                                    new ContainsFilter(writerFormatNamesMethod,
+                                                       formatName),
+                                            true);
+        } catch (IllegalArgumentException e) {
+            return Collections.<ImageWriter>emptyIterator();
         }
+        return new ImageWriterIterator(iter);
     }
 
-    public static boolean write(java.awt.image.RenderedImage im, String formatName, File output) throws IOException {
-        if(formatFor(formatName)==null)return false;
-        try (java.io.FileOutputStream os = new java.io.FileOutputStream(output)) {
-            return write(im, formatName, os);
+    /**
+     * Returns an <code>Iterator</code> containing all currently
+     * registered <code>ImageWriter</code>s that claim to be able to
+     * encode files with the given suffix.
+     *
+     * @param fileSuffix a <code>String</code> containing a file
+     * suffix (<i>e.g.</i>, "jpg" or "tiff").
+     *
+     * @return an <code>Iterator</code> containing <code>ImageWriter</code>s.
+     *
+     * @exception IllegalArgumentException if <code>fileSuffix</code> is
+     * <code>null</code>.
+     *
+     * @see javax.imageio.spi.ImageWriterSpi#getFileSuffixes
+     */
+    public static Iterator<ImageWriter>
+        getImageWritersBySuffix(String fileSuffix)
+    {
+        if (fileSuffix == null) {
+            throw new IllegalArgumentException("fileSuffix == null!");
         }
+        Iterator iter;
+        // Ensure category is present
+        try {
+            iter = theRegistry.getServiceProviders(ImageWriterSpi.class,
+                                   new ContainsFilter(writerFileSuffixesMethod,
+                                                      fileSuffix),
+                                            true);
+        } catch (IllegalArgumentException e) {
+            return Collections.<ImageWriter>emptyIterator();
+        }
+        return new ImageWriterIterator(iter);
     }
 
-    private static BufferedImage bitmapToBufferedImage(Bitmap bitmap) throws IOException {
-        if (bitmap == null) return null;
-        int w = bitmap.getWidth();
-        int h = bitmap.getHeight();
-        BufferedImage out = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
-        bitmap.getPixels(out.backingArray(), 0, w, 0, 0, w, h);
-        bitmap.recycle();
-        return out;
+    /**
+     * Returns an <code>Iterator</code> containing all currently
+     * registered <code>ImageWriter</code>s that claim to be able to
+     * encode files with the given MIME type.
+     *
+     * @param MIMEType a <code>String</code> containing a file
+     * suffix (<i>e.g.</i>, "image/jpeg" or "image/x-bmp").
+     *
+     * @return an <code>Iterator</code> containing <code>ImageWriter</code>s.
+     *
+     * @exception IllegalArgumentException if <code>MIMEType</code> is
+     * <code>null</code>.
+     *
+     * @see javax.imageio.spi.ImageWriterSpi#getMIMETypes
+     */
+    public static Iterator<ImageWriter>
+        getImageWritersByMIMEType(String MIMEType)
+    {
+        if (MIMEType == null) {
+            throw new IllegalArgumentException("MIMEType == null!");
+        }
+        Iterator iter;
+        // Ensure category is present
+        try {
+            iter = theRegistry.getServiceProviders(ImageWriterSpi.class,
+                                      new ContainsFilter(writerMIMETypesMethod,
+                                                         MIMEType),
+                                            true);
+        } catch (IllegalArgumentException e) {
+            return Collections.<ImageWriter>emptyIterator();
+        }
+        return new ImageWriterIterator(iter);
     }
 
-    private static Bitmap.CompressFormat formatFor(String name) {
-        if (name == null) throw new IllegalArgumentException("formatName");
-        String n = name.toLowerCase(java.util.Locale.ROOT);
-        if (n.equals("jpeg") || n.equals("jpg")) return Bitmap.CompressFormat.JPEG;
-        if (n.equals("webp")) {
-            // WEBP_LOSSLESS was split out of the deprecated WEBP enum in API 30. Our minSdk
-            // is 26, so gate the newer constant on Build.VERSION and fall back to plain WEBP
-            // (still lossless mode in practice) on older devices.
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-                return Bitmap.CompressFormat.WEBP_LOSSLESS;
+    /**
+     * Returns an <code>ImageWriter</code>corresponding to the given
+     * <code>ImageReader</code>, if there is one, or <code>null</code>
+     * if the plug-in for this <code>ImageReader</code> does not
+     * specify a corresponding <code>ImageWriter</code>, or if the
+     * given <code>ImageReader</code> is not registered.  This
+     * mechanism may be used to obtain an <code>ImageWriter</code>
+     * that will understand the internal structure of non-pixel
+     * metadata (as encoded by <code>IIOMetadata</code> objects)
+     * generated by the <code>ImageReader</code>.  By obtaining this
+     * data from the <code>ImageReader</code> and passing it on to the
+     * <code>ImageWriter</code> obtained with this method, a client
+     * program can read an image, modify it in some way, and write it
+     * back out preserving all metadata, without having to understand
+     * anything about the structure of the metadata, or even about
+     * the image format.  Note that this method returns the
+     * "preferred" writer, which is the first in the list returned by
+     * <code>javax.imageio.spi.ImageReaderSpi.getImageWriterSpiNames()</code>.
+     *
+     * @param reader an instance of a registered <code>ImageReader</code>.
+     *
+     * @return an <code>ImageWriter</code>, or null.
+     *
+     * @exception IllegalArgumentException if <code>reader</code> is
+     * <code>null</code>.
+     *
+     * @see #getImageReader(ImageWriter)
+     * @see javax.imageio.spi.ImageReaderSpi#getImageWriterSpiNames()
+     */
+    public static ImageWriter getImageWriter(ImageReader reader) {
+        if (reader == null) {
+            throw new IllegalArgumentException("reader == null!");
+        }
+
+        ImageReaderSpi readerSpi = reader.getOriginatingProvider();
+        if (readerSpi == null) {
+            Iterator readerSpiIter;
+            // Ensure category is present
+            try {
+                readerSpiIter =
+                    theRegistry.getServiceProviders(ImageReaderSpi.class,
+                                                    false);
+            } catch (IllegalArgumentException e) {
+                return null;
             }
-            @SuppressWarnings("deprecation")
-            Bitmap.CompressFormat legacy = Bitmap.CompressFormat.WEBP;
-            return legacy;
+
+            while (readerSpiIter.hasNext()) {
+                ImageReaderSpi temp = (ImageReaderSpi) readerSpiIter.next();
+                if (temp.isOwnReader(reader)) {
+                    readerSpi = temp;
+                    break;
+                }
+            }
+            if (readerSpi == null) {
+                return null;
+            }
         }
-        return n.equals("png")?Bitmap.CompressFormat.PNG:null;
+
+        String[] writerNames = readerSpi.getImageWriterSpiNames();
+        if (writerNames == null) {
+            return null;
+        }
+
+        Class writerSpiClass = null;
+        try {
+            writerSpiClass = Class.forName(writerNames[0], true,
+                                           spiClassLoader(readerSpi));
+        } catch (ClassNotFoundException e) {
+            return null;
+        }
+
+        ImageWriterSpi writerSpi = (ImageWriterSpi)
+            theRegistry.getServiceProviderByClass(writerSpiClass);
+        if (writerSpi == null) {
+            return null;
+        }
+
+        try {
+            return writerSpi.createWriterInstance();
+        } catch (IOException e) {
+            // Deregister the spi in this case, but only as a writerSpi
+            theRegistry.deregisterServiceProvider(writerSpi,
+                                                  ImageWriterSpi.class);
+            return null;
+        }
+    }
+
+    /**
+     * The loader the paired provider class is resolved with. The JDK uses the
+     * system class loader, which on Android sees only the boot classpath: the
+     * shadow plugins live in the APK and a hub plugin's in its own dex loader,
+     * so the loader of the provider naming the pair is the one that sees it.
+     */
+    private static ClassLoader spiClassLoader(Object spi) {
+        ClassLoader loader = spi.getClass().getClassLoader();
+        return loader != null ? loader : ImageIO.class.getClassLoader();
+    }
+
+    /**
+     * Returns an <code>ImageReader</code>corresponding to the given
+     * <code>ImageWriter</code>, if there is one, or <code>null</code>
+     * if the plug-in for this <code>ImageWriter</code> does not
+     * specify a corresponding <code>ImageReader</code>, or if the
+     * given <code>ImageWriter</code> is not registered.  This method
+     * is provided principally for symmetry with
+     * <code>getImageWriter(ImageReader)</code>.  Note that this
+     * method returns the "preferred" reader, which is the first in
+     * the list returned by
+     * javax.imageio.spi.ImageWriterSpi.<code>getImageReaderSpiNames()</code>.
+     *
+     * @param writer an instance of a registered <code>ImageWriter</code>.
+     *
+     * @return an <code>ImageReader</code>, or null.
+     *
+     * @exception IllegalArgumentException if <code>writer</code> is
+     * <code>null</code>.
+     *
+     * @see #getImageWriter(ImageReader)
+     * @see javax.imageio.spi.ImageWriterSpi#getImageReaderSpiNames()
+     */
+    public static ImageReader getImageReader(ImageWriter writer) {
+        if (writer == null) {
+            throw new IllegalArgumentException("writer == null!");
+        }
+
+        ImageWriterSpi writerSpi = writer.getOriginatingProvider();
+        if (writerSpi == null) {
+            Iterator writerSpiIter;
+            // Ensure category is present
+            try {
+                writerSpiIter =
+                    theRegistry.getServiceProviders(ImageWriterSpi.class,
+                                                    false);
+            } catch (IllegalArgumentException e) {
+                return null;
+            }
+
+            while (writerSpiIter.hasNext()) {
+                ImageWriterSpi temp = (ImageWriterSpi) writerSpiIter.next();
+                if (temp.isOwnWriter(writer)) {
+                    writerSpi = temp;
+                    break;
+                }
+            }
+            if (writerSpi == null) {
+                return null;
+            }
+        }
+
+        String[] readerNames = writerSpi.getImageReaderSpiNames();
+        if (readerNames == null) {
+            return null;
+        }
+
+        Class readerSpiClass = null;
+        try {
+            readerSpiClass = Class.forName(readerNames[0], true,
+                                           spiClassLoader(writerSpi));
+        } catch (ClassNotFoundException e) {
+            return null;
+        }
+
+        ImageReaderSpi readerSpi = (ImageReaderSpi)
+            theRegistry.getServiceProviderByClass(readerSpiClass);
+        if (readerSpi == null) {
+            return null;
+        }
+
+        try {
+            return readerSpi.createReaderInstance();
+        } catch (IOException e) {
+            // Deregister the spi in this case, but only as a readerSpi
+            theRegistry.deregisterServiceProvider(readerSpi,
+                                                  ImageReaderSpi.class);
+            return null;
+        }
+    }
+
+    /**
+     * Returns an <code>Iterator</code> containing all currently
+     * registered <code>ImageWriter</code>s that claim to be able to
+     * encode images of the given layout (specified using an
+     * <code>ImageTypeSpecifier</code>) in the given format.
+     *
+     * @param type an <code>ImageTypeSpecifier</code> indicating the
+     * layout of the image to be written.
+     * @param formatName the informal name of the <code>format</code>.
+     *
+     * @return an <code>Iterator</code> containing <code>ImageWriter</code>s.
+     *
+     * @exception IllegalArgumentException if any parameter is
+     * <code>null</code>.
+     *
+     * @see javax.imageio.spi.ImageWriterSpi#canEncodeImage(ImageTypeSpecifier)
+     */
+    public static Iterator<ImageWriter>
+        getImageWriters(ImageTypeSpecifier type, String formatName)
+    {
+        if (type == null) {
+            throw new IllegalArgumentException("type == null!");
+        }
+        if (formatName == null) {
+            throw new IllegalArgumentException("formatName == null!");
+        }
+
+        Iterator iter;
+        // Ensure category is present
+        try {
+            iter = theRegistry.getServiceProviders(ImageWriterSpi.class,
+                                 new CanEncodeImageFilter(type,
+                                                          formatName),
+                                            true);
+        } catch (IllegalArgumentException e) {
+            return Collections.<ImageWriter>emptyIterator();
+        }
+
+        return new ImageWriterIterator(iter);
+    }
+
+    static class ImageTranscoderIterator
+        implements Iterator<ImageTranscoder>
+    {
+        // Contains ImageTranscoderSpis
+        public Iterator iter;
+
+        public ImageTranscoderIterator(Iterator iter) {
+            this.iter = iter;
+        }
+
+        public boolean hasNext() {
+            return iter.hasNext();
+        }
+
+        public ImageTranscoder next() {
+            ImageTranscoderSpi spi = null;
+            spi = (ImageTranscoderSpi)iter.next();
+            return spi.createTranscoderInstance();
+        }
+
+        public void remove() {
+            throw new UnsupportedOperationException();
+        }
+    }
+
+    static class TranscoderFilter
+        implements ServiceRegistry.Filter {
+
+        String readerSpiName;
+        String writerSpiName;
+
+        public TranscoderFilter(ImageReaderSpi readerSpi,
+                                ImageWriterSpi writerSpi) {
+            this.readerSpiName = readerSpi.getClass().getName();
+            this.writerSpiName = writerSpi.getClass().getName();
+        }
+
+        public boolean filter(Object elt) {
+            ImageTranscoderSpi spi = (ImageTranscoderSpi)elt;
+            String readerName = spi.getReaderServiceProviderName();
+            String writerName = spi.getWriterServiceProviderName();
+            return (readerName.equals(readerSpiName) &&
+                    writerName.equals(writerSpiName));
+        }
+    }
+
+    /**
+     * Returns an <code>Iterator</code> containing all currently
+     * registered <code>ImageTranscoder</code>s that claim to be
+     * able to transcode between the metadata of the given
+     * <code>ImageReader</code> and <code>ImageWriter</code>.
+     *
+     * @param reader an <code>ImageReader</code>.
+     * @param writer an <code>ImageWriter</code>.
+     *
+     * @return an <code>Iterator</code> containing
+     * <code>ImageTranscoder</code>s.
+     *
+     * @exception IllegalArgumentException if <code>reader</code> or
+     * <code>writer</code> is <code>null</code>.
+     */
+    public static Iterator<ImageTranscoder>
+        getImageTranscoders(ImageReader reader, ImageWriter writer)
+    {
+        if (reader == null) {
+            throw new IllegalArgumentException("reader == null!");
+        }
+        if (writer == null) {
+            throw new IllegalArgumentException("writer == null!");
+        }
+        ImageReaderSpi readerSpi = reader.getOriginatingProvider();
+        ImageWriterSpi writerSpi = writer.getOriginatingProvider();
+        ServiceRegistry.Filter filter =
+            new TranscoderFilter(readerSpi, writerSpi);
+
+        Iterator iter;
+        // Ensure category is present
+        try {
+            iter = theRegistry.getServiceProviders(ImageTranscoderSpi.class,
+                                            filter, true);
+        } catch (IllegalArgumentException e) {
+            return Collections.<ImageTranscoder>emptyIterator();
+        }
+        return new ImageTranscoderIterator(iter);
+    }
+
+    // All-in-one methods
+
+    /**
+     * Whether any reader is registered at all. With none (the built-in plugin
+     * list not yet populated) the stream-based lookup cannot succeed, so the
+     * convenience readers go straight to the platform codec without buffering
+     * the input through an <code>ImageInputStream</code> first.
+     */
+    private static boolean hasReaders() {
+        try {
+            return theRegistry.getServiceProviders(ImageReaderSpi.class, false)
+                .hasNext();
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+    }
+
+    /**
+     * Whether the convenience readers decode a PNG with the platform codec rather
+     * than the ported PNGImageReader. RuneLite loads hundreds of PNG resources at
+     * start-up through read(InputStream) with no parameters; BitmapFactory decodes
+     * them in native code (unpremultiplied, see AndroidImageCodec) into the
+     * TYPE_INT_ARGB image the renderer blits fastest. Only PNGs whose decode has
+     * the same getRGB values as the ported reader take this path (see
+     * {@link #startsWithPlatformPng}); images still come back as TYPE_INT_ARGB
+     * instead of the reader's TYPE_4BYTE_ABGR/TYPE_3BYTE_BGR/indexed types. Set
+     * <code>-Dnet.runelite.awt.imageio.platformPng=false</code> (before ImageIO
+     * loads) to route these reads through the ported reader, which is how the two
+     * are benchmarked against each other.
+     */
+    private static final boolean PLATFORM_PNG =
+        !"false".equals(System.getProperty("net.runelite.awt.imageio.platformPng"));
+
+    private static final byte[] PNG_SIGNATURE =
+        {(byte)0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'};
+
+    /** How far the chunk probe may read ahead before giving up on the fast path. */
+    private static final int PNG_PROBE_LIMIT = 64 * 1024;
+
+    private static final int IHDR = 0x49484452;
+    private static final int IDAT = 0x49444154;
+    private static final int GAMA = 0x67414d41;
+    private static final int CHRM = 0x6348524d;
+    private static final int ICCP = 0x69434350;
+    private static final int SRGB = 0x73524742;
+
+    private static boolean readFully(InputStream in, byte[] b, int len) throws IOException {
+        int n = 0;
+        while (n < len) {
+            int r = in.read(b, n, len - n);
+            if (r < 0) {
+                return false;
+            }
+            n += r;
+        }
+        return true;
+    }
+
+    private static int int32(byte[] b, int off) {
+        return ((b[off] & 0xff) << 24) | ((b[off + 1] & 0xff) << 16)
+            | ((b[off + 2] & 0xff) << 8) | (b[off + 3] & 0xff);
+    }
+
+    /**
+     * Peeks, on a stream that supports mark/reset, whether it is a PNG the platform
+     * codec decodes to the same pixels as PNGImageReader. The ported reader keeps
+     * gAMA/cHRM/iCCP as metadata and returns the stored samples, while Skia tags the
+     * bitmap with that colour space and getPixels converts it to sRGB; an sRGB chunk
+     * takes precedence over gAMA/cHRM in Skia, so those stay exact. 16-bit samples
+     * are excluded because Skia truncates them where the reader's colour model
+     * rounds. Anything the probe cannot settle within PNG_PROBE_LIMIT bytes goes to
+     * the ported reader.
+     */
+    private static boolean startsWithPlatformPng(InputStream in) throws IOException {
+        in.mark(PNG_PROBE_LIMIT);
+        try {
+            byte[] b = new byte[PNG_SIGNATURE.length];
+            if (!readFully(in, b, b.length) || !Arrays.equals(b, PNG_SIGNATURE)) {
+                return false;
+            }
+            int read = b.length;
+            boolean srgb = false;
+            boolean tagged = false;
+            byte[] head = new byte[8];
+            byte[] body = new byte[4096];
+            while (true) {
+                if (!readFully(in, head, 8)) {
+                    return false;
+                }
+                read += 8;
+                long length = int32(head, 0) & 0xffffffffL;
+                int type = int32(head, 4);
+                if (type == IDAT) {
+                    return srgb || !tagged;
+                }
+                // Body, CRC and the next chunk header must all stay inside the mark.
+                if (read + length + 4 + 8 > PNG_PROBE_LIMIT) {
+                    return false;
+                }
+                if (type == IHDR) {
+                    if (length < 13 || !readFully(in, body, 13)) {
+                        return false;
+                    }
+                    if ((body[8] & 0xff) > 8) {
+                        return false;
+                    }
+                    length -= 13;
+                    read += 13;
+                } else if (type == SRGB) {
+                    srgb = true;
+                } else if (type == GAMA || type == CHRM || type == ICCP) {
+                    tagged = true;
+                    if (type == ICCP) {
+                        // Skia honours an embedded profile ahead of sRGB.
+                        return false;
+                    }
+                }
+                // Skip the rest of the body and the CRC through reads, so the mark holds.
+                long skip = length + 4;
+                while (skip > 0) {
+                    int r = in.read(body, 0, (int) Math.min(body.length, skip));
+                    if (r < 0) {
+                        return false;
+                    }
+                    skip -= r;
+                }
+                read += (int) (length + 4);
+            }
+        } finally {
+            in.reset();
+        }
+    }
+
+    /**
+     * The platform-codec read of a PNG stream, or null when the stream is not a PNG
+     * (or the fast path is off) and the registered readers should take it. The
+     * stream must support mark/reset.
+     */
+    private static BufferedImage readPlatformPng(InputStream in) throws IOException {
+        if (!PLATFORM_PNG || !startsWithPlatformPng(in)) {
+            return null;
+        }
+        BufferedImage bi = AndroidImageCodec.decode(in);
+        if (bi == null) {
+            throw new IIOException("Error reading PNG image data");
+        }
+        return bi;
+    }
+
+    /**
+     * Returns a <code>BufferedImage</code> as the result of decoding
+     * a supplied <code>File</code> with an <code>ImageReader</code>
+     * chosen automatically from among those currently registered.
+     * The <code>File</code> is wrapped in an
+     * <code>ImageInputStream</code>.  If no registered
+     * <code>ImageReader</code> claims to be able to read the
+     * resulting stream, the platform codec is tried, and
+     * <code>null</code> is returned when it cannot decode the data either.
+     *
+     * <p> The current cache settings from <code>getUseCache</code>and
+     * <code>getCacheDirectory</code> will be used to control caching in the
+     * <code>ImageInputStream</code> that is created.
+     *
+     * <p> Note that there is no <code>read</code> method that takes a
+     * filename as a <code>String</code>; use this method instead after
+     * creating a <code>File</code> from the filename.
+     *
+     * @param input a <code>File</code> to read from.
+     *
+     * @return a <code>BufferedImage</code> containing the decoded
+     * contents of the input, or <code>null</code>.
+     *
+     * @exception IllegalArgumentException if <code>input</code> is
+     * <code>null</code>.
+     * @exception IOException if an error occurs during reading or when not
+     * able to create required ImageInputStream.
+     */
+    public static BufferedImage read(File input) throws IOException {
+        if (input == null) {
+            throw new IllegalArgumentException("input == null!");
+        }
+        if (!input.canRead()) {
+            throw new IIOException("Can't read input file!");
+        }
+
+        if (!hasReaders()) {
+            return AndroidImageCodec.decode(input);
+        }
+        if (PLATFORM_PNG) {
+            boolean png;
+            InputStream head = new java.io.FileInputStream(input);
+            try {
+                png = startsWithPlatformPng(new java.io.BufferedInputStream(head, 4096));
+            } finally {
+                head.close();
+            }
+            if (png) {
+                BufferedImage bi = AndroidImageCodec.decode(input);
+                if (bi != null) {
+                    return bi;
+                }
+                // Undecodable: the ported reader below says what is wrong with it.
+            }
+        }
+
+        ImageInputStream stream = createImageInputStream(input);
+        if (stream == null) {
+            throw new IIOException("Can't create an ImageInputStream!");
+        }
+        BufferedImage bi = read(stream);
+        if (bi == null) {
+            stream.close();
+        }
+        return bi;
+    }
+
+    /**
+     * Returns a <code>BufferedImage</code> as the result of decoding
+     * a supplied <code>InputStream</code> with an <code>ImageReader</code>
+     * chosen automatically from among those currently registered.
+     * The <code>InputStream</code> is wrapped in an
+     * <code>ImageInputStream</code>.  If no registered
+     * <code>ImageReader</code> claims to be able to read the
+     * resulting stream, the platform codec is tried, and
+     * <code>null</code> is returned when it cannot decode the data either.
+     *
+     * <p> The current cache settings from <code>getUseCache</code>and
+     * <code>getCacheDirectory</code> will be used to control caching in the
+     * <code>ImageInputStream</code> that is created.
+     *
+     * <p> This method does not attempt to locate
+     * <code>ImageReader</code>s that can read directly from an
+     * <code>InputStream</code>; use
+     * <code>ImageIO.getImageReaders</code> to search for such readers.
+     *
+     * <p> This method <em>does not</em> close the provided
+     * <code>InputStream</code> after the read operation has completed;
+     * it is the responsibility of the caller to close the stream, if desired.
+     *
+     * @param input an <code>InputStream</code> to read from.
+     *
+     * @return a <code>BufferedImage</code> containing the decoded
+     * contents of the input, or <code>null</code>.
+     *
+     * @exception IllegalArgumentException if <code>input</code> is
+     * <code>null</code>.
+     * @exception IOException if an error occurs during reading or when not
+     * able to create required ImageInputStream.
+     */
+    public static BufferedImage read(InputStream input) throws IOException {
+        if (input == null) {
+            throw new IllegalArgumentException("input == null!");
+        }
+
+        if (!hasReaders()) {
+            return AndroidImageCodec.decode(input);
+        }
+        if (PLATFORM_PNG) {
+            if (!input.markSupported()) {
+                input = new java.io.BufferedInputStream(input);
+            }
+            BufferedImage png = readPlatformPng(input);
+            if (png != null) {
+                return png;
+            }
+        }
+
+        ImageInputStream stream = createImageInputStream(input);
+        if (stream == null) {
+            throw new IIOException("Can't create an ImageInputStream!");
+        }
+        BufferedImage bi = read(stream);
+        if (bi == null) {
+            stream.close();
+        }
+        return bi;
+    }
+
+    /**
+     * Returns a <code>BufferedImage</code> as the result of decoding
+     * a supplied <code>URL</code> with an <code>ImageReader</code>
+     * chosen automatically from among those currently registered.  An
+     * <code>InputStream</code> is obtained from the <code>URL</code>,
+     * which is wrapped in an <code>ImageInputStream</code>.  If no
+     * registered <code>ImageReader</code> claims to be able to read
+     * the resulting stream, the platform codec is tried, and
+     * <code>null</code> is returned when it cannot decode the data either.
+     *
+     * <p> The current cache settings from <code>getUseCache</code>and
+     * <code>getCacheDirectory</code> will be used to control caching in the
+     * <code>ImageInputStream</code> that is created.
+     *
+     * <p> This method does not attempt to locate
+     * <code>ImageReader</code>s that can read directly from a
+     * <code>URL</code>; that may be accomplished using
+     * <code>IIORegistry</code> and <code>ImageReaderSpi</code>.
+     *
+     * @param input a <code>URL</code> to read from.
+     *
+     * @return a <code>BufferedImage</code> containing the decoded
+     * contents of the input, or <code>null</code>.
+     *
+     * @exception IllegalArgumentException if <code>input</code> is
+     * <code>null</code>.
+     * @exception IOException if an error occurs during reading or when not
+     * able to create required ImageInputStream.
+     */
+    public static BufferedImage read(URL input) throws IOException {
+        if (input == null) {
+            throw new IllegalArgumentException("input == null!");
+        }
+
+        InputStream istream = null;
+        try {
+            istream = input.openStream();
+        } catch (IOException e) {
+            throw new IIOException("Can't get input stream from URL!", e);
+        }
+
+        if (!hasReaders()) {
+            try {
+                return AndroidImageCodec.decode(istream);
+            } finally {
+                istream.close();
+            }
+        }
+        if (PLATFORM_PNG) {
+            if (!istream.markSupported()) {
+                istream = new java.io.BufferedInputStream(istream);
+            }
+            BufferedImage png;
+            try {
+                png = readPlatformPng(istream);
+            } catch (IOException e) {
+                istream.close();
+                throw e;
+            }
+            if (png != null) {
+                istream.close();
+                return png;
+            }
+        }
+
+        ImageInputStream stream = createImageInputStream(istream);
+        if (stream == null) {
+            /* close the istream when stream is null so that if user has
+             * given filepath as URL he can delete it, otherwise stream will
+             * be open to that file and he will not be able to delete it.
+             */
+            istream.close();
+            throw new IIOException("Can't create an ImageInputStream!");
+        }
+        BufferedImage bi;
+        try {
+            bi = read(stream);
+            if (bi == null) {
+                stream.close();
+            }
+        } finally {
+            istream.close();
+        }
+        return bi;
+    }
+
+    /**
+     * Returns a <code>BufferedImage</code> as the result of decoding
+     * a supplied <code>ImageInputStream</code> with an
+     * <code>ImageReader</code> chosen automatically from among those
+     * currently registered.  If no registered
+     * <code>ImageReader</code> claims to be able to read the stream,
+     * the platform codec is tried on the bytes from the current position,
+     * and <code>null</code> is returned when it cannot decode them either.
+     *
+     * <p> Unlike most other methods in this class, this method <em>does</em>
+     * close the provided <code>ImageInputStream</code> after the read
+     * operation has completed, unless <code>null</code> is returned,
+     * in which case this method <em>does not</em> close the stream.
+     *
+     * @param stream an <code>ImageInputStream</code> to read from.
+     *
+     * @return a <code>BufferedImage</code> containing the decoded
+     * contents of the input, or <code>null</code>.
+     *
+     * @exception IllegalArgumentException if <code>stream</code> is
+     * <code>null</code>.
+     * @exception IOException if an error occurs during reading.
+     */
+    public static BufferedImage read(ImageInputStream stream)
+        throws IOException {
+        if (stream == null) {
+            throw new IllegalArgumentException("stream == null!");
+        }
+
+        Iterator iter = getImageReaders(stream);
+        ImageReader reader = null;
+        while (reader == null && iter.hasNext()) {
+            // The JDK takes the first element; a provider whose instance could
+            // not be created yields null here and the next one is tried.
+            reader = (ImageReader)iter.next();
+        }
+        if (reader == null) {
+            stream.mark();
+            BufferedImage bi = AndroidImageCodec.decode(stream);
+            if (bi == null) {
+                stream.reset();
+                return null;
+            }
+            stream.close();
+            return bi;
+        }
+
+        ImageReadParam param = reader.getDefaultReadParam();
+        reader.setInput(stream, true, true);
+        BufferedImage bi;
+        try {
+            bi = reader.read(0, param);
+        } finally {
+            reader.dispose();
+            stream.close();
+        }
+        return bi;
+    }
+
+    /**
+     * Writes an image using the an arbitrary <code>ImageWriter</code>
+     * that supports the given format to an
+     * <code>ImageOutputStream</code>.  The image is written to the
+     * <code>ImageOutputStream</code> starting at the current stream
+     * pointer, overwriting existing stream data from that point
+     * forward, if present.
+     *
+     * <p> This method <em>does not</em> close the provided
+     * <code>ImageOutputStream</code> after the write operation has completed;
+     * it is the responsibility of the caller to close the stream, if desired.
+     *
+     * @param im a <code>RenderedImage</code> to be written.
+     * @param formatName a <code>String</code> containing the informal
+     * name of the format.
+     * @param output an <code>ImageOutputStream</code> to be written to.
+     *
+     * @return <code>false</code> if no appropriate writer is found.
+     *
+     * @exception IllegalArgumentException if any parameter is
+     * <code>null</code>.
+     * @exception IOException if an error occurs during writing.
+     */
+    public static boolean write(RenderedImage im,
+                                String formatName,
+                                ImageOutputStream output) throws IOException {
+        if (im == null) {
+            throw new IllegalArgumentException("im == null!");
+        }
+        if (formatName == null) {
+            throw new IllegalArgumentException("formatName == null!");
+        }
+        if (output == null) {
+            throw new IllegalArgumentException("output == null!");
+        }
+
+        return doWrite(im, getWriter(im, formatName), formatName, output);
+    }
+
+    /**
+     * Writes an image using an arbitrary <code>ImageWriter</code>
+     * that supports the given format to a <code>File</code>.  If
+     * there is already a <code>File</code> present, its contents are
+     * discarded.
+     *
+     * @param im a <code>RenderedImage</code> to be written.
+     * @param formatName a <code>String</code> containing the informal
+     * name of the format.
+     * @param output a <code>File</code> to be written to.
+     *
+     * @return <code>false</code> if no appropriate writer is found.
+     *
+     * @exception IllegalArgumentException if any parameter is
+     * <code>null</code>.
+     * @exception IOException if an error occurs during writing or when not
+     * able to create required ImageOutputStream.
+     */
+    public static boolean write(RenderedImage im,
+                                String formatName,
+                                File output) throws IOException {
+        if (output == null) {
+            throw new IllegalArgumentException("output == null!");
+        }
+
+        ImageWriter writer = getWriter(im, formatName);
+        if (writer == null) {
+            if (!AndroidImageCodec.canEncode(formatName)) {
+                /* Do not make changes in the file system if we have
+                 * no appropriate writer.
+                 */
+                return false;
+            }
+            output.delete();
+            OutputStream os = new java.io.FileOutputStream(output);
+            try {
+                return AndroidImageCodec.encode(im, formatName, os);
+            } finally {
+                os.close();
+            }
+        }
+
+        output.delete();
+        ImageOutputStream stream = createImageOutputStream(output);
+        if (stream == null) {
+            throw new IIOException("Can't create an ImageOutputStream!");
+        }
+        try {
+            return doWrite(im, writer, formatName, stream);
+        } finally {
+            stream.close();
+        }
+    }
+
+    /**
+     * Writes an image using an arbitrary <code>ImageWriter</code>
+     * that supports the given format to an <code>OutputStream</code>.
+     *
+     * <p> This method <em>does not</em> close the provided
+     * <code>OutputStream</code> after the write operation has completed;
+     * it is the responsibility of the caller to close the stream, if desired.
+     *
+     * <p> The current cache settings from <code>getUseCache</code>and
+     * <code>getCacheDirectory</code> will be used to control caching.
+     *
+     * @param im a <code>RenderedImage</code> to be written.
+     * @param formatName a <code>String</code> containing the informal
+     * name of the format.
+     * @param output an <code>OutputStream</code> to be written to.
+     *
+     * @return <code>false</code> if no appropriate writer is found.
+     *
+     * @exception IllegalArgumentException if any parameter is
+     * <code>null</code>.
+     * @exception IOException if an error occurs during writing or when not
+     * able to create required ImageOutputStream.
+     */
+    public static boolean write(RenderedImage im,
+                                String formatName,
+                                OutputStream output) throws IOException {
+        if (output == null) {
+            throw new IllegalArgumentException("output == null!");
+        }
+
+        ImageWriter writer = getWriter(im, formatName);
+        if (writer == null) {
+            return AndroidImageCodec.encode(im, formatName, output);
+        }
+
+        ImageOutputStream stream = createImageOutputStream(output);
+        if (stream == null) {
+            throw new IIOException("Can't create an ImageOutputStream!");
+        }
+        try {
+            return doWrite(im, writer, formatName, stream);
+        } finally {
+            stream.close();
+        }
+    }
+
+    /**
+     * Returns <code>ImageWriter</code> instance according to given
+     * rendered image and image format or <code>null</code> if there
+     * is no appropriate writer.
+     */
+    private static ImageWriter getWriter(RenderedImage im,
+                                         String formatName) {
+        if (im == null) {
+            throw new IllegalArgumentException("im == null!");
+        }
+        if (formatName == null) {
+            throw new IllegalArgumentException("formatName == null!");
+        }
+        // With no writer registered there is nothing to match; skipping the
+        // type derivation keeps the platform-codec path independent of how
+        // well an unusual RenderedImage maps onto an ImageTypeSpecifier.
+        try {
+            if (!theRegistry.getServiceProviders(ImageWriterSpi.class, false)
+                    .hasNext()) {
+                return null;
+            }
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+        ImageTypeSpecifier type =
+            ImageTypeSpecifier.createFromRenderedImage(im);
+        Iterator<ImageWriter> iter = getImageWriters(type, formatName);
+
+        while (iter.hasNext()) {
+            ImageWriter writer = iter.next();
+            if (writer != null) {
+                return writer;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Writes image to output stream using given image writer, or through the
+     * platform codec when no writer is registered for the format.
+     */
+    private static boolean doWrite(RenderedImage im, ImageWriter writer,
+                                 String formatName, ImageOutputStream output)
+        throws IOException {
+        if (writer == null) {
+            if (!AndroidImageCodec.canEncode(formatName)) {
+                return false;
+            }
+            java.io.ByteArrayOutputStream bytes =
+                new java.io.ByteArrayOutputStream();
+            if (!AndroidImageCodec.encode(im, formatName, bytes)) {
+                return false;
+            }
+            output.write(bytes.toByteArray());
+            output.flush();
+            return true;
+        }
+        writer.setOutput(output);
+        try {
+            writer.write(im);
+        } finally {
+            writer.dispose();
+            output.flush();
+        }
+        return true;
     }
 }

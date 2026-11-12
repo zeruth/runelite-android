@@ -1,0 +1,17 @@
+--------- beginning of main
+11-12 06:01:00.000  4321  4410 I RlHubStatus: HUB download internal=broken-plugin size=999
+11-12 06:01:00.400  4321  4410 I RlHubStatus: HUB converting internal=broken-plugin
+11-12 06:01:01.200  4321  4410 I RlHubStatus: HUB converted internal=broken-plugin ms=800
+11-12 06:01:01.300  4321  4410 I ExternalPluginManager: Loading external plugin "broken-plugin" jar "YnJva2Vu"
+11-12 06:01:01.900  4321  4410 W ExternalPluginManager: Unable to start or load external plugin "broken-plugin"
+11-12 06:01:01.900  4321  4410 W ExternalPluginManager: java.lang.RuntimeException: net.runelite.client.plugins.PluginInstantiationException: java.lang.NoSuchMethodError: No virtual method getSystemSelection()Ljava/awt/datatransfer/Clipboard; in class Ljava/awt/Toolkit; or its super classes
+11-12 06:01:01.900  4321  4410 W ExternalPluginManager: 	at net.runelite.client.externalplugins.ExternalPluginManager.lambda$refreshPlugins$3(ExternalPluginManager.java:354)
+11-12 06:01:01.900  4321  4410 W ExternalPluginManager: 	at java.awt.event.InvocationEvent.dispatch(InvocationEvent.java:311)
+11-12 06:01:01.900  4321  4410 W ExternalPluginManager: Caused by: net.runelite.client.plugins.PluginInstantiationException: java.lang.NoSuchMethodError: No virtual method getSystemSelection()Ljava/awt/datatransfer/Clipboard; in class Ljava/awt/Toolkit; or its super classes
+11-12 06:01:01.900  4321  4410 W ExternalPluginManager: 	at net.runelite.client.plugins.PluginManager.startPlugin(PluginManager.java:440)
+11-12 06:01:01.900  4321  4410 W ExternalPluginManager: 	... 2 more
+11-12 06:01:01.900  4321  4410 W ExternalPluginManager: Caused by: java.lang.NoSuchMethodError: No virtual method getSystemSelection()Ljava/awt/datatransfer/Clipboard; in class Ljava/awt/Toolkit; or its super classes
+11-12 06:01:01.900  4321  4410 W ExternalPluginManager: 	at com.broken.BrokenPlugin.startUp(BrokenPlugin.java:30)
+11-12 06:01:01.900  4321  4410 W ExternalPluginManager: 	at net.runelite.client.plugins.PluginManager.startPlugin(PluginManager.java:422)
+11-12 06:01:01.900  4321  4410 W ExternalPluginManager: 	... 4 more
+11-12 06:01:01.950  4321  4410 I RlHubStatus: HUB failed internal=broken-plugin stage=START message=Failed to start: No virtual method getSystemSelection()Ljava/awt/datatransfer/Clipboard; in class Ljava/awt/Toolkit; or its super classes

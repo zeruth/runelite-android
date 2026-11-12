@@ -23,7 +23,8 @@
  * questions.
  */
 
-/* ********************************************************************
+/*
+ **********************************************************************
  **********************************************************************
  **********************************************************************
  *** COPYRIGHT (c) Eastman Kodak Company, 1997                      ***
@@ -32,9 +33,14 @@
  **********************************************************************
  **********************************************************************
  **********************************************************************/
+
 package java.awt.color;
 
+import sun.java2d.cmm.Profile;
+import sun.java2d.cmm.ProfileDeferralInfo;
+
 /**
+ *
  * A subclass of the ICC_Profile class which represents profiles
  * which meet the following criteria: the color space type of the
  * profile is TYPE_GRAY and the profile includes the grayTRCTag and
@@ -51,13 +57,36 @@ package java.awt.color;
  * Connection Space, the device gray component is transformed by
  * a lookup through the tone reproduction curve (TRC).  The result is
  * treated as the achromatic component of the PCS.
+<pre>
+
+&nbsp;               PCSY = grayTRC[deviceGray]
+
+</pre>
+ * The inverse transform is done by converting the PCS Y components to
+ * device Gray via the inverse of the grayTRC.
  */
-public class ICC_ProfileGray extends ICC_Profile {
+
+
+
+public class ICC_ProfileGray
+extends ICC_Profile {
+
     static final long serialVersionUID = -1124721290732002649L;
 
-    ICC_ProfileGray(byte[] data, int predefined) {
-        super(data, predefined);
+    /**
+     * Constructs a new ICC_ProfileGray from a CMM ID.
+     */
+    ICC_ProfileGray(Profile p) {
+        super(p);
     }
+
+    /**
+     * Constructs a new ICC_ProfileGray from a ProfileDeferralInfo object.
+     */
+    ICC_ProfileGray(ProfileDeferralInfo pdi) {
+        super(pdi);
+    }
+
 
     /**
      * Returns a float array of length 3 containing the X, Y, and Z
@@ -69,17 +98,28 @@ public class ICC_ProfileGray extends ICC_Profile {
         return super.getMediaWhitePoint();
     }
 
+
     /**
      * Returns a gamma value representing the tone reproduction
      * curve (TRC).  If the profile represents the TRC as a table rather
      * than a single gamma value, then an exception is thrown.  In this
-     * case the actual table can be obtained via getTRC().
+     * case the actual table can be obtained via getTRC().  When
+     * using a gamma value, the PCS Y component is computed as follows:
+<pre>
+
+&nbsp;                         gamma
+&nbsp;        PCSY = deviceGray
+
+</pre>
      * @return the gamma value as a float.
      * @exception ProfileDataException if the profile does not specify
      *            the TRC as a single gamma value.
      */
     public float getGamma() {
-        return super.getGamma(ICC_Profile.icSigGrayTRCTag);
+    float theGamma;
+
+        theGamma = super.getGamma(ICC_Profile.icSigGrayTRCTag);
+        return theGamma;
     }
 
     /**
@@ -101,6 +141,10 @@ public class ICC_ProfileGray extends ICC_Profile {
      *            the TRC as a table.
      */
     public short[] getTRC() {
-        return super.getTRC(ICC_Profile.icSigGrayTRCTag);
+    short[]    theTRC;
+
+        theTRC = super.getTRC(ICC_Profile.icSigGrayTRCTag);
+        return theTRC;
     }
+
 }
