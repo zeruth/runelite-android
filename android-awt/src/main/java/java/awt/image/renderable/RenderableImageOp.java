@@ -240,9 +240,7 @@ public class RenderableImageOp implements RenderableImage {
      */
     public RenderedImage createScaledRendering(int w, int h,
                                                RenderingHints hints) {
-        // DSR -- I know this is redundant, but particularly in the
-        // case of a large aspect ratio, we may get an inaccurate
-        // result.
+        // DSR -- code to try to get a unit scale
         double sx = (double)w/getWidth();
         double sy = (double)h/getHeight();
         if (Math.abs(sx/sy - 1.0) < 0.01) {

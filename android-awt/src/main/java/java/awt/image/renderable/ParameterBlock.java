@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998, 2013, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1998, 2004, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -580,6 +580,13 @@ public class ParameterBlock implements Cloneable, Serializable {
      * @param index the index of the parameter to be returned.
      * @return the parameter at the specified index
      *         as a <code>char</code> value.
+     * @throws ClassCastException if the parameter at the
+     *         specified index is not a <code>Character</code>
+     * @throws NullPointerException if the parameter at the specified
+     *         index is <code>null</code>
+     * @throws ArrayIndexOutOfBoundsException if <code>index</code>
+     *         is negative or not less than the current size of this
+     *         <code>ParameterBlock</code> object
      */
     public char getCharParameter(int index) {
         return ((Character)parameters.elementAt(index)).charValue();
@@ -593,6 +600,13 @@ public class ParameterBlock implements Cloneable, Serializable {
      * @param index the index of the parameter to be returned.
      * @return the parameter at the specified index
      *         as a <code>short</code> value.
+     * @throws ClassCastException if the parameter at the
+     *         specified index is not a <code>Short</code>
+     * @throws NullPointerException if the parameter at the specified
+     *         index is <code>null</code>
+     * @throws ArrayIndexOutOfBoundsException if <code>index</code>
+     *         is negative or not less than the current size of this
+     *         <code>ParameterBlock</code> object
      */
     public short getShortParameter(int index) {
         return ((Short)parameters.elementAt(index)).shortValue();
@@ -606,6 +620,13 @@ public class ParameterBlock implements Cloneable, Serializable {
      * @param index the index of the parameter to be returned.
      * @return the parameter at the specified index
      *         as a <code>int</code> value.
+     * @throws ClassCastException if the parameter at the
+     *         specified index is not a <code>Integer</code>
+     * @throws NullPointerException if the parameter at the specified
+     *         index is <code>null</code>
+     * @throws ArrayIndexOutOfBoundsException if <code>index</code>
+     *         is negative or not less than the current size of this
+     *         <code>ParameterBlock</code> object
      */
     public int getIntParameter(int index) {
         return ((Integer)parameters.elementAt(index)).intValue();
@@ -619,6 +640,13 @@ public class ParameterBlock implements Cloneable, Serializable {
      * @param index the index of the parameter to be returned.
      * @return the parameter at the specified index
      *         as a <code>long</code> value.
+     * @throws ClassCastException if the parameter at the
+     *         specified index is not a <code>Long</code>
+     * @throws NullPointerException if the parameter at the specified
+     *         index is <code>null</code>
+     * @throws ArrayIndexOutOfBoundsException if <code>index</code>
+     *         is negative or not less than the current size of this
+     *         <code>ParameterBlock</code> object
      */
     public long getLongParameter(int index) {
         return ((Long)parameters.elementAt(index)).longValue();
@@ -632,6 +660,13 @@ public class ParameterBlock implements Cloneable, Serializable {
      * @param index the index of the parameter to be returned.
      * @return the parameter at the specified index
      *         as a <code>float</code> value.
+     * @throws ClassCastException if the parameter at the
+     *         specified index is not a <code>Float</code>
+     * @throws NullPointerException if the parameter at the specified
+     *         index is <code>null</code>
+     * @throws ArrayIndexOutOfBoundsException if <code>index</code>
+     *         is negative or not less than the current size of this
+     *         <code>ParameterBlock</code> object
      */
     public float getFloatParameter(int index) {
         return ((Float)parameters.elementAt(index)).floatValue();
@@ -645,6 +680,13 @@ public class ParameterBlock implements Cloneable, Serializable {
      * @param index the index of the parameter to be returned.
      * @return the parameter at the specified index
      *         as a <code>double</code> value.
+     * @throws ClassCastException if the parameter at the
+     *         specified index is not a <code>Double</code>
+     * @throws NullPointerException if the parameter at the specified
+     *         index is <code>null</code>
+     * @throws ArrayIndexOutOfBoundsException if <code>index</code>
+     *         is negative or not less than the current size of this
+     *         <code>ParameterBlock</code> object
      */
     public double getDoubleParameter(int index) {
         return ((Double)parameters.elementAt(index)).doubleValue();

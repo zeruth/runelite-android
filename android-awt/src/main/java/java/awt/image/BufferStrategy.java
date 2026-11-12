@@ -36,9 +36,92 @@ import java.awt.Graphics;
  * <code>GraphicsConfiguration</code> used when creating the
  * <code>Canvas</code> or <code>Window</code>.
  * <p>
- * Alternatively, rendering may be performed in a loop that checks
- * {@link #contentsLost()} and {@link #contentsRestored()} after each
- * {@link #show()}, re-rendering the frame when either reports a change.
+ * It is worth noting that the terms <i>buffer</i> and <i>surface</i> are meant
+ * to be synonymous: an area of contiguous memory, either in video device
+ * memory or in system memory.
+ * <p>
+ * There are several types of complex buffer strategies, including
+ * sequential ring buffering and blit buffering.
+ * Sequential ring buffering (i.e., double or triple
+ * buffering) is the most common; an application draws to a single <i>back
+ * buffer</i> and then moves the contents to the front (display) in a single
+ * step, either by copying the data or moving the video pointer.
+ * Moving the video pointer exchanges the buffers so that the first buffer
+ * drawn becomes the <i>front buffer</i>, or what is currently displayed on the
+ * device; this is called <i>page flipping</i>.
+ * <p>
+ * Alternatively, the contents of the back buffer can be copied, or
+ * <i>blitted</i> forward in a chain instead of moving the video pointer.
+ * <pre>{@code
+ * Double buffering:
+ *
+ *                    ***********         ***********
+ *                    *         * ------> *         *
+ * [To display] <---- * Front B *   Show  * Back B. * <---- Rendering
+ *                    *         * <------ *         *
+ *                    ***********         ***********
+ *
+ * Triple buffering:
+ *
+ * [To      ***********         ***********        ***********
+ * display] *         * --------+---------+------> *         *
+ *    <---- * Front B *   Show  * Mid. B. *        * Back B. * <---- Rendering
+ *          *         * <------ *         * <----- *         *
+ *          ***********         ***********        ***********
+ *
+ * }</pre>
+ * <p>
+ * Here is an example of how buffer strategies can be created and used:
+ * <pre><code>
+ *
+ * // Check the capabilities of the GraphicsConfiguration
+ * ...
+ *
+ * // Create our component
+ * Window w = new Window(gc);
+ *
+ * // Show our window
+ * w.setVisible(true);
+ *
+ * // Create a general double-buffering strategy
+ * w.createBufferStrategy(2);
+ * BufferStrategy strategy = w.getBufferStrategy();
+ *
+ * // Main loop
+ * while (!done) {
+ *     // Prepare for rendering the next frame
+ *     // ...
+ *
+ *     // Render single frame
+ *     do {
+ *         // The following loop ensures that the contents of the drawing buffer
+ *         // are consistent in case the underlying surface was recreated
+ *         do {
+ *             // Get a new graphics context every time through the loop
+ *             // to make sure the strategy is validated
+ *             Graphics graphics = strategy.getDrawGraphics();
+ *
+ *             // Render to graphics
+ *             // ...
+ *
+ *             // Dispose the graphics
+ *             graphics.dispose();
+ *
+ *             // Repeat the rendering if the drawing buffer contents
+ *             // were restored
+ *         } while (strategy.contentsRestored());
+ *
+ *         // Display the buffer
+ *         strategy.show();
+ *
+ *         // Repeat the rendering if the drawing buffer was lost
+ *     } while (strategy.contentsLost());
+ * }
+ *
+ * // Dispose the window
+ * w.setVisible(false);
+ * w.dispose();
+ * </code></pre>
  *
  * @see java.awt.Window
  * @see java.awt.Canvas
