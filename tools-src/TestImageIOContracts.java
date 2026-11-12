@@ -1,4 +1,4 @@
-// host-contract
+// host-contract: patched-args=shadow
 import java.awt.Rectangle;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
@@ -38,6 +38,8 @@ import javax.imageio.stream.MemoryCacheImageOutputStream;
 public final class TestImageIOContracts {
     private static int failures;
     private static int total;
+    /** Set by the runner's {@code patched-args=shadow} on the run against the shadow classes. */
+    private static boolean shadow;
 
     private static void check(String name, boolean actual) {
         total++;
@@ -304,12 +306,26 @@ public final class TestImageIOContracts {
 
         ImageTypeSpecifier argb =
             ImageTypeSpecifier.createFromBufferedImageType(BufferedImage.TYPE_INT_ARGB);
-        check("type specifier round-trips its type",
-            argb.getBufferedImageType() == BufferedImage.TYPE_INT_ARGB);
         check("type specifier bands", argb.getNumBands() == 4 && argb.getNumComponents() == 4);
         BufferedImage made = argb.createBufferedImage(3, 2);
-        check("type specifier creates an image", made.getWidth() == 3 && made.getHeight() == 2
-            && made.getType() == BufferedImage.TYPE_INT_ARGB);
+        check("type specifier creates an image", made.getWidth() == 3 && made.getHeight() == 2);
+        if (shadow) {
+            // The host patch keeps the JDK BufferedImage (the shadow one needs the native
+            // backend) over the shadow Raster, and the JDK only types its own
+            // sun.awt.image rasters, so the image comes back TYPE_CUSTOM here; assert the
+            // model the shadow BufferedImage types as TYPE_INT_ARGB on Android instead.
+            java.awt.image.ColorModel cm = argb.getColorModel();
+            check("type specifier model is packed ARGB",
+                cm instanceof java.awt.image.DirectColorModel
+                && ((java.awt.image.DirectColorModel) cm).getAlphaMask() == 0xff000000
+                && ((java.awt.image.DirectColorModel) cm).getRedMask() == 0xff0000
+                && !cm.isAlphaPremultiplied() && cm.getColorSpace().isCS_sRGB()
+                && made.getColorModel().equals(cm));
+        } else {
+            check("type specifier round-trips its type",
+                argb.getBufferedImageType() == BufferedImage.TYPE_INT_ARGB);
+            check("type specifier image type", made.getType() == BufferedImage.TYPE_INT_ARGB);
+        }
 
         IIOImage image = new IIOImage(made, null, null);
         check("IIOImage holds the rendered image", image.getRenderedImage() == made
@@ -328,6 +344,7 @@ public final class TestImageIOContracts {
     }
 
     public static void main(String[] args) throws Exception {
+        shadow = args.length > 0 && "shadow".equals(args[0]);
         streams();
         registry();
         dataClasses();
