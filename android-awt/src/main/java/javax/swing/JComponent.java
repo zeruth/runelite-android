@@ -1341,6 +1341,28 @@ public class JComponent extends Container {
 
     public java.awt.Insets getInsets() { return border != null ? border.getBorderInsets(this) : super.getInsets(); }
 
+    /**
+     * Returns an <code>Insets</code> object containing this component's inset values,
+     * reusing <code>insets</code> when the border is an AbstractBorder.
+     */
+    public java.awt.Insets getInsets(java.awt.Insets insets) {
+        if (insets == null) {
+            insets = new java.awt.Insets(0, 0, 0, 0);
+        }
+        if (border != null) {
+            if (border instanceof javax.swing.border.AbstractBorder) {
+                return ((javax.swing.border.AbstractBorder) border).getBorderInsets(this, insets);
+            } else {
+                // Can't reuse border insets because the Border interface
+                // can't be enhanced.
+                return border.getBorderInsets(this);
+            }
+        } else {
+            insets.left = insets.top = insets.right = insets.bottom = 0;
+            return insets;
+        }
+    }
+
     private boolean autoscrolls;
     public void setAutoscrolls(boolean autoscrolls) { this.autoscrolls = autoscrolls; }
     public boolean getAutoscrolls() { return autoscrolls; }

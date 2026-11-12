@@ -1,68 +1,145 @@
 /*
- * Copyright (c) 2026, Tyler Bochard
- * All rights reserved.
+ * Copyright (c) 1997, 2013, Oracle and/or its affiliates. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
- * Part of android-awt, the Android shadow of the desktop JDK surface used by
- * runelite-android. Original work of this project, not derived from OpenJDK;
- * licensed under the BSD 2-Clause License (see the LICENSE file at the
- * repository root). Files ported from OpenJDK carry the OpenJDK header instead;
- * see android-awt/LICENSE.
+ * This code is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 only, as
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
+ * This code is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ * version 2 for more details (a copy is included in the LICENSE file that
+ * accompanied this code).
  *
- * 1. Redistributions of source code must retain the above copyright notice, this
- *    list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright notice,
- *    this list of conditions and the following disclaimer in the documentation
- *    and/or other materials provided with the distribution.
+ * You should have received a copy of the GNU General Public License version
+ * 2 along with this work; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
- * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
+ * or visit www.oracle.com if you need additional information or have any
+ * questions.
  */
 package javax.swing.border;
 
 import java.awt.Component;
 import java.awt.Graphics;
 import java.awt.Insets;
+import java.beans.ConstructorProperties;
 
+/**
+ * A composite Border class used to compose two Border objects
+ * into a single border by nesting an inside Border object within
+ * the insets of an outside Border object.
+ *
+ * @author David Kloba
+ */
+@SuppressWarnings("serial")
 public class CompoundBorder extends AbstractBorder {
-    private static final long serialVersionUID = 9054540377030555103L;
     protected Border outsideBorder;
     protected Border insideBorder;
 
-    public CompoundBorder() {}
+    /**
+     * Creates a compound border with null outside and inside borders.
+     */
+    public CompoundBorder() {
+        this.outsideBorder = null;
+        this.insideBorder = null;
+    }
+
+    /**
+     * Creates a compound border with the specified outside and
+     * inside borders.  Either border may be null.
+     * @param outsideBorder the outside border
+     * @param insideBorder the inside border to be nested
+     */
+    @ConstructorProperties({"outsideBorder", "insideBorder"})
     public CompoundBorder(Border outsideBorder, Border insideBorder) {
         this.outsideBorder = outsideBorder;
         this.insideBorder = insideBorder;
     }
 
-    public Border getOutsideBorder() { return outsideBorder; }
-    public Border getInsideBorder()  { return insideBorder; }
-
+    /**
+     * Returns whether or not the compound border is opaque.
+     *
+     * @return {@code true} if the inside and outside borders
+     *         are each either {@code null} or opaque;
+     *         or {@code false} otherwise
+     */
     @Override
-    public Insets getBorderInsets(Component c) {
-        Insets a = outsideBorder != null ? outsideBorder.getBorderInsets(c) : new Insets(0, 0, 0, 0);
-        Insets b = insideBorder != null ? insideBorder.getBorderInsets(c) : new Insets(0, 0, 0, 0);
-        return new Insets(a.top + b.top, a.left + b.left, a.bottom + b.bottom, a.right + b.right);
+    public boolean isBorderOpaque() {
+        return (outsideBorder == null || outsideBorder.isBorderOpaque()) &&
+               (insideBorder == null || insideBorder.isBorderOpaque());
     }
 
-    @Override
+    /**
+     * Paints the compound border by painting the outside border
+     * with the specified position and size and then painting the
+     * inside border at the specified position and size offset by
+     * the insets of the outside border.
+     */
     public void paintBorder(Component c, Graphics g, int x, int y, int width, int height) {
-        if (outsideBorder != null) outsideBorder.paintBorder(c, g, x, y, width, height);
-        if (insideBorder != null) {
-            Insets o = outsideBorder != null ? outsideBorder.getBorderInsets(c) : new Insets(0, 0, 0, 0);
-            insideBorder.paintBorder(c, g,
-                x + o.left, y + o.top,
-                width - o.left - o.right, height - o.top - o.bottom);
+        Insets  nextInsets;
+        int px, py, pw, ph;
+
+        px = x;
+        py = y;
+        pw = width;
+        ph = height;
+
+        if(outsideBorder != null) {
+            outsideBorder.paintBorder(c, g, px, py, pw, ph);
+
+            nextInsets = outsideBorder.getBorderInsets(c);
+            px += nextInsets.left;
+            py += nextInsets.top;
+            pw = pw - nextInsets.right - nextInsets.left;
+            ph = ph - nextInsets.bottom - nextInsets.top;
         }
+        if(insideBorder != null)
+            insideBorder.paintBorder(c, g, px, py, pw, ph);
+
+    }
+
+    /**
+     * Reinitialize the insets parameter with this Border's current Insets.
+     * @param c the component for which this border insets value applies
+     * @param insets the object to be reinitialized
+     */
+    public Insets getBorderInsets(Component c, Insets insets) {
+        Insets  nextInsets;
+
+        insets.top = insets.left = insets.right = insets.bottom = 0;
+        if(outsideBorder != null) {
+            nextInsets = outsideBorder.getBorderInsets(c);
+            insets.top += nextInsets.top;
+            insets.left += nextInsets.left;
+            insets.right += nextInsets.right;
+            insets.bottom += nextInsets.bottom;
+        }
+        if(insideBorder != null) {
+            nextInsets = insideBorder.getBorderInsets(c);
+            insets.top += nextInsets.top;
+            insets.left += nextInsets.left;
+            insets.right += nextInsets.right;
+            insets.bottom += nextInsets.bottom;
+        }
+        return insets;
+    }
+
+    /**
+     * Returns the outside border object.
+     */
+    public Border getOutsideBorder() {
+        return outsideBorder;
+    }
+
+    /**
+     * Returns the inside border object.
+     */
+    public Border getInsideBorder() {
+        return insideBorder;
     }
 }
