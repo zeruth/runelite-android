@@ -212,7 +212,8 @@ defines (so it cannot be shadowed, section 4), the on-device client preparation
 (`android/src/androidMain/kotlin/net/runelite/mp/client/ClientTransforms.kt`, run in order by
 `ClientPreparer.build`) rewrites the call site to a static helper in
 `android/src/androidMain/kotlin/net/runelite/mp/util`. These rewrites apply to the downloaded
-client jar only; hub plugins go through `PluginDexer` (D8 alone) and see none of them. Each row
+client jar only; hub plugins go through `PluginDexer` (`PluginClassTransform`, then D8, section
+11) and see none of them. Each row
 is one rewrite; a retargeting table in the dexer replaces them row by row.
 
 | Shim member | Pass (`ClientTransforms.kt`) | Bytecode matched | Rewritten to | Why |
@@ -228,3 +229,53 @@ is one rewrite; a retargeting table in the dexer replaces them row by row.
 `DesugarLambdasTask` itself (every `LambdaMetafactory.metafactory` indy becomes a generated
 `runelite/desugar/LambdaN` class, impl methods and their types widened to public) is a language
 lowering, not a member retarget, and stays outside the table.
+
+## 11. invokedynamic and dynamic-constant bootstraps
+
+ART at API 26 has `invoke-custom` but none of the JDK bootstrap classes, and no
+`const-method-handle` before API 28, so every bootstrap must be gone before the dex reaches the
+device: either D8 9.5 (`--min-api 26`) desugars it, or an ASM pass lowers it first. The client jar
+goes through `ClientTransforms.kt` before its D8; a hub jar goes through `PluginClassTransform`
+(`android/src/androidMain/java/net/runelite/mp/plugins`, desktop regex relocation then
+`IndyLowering`) before `PluginDexer`'s D8. `python tools-src/indy-inventory.py` lists the kinds
+and their call-site counts in `build/hub-cache` (filled by `hub-compat-scan.py`) and the injected
+client (`data/`, else `net.runelite:injected-client` at `project.build.version` in the Gradle
+cache); a kind it prints that is not a row here needs a row and a fixture.
+
+Inventory of 2026-11-12: all 2927 jars of the 1.13.6 hub manifest plus `injected-client-1.13.6.jar`
+(constant-pool entries, i.e. call sites per class, summed):
+
+| Kind | Call sites | Jars | Where |
+|---|---|---|---|
+| `LambdaMetafactory.metafactory` | 90523 | 2327 | hub (2326 plugins) and the injected client |
+| `StringConcatFactory.makeConcatWithConstants` | 57607 | 2163 | hub and the injected client |
+| `StringConcatFactory.makeConcatWithConstants[constants]` | 10 | 4 | injected client (3), `inventory-setups-picker`, `irc`, `voiced-dialogue` |
+| `condy ConstantBootstraps.invoke` (`ldc`, `H_INVOKESTATIC` target) | 7 | 1 | injected client |
+| `condy-arg ConstantBootstraps.invoke` (a `makeConcatWithConstants` constant) | 2 | 1 | injected client |
+
+No hub jar holds `altMetafactory`, `makeConcat`, `ObjectMethods`, `SwitchBootstraps` or any `ldc` of
+a dynamic constant: the hub builds at `--release 11` (2926 jars top out at class version 55, one
+at 52). The rows past these five are covered ahead
+of the plugins that will need them. The runelite-client and runelite-api jars (lambdas and
+`makeConcatWithConstants` only) are dexed by AGP's D8, not by either pass here.
+
+| Bootstrap | Emitted by | Client jar | Hub jars | Fixture (`tools-src`) |
+|---|---|---|---|---|
+| `LambdaMetafactory.metafactory` | lambdas, method references | `DesugarLambdasTask` → `runelite/desugar/LambdaN` (`SyntheticLambdas`); `H_INVOKESPECIAL` impls dispatch `INVOKEVIRTUAL` on the widened method | D8 | `IndyLambdaFixture`; `ClientLambdaFixture` through `TestClientLambdaLowering` |
+| `LambdaMetafactory.altMetafactory` (serializable, marker interfaces, bridges) | intersection casts, `Serializable` targets, generic SAM overrides | D8 (not seen in the client) | D8; a serializable lambda calls but does not serialize (no `SerializedLambda` on ART) | `IndyAltLambdaFixture` |
+| `StringConcatFactory.makeConcatWithConstants` (with and without bootstrap constants) | `+` on strings, `--release 9`+ | `DesugarStringConcatTask` → `IndyConcat.concat` (section 10) | D8 | `IndyConcatConstantsFixture` |
+| `StringConcatFactory.makeConcat` | `-XDstringConcat=indy` | D8 | D8 | `IndyConcatPlainFixture` |
+| `ObjectMethods.bootstrap` | records' `equals`/`hashCode`/`toString` | D8 | D8 (record desugaring) | `IndyRecordFixture` |
+| `SwitchBootstraps.typeSwitch` (class, `String`, `Integer`, enum labels; `EnumDesc` labels are nested `ConstantBootstraps.invoke` arguments) | pattern `switch`, `--release 21` | D8 | D8 | `IndyTypeSwitchFixture` |
+| `SwitchBootstraps.enumSwitch` | pattern `switch` over an enum type | D8 | D8 | `IndyEnumSwitchFixture` |
+| `ldc` of a `ConstantBootstraps` dynamic constant (`nullConstant`, `primitiveClass`, `enumConstant`, `getStaticFinal`, `invoke`, `explicitCast`) | obfuscators and bytecode tools, not javac | `DesugarStringConcatTask` → `runelite/desugar/CondyN` holder classes (`invoke` + `H_INVOKESTATIC` only) | `IndyLowering` → a cached `private static synchronized $condy$N` accessor in the same class (resolve-once, own access to private targets) | `IndyCondyFixture`, generated by `TestIndyFixtures condy` |
+| `ConstantBootstraps` VarHandle constants (`fieldVarHandle`, `staticFieldVarHandle`, `arrayVarHandle`) | bytecode tools | refused (`DesugarStringConcatTask` names the constant) | refused with the reason (`IndyLowering`); no `VarHandle` at API 26 | none: refusal is the behaviour |
+| `ldc` of a dynamic constant with any other static bootstrap (the class's own, JaCoCo's `$jacocoData` shape) | `javac` does not emit one; coverage and bytecode tools do | not present; `DesugarStringConcatTask` stops naming the constant | `IndyLowering` → the same cached accessor, calling the bootstrap with the holder's own `MethodHandles.lookup()` (API 26), the name and the type; D8 9.5 refuses even this shape at every API level ("Unsupported dynamic constant (unsupported constant type)") | `IndySelfCondyFixture`, generated by `TestIndyFixtures selfcondy` |
+| Java 21 string templates (`StringTemplate`, preview) | preview-only, removed in JDK 23 | not present | not present (a preview class file cannot load on a release JVM, so hub jars cannot carry it) | none |
+
+`python tools-src/test-runtime-plugin-dex.py` is the proof: each fixture's class files are checked
+with the inventory to hold the kinds of its row, run on the host JVM, run again after
+`PluginClassTransform` under `-Xverify:all` with identical output, and dexed by D8 9.5 at
+min-api 26 into a dex with no call-site and no method-handle items. A dynamic constant `ldc`'d in
+an interface is refused by `IndyLowering` with its name: interface fields are final, so there is
+no field to cache the resolved value in.

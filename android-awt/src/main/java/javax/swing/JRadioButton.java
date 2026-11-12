@@ -31,6 +31,8 @@
 package javax.swing;
 
 public class JRadioButton extends JToggleButton implements javax.accessibility.Accessible {
+    private static final String uiClassID = "RadioButtonUI";
+    public String getUIClassID() { return uiClassID; }
 
     public javax.accessibility.AccessibleContext getAccessibleContext() {
         if (accessibleContext == null) {

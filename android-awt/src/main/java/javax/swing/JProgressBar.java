@@ -33,6 +33,8 @@ package javax.swing;
 import javax.swing.event.ChangeListener;
 
 public class JProgressBar extends JComponent implements SwingConstants, javax.accessibility.Accessible {
+    private static final String uiClassID = "ProgressBarUI";
+    public String getUIClassID() { return uiClassID; }
 
     public javax.accessibility.AccessibleContext getAccessibleContext() {
         if (accessibleContext == null) {

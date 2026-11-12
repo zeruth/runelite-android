@@ -401,8 +401,10 @@ public class JComponent extends Container {
     protected void printChildren(java.awt.Graphics g) { paintChildren(g); }
     protected void printBorder(java.awt.Graphics g) { paintBorder(g); }
 
+    // JDK 9+ (9): jdk17u src/java.desktop/share/classes/javax/swing/JComponent.java
     public javax.swing.plaf.ComponentUI getUI() { return ui; }
-    public void setUI(javax.swing.plaf.ComponentUI ui) { javax.swing.plaf.ComponentUI old=this.ui;if(old!=null)old.uninstallUI(this);this.ui=ui;if(ui!=null)ui.installUI(this);firePropertyChange("UI",old,ui);revalidate();repaint(); }
+    /** Protected as on the JDK: callers go through each component's typed setUI(FooUI). */
+    protected void setUI(javax.swing.plaf.ComponentUI ui) { javax.swing.plaf.ComponentUI old=this.ui;if(old!=null)old.uninstallUI(this);this.ui=ui;if(ui!=null)ui.installUI(this);firePropertyChange("UI",old,ui);revalidate();repaint(); }
     public String getUIClassID() { return "ComponentUI"; }
 
     public void updateUI() { javax.swing.plaf.ComponentUI delegate=UIManager.getUI(this);if(delegate!=null)setUI(delegate); }
@@ -426,6 +428,11 @@ public class JComponent extends Container {
 
     public void repaint(java.awt.Rectangle r) {
         repaint(0, r.x, r.y, r.width, r.height);
+    }
+
+    /** Swing's default: painting of a component does not have to start at it. */
+    protected boolean isPaintingOrigin() {
+        return false;
     }
 
     /**

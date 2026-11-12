@@ -30,7 +30,7 @@
  */
 package java.lang.management;
 
-public interface MemoryPoolMXBean {
+public interface MemoryPoolMXBean extends PlatformManagedObject {
     String getName();
     String[] getMemoryManagerNames();
     MemoryUsage getUsage();
@@ -42,4 +42,11 @@ public interface MemoryPoolMXBean {
     boolean isUsageThresholdSupported();
     long getUsageThreshold();
     void setUsageThreshold(long threshold);
+    boolean isUsageThresholdExceeded();
+    long getUsageThresholdCount();
+    boolean isCollectionUsageThresholdSupported();
+    long getCollectionUsageThreshold();
+    void setCollectionUsageThreshold(long threshold);
+    boolean isCollectionUsageThresholdExceeded();
+    long getCollectionUsageThresholdCount();
 }

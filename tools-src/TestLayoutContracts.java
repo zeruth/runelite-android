@@ -1,4 +1,4 @@
-// host-contract: patched-args=shadow
+// host-contract: patched-args=shadow jvm-args=--add-exports=java.desktop/sun.awt=ALL-UNNAMED,--add-opens=java.desktop/java.awt=ALL-UNNAMED
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
@@ -57,21 +57,9 @@ public class TestLayoutContracts {
 
     static JPanel rigid(int w, int h) { return sized(w, h, w, h, w, h); }
 
-    /**
-     * A rigid child hidden without setVisible(false): the JDK's Container.hide() goes through
-     * the keyboard focus manager, which the patched run cannot initialise headless. Both
-     * layouts read visibility through isVisible(), so the override is what they see.
-     */
     static JPanel hiddenRigid(int w, int h) {
-        JPanel p = new JPanel() {
-            @Override public boolean isVisible() { return false; }
-        };
-        Dimension d = new Dimension(w, h);
-        p.setMinimumSize(d);
-        p.setPreferredSize(d);
-        p.setMaximumSize(d);
-        p.setAlignmentX(0.5f);
-        p.setAlignmentY(0.5f);
+        JPanel p = rigid(w, h);
+        p.setVisible(false);
         return p;
     }
 
@@ -164,10 +152,7 @@ public class TestLayoutContracts {
         filler.changeShape(new Dimension(1, 1), new Dimension(2, 2), new Dimension(3, 3));
         check(filler.getPreferredSize().equals(new Dimension(2, 2)), "changeShape preferred " + filler.getPreferredSize());
 
-        // JSeparator rejects an orientation other than HORIZONTAL or VERTICAL. A valid one is
-        // not constructed here: JSeparator is not patched, and the JDK's constructor calls
-        // setFocusable(false), which reaches the keyboard focus manager the patched run cannot
-        // initialise headless; the orientation check throws before that.
+        // JSeparator rejects an orientation other than HORIZONTAL or VERTICAL and is not focusable.
         threw = false;
         try {
             new javax.swing.JSeparator(42);
@@ -175,6 +160,7 @@ public class TestLayoutContracts {
             threw = true;
         }
         check(threw, "JSeparator orientation check");
+        check(!new javax.swing.JSeparator().isFocusable(), "JSeparator focusable");
     }
 
     static void overlayLayout() {
@@ -479,8 +465,10 @@ public class TestLayoutContracts {
         check(SwingUtilities.getUnwrappedView(vp) == view, "unwrapped view skips the layer");
     }
 
-    public static void main(String[] args) {
-        boolean shadow = args.length > 0 && "shadow".equals(args[0]);
+    public static void main(String[] args) throws Exception {
+        if (args.length > 0 && "shadow".equals(args[0])) {
+            installHeadlessFocusManager();
+        }
         boxLayout();
         boxContracts();
         overlayLayout();
@@ -489,13 +477,31 @@ public class TestLayoutContracts {
         springLayout();
         scrollPaneLayout();
         defaultLayouts();
-        // Every JLayer constructor hides its fresh glass pane (as 8u does), and the JDK's
-        // Container.hide() then builds the keyboard focus manager, whose peer lookup casts the
-        // toolkit to sun.awt.KeyboardFocusManagerPeerProvider; KeyboardFocusManager is not
-        // patchable (JNI layout), so the patched run cannot construct a JLayer headless.
-        if (!shadow) {
-            layer();
-        }
+        layer();
         System.out.println("TestLayoutContracts: ok");
+    }
+
+    /**
+     * The JDK's Component.hide() and setFocusable(false) ask the keyboard focus manager for the
+     * focus owner, and the first ask builds a DefaultKeyboardFocusManager whose peer lookup casts
+     * the default toolkit to sun.awt.KeyboardFocusManagerPeerProvider. In the patched run the
+     * default toolkit is the shadow HostToolkit, and KeyboardFocusManager itself is not
+     * patchable (its JNI layout differs), so the manager is built once here with the JDK's
+     * HeadlessToolkit, the toolkit of the plain run whose focus peer is a no-op, standing in
+     * as default. Only that construction sees the stand-in; every case after it runs on the
+     * shadow toolkit.
+     */
+    private static void installHeadlessFocusManager() throws ReflectiveOperationException {
+        java.lang.reflect.Field field = java.awt.Toolkit.class.getDeclaredField("defaultToolkit");
+        field.setAccessible(true);
+        java.awt.Toolkit host = java.awt.Toolkit.getDefaultToolkit();
+        Object headless = Class.forName("sun.awt.HeadlessToolkit")
+            .getConstructor(java.awt.Toolkit.class).newInstance(host);
+        field.set(null, headless);
+        try {
+            java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager();
+        } finally {
+            field.set(null, host);
+        }
     }
 }

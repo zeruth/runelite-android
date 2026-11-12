@@ -29,7 +29,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 package javax.management;
-public class InstanceNotFoundException extends Exception {
+public class InstanceNotFoundException extends OperationsException {
     public InstanceNotFoundException() {}
     public InstanceNotFoundException(String message) { super(message); }
 }

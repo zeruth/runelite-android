@@ -59,6 +59,8 @@ public abstract class BasicLookAndFeel extends LookAndFeel {
                   "LabelUI", basicPackageName + "BasicLabelUI",
              "OptionPaneUI", basicPackageName + "BasicOptionPaneUI",
             "ProgressBarUI", basicPackageName + "BasicProgressBarUI",
+           "ColorChooserUI", basicPackageName + "BasicColorChooserUI",
+            "FileChooserUI", basicPackageName + "BasicFileChooserUI",
                    "TreeUI", basicPackageName + "BasicTreeUI",
                   "TableUI", basicPackageName + "BasicTableUI",
             "TableHeaderUI", basicPackageName + "BasicTableHeaderUI",

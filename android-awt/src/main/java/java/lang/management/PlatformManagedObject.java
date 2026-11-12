@@ -28,10 +28,9 @@
  * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-package java.awt;
-/** Retained name for older shim callers. Desktop APIs use java.awt.font.FontRenderContext. */
-@Deprecated
-public class FontRenderContext extends java.awt.font.FontRenderContext {
-    public FontRenderContext(){super(null,false,false);}
-    public FontRenderContext(java.awt.geom.AffineTransform transform,boolean aa,boolean fractional){super(transform,aa,fractional);}
+package java.lang.management;
+
+/** A platform MXBean: the name it is registered under in the platform MBean server. */
+public interface PlatformManagedObject {
+    javax.management.ObjectName getObjectName();
 }

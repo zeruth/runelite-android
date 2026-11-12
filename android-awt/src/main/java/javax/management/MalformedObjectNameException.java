@@ -30,7 +30,7 @@
  */
 package javax.management;
 
-public class MalformedObjectNameException extends Exception {
+public class MalformedObjectNameException extends OperationsException {
     private static final long serialVersionUID = 1L;
     public MalformedObjectNameException() {}
     public MalformedObjectNameException(String message) { super(message); }
