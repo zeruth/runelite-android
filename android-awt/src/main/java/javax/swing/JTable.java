@@ -5500,7 +5500,7 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
     static class NumberEditor extends GenericEditor {
 
         public NumberEditor() {
-            ((JTextField)getComponent()).setHorizontalAlignment(JTextField.RIGHT);
+            ((JTextField)getComponent()).setHorizontalAlignment(SwingConstants.RIGHT);
         }
     }
 
