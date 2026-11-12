@@ -419,7 +419,8 @@ public abstract class JTextComponent extends JComponent {
                 return false;
             }
             if (support.isDrop()) {
-                int index = ((DropLocation) support.getDropLocation()).getIndex();
+                // Qualified: inside a TransferHandler subclass, DropLocation is TransferHandler's.
+                int index = ((JTextComponent.DropLocation) support.getDropLocation()).getIndex();
                 // Dropping a moved selection back inside itself is a no-op, as on desktop.
                 if (c == exportComp && p0 != null && index >= p0.getOffset() && index <= p1.getOffset()) {
                     shouldRemove = false;
