@@ -108,6 +108,8 @@ public class MediaTracker implements java.io.Serializable {
      * @param     h    the height at which the image is rendered
      */
     public synchronized void addImage(Image image, int id, int w, int h) {
+        // jdk8u splits this into addImageImpl plus a second entry for the
+        // MultiResolutionToolkitImage variant; no toolkit image here has variants.
         head = MediaEntry.insert(head,
                                  new ImageMediaEntry(this, image, id, w, h));
     }
