@@ -113,11 +113,22 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
     protected Container parent;
     /** Mouse cursor — Android can't actually show one but RuneLite plugins
      *  (CustomCursorPlugin, drag handlers) call setCursor/getCursor a lot and
-     *  hit NoSuchMethodError if these aren't here. */
-    protected Cursor cursor = Cursor.getDefaultCursor();
+     *  hit NoSuchMethodError if these aren't here. Null until set, so an unset
+     *  component inherits its parent's cursor as on the JDK. */
+    protected Cursor cursor;
 
-    public Cursor getCursor() { return cursor; }
+    public Cursor getCursor() {
+        Cursor c = cursor;
+        for (Component comp = this; c == null; c = comp.cursor) {
+            if (comp instanceof Window) return Cursor.getDefaultCursor();
+            comp = comp.parent;
+            if (comp == null) return Cursor.getDefaultCursor();
+        }
+        return c;
+    }
     public void setCursor(Cursor cursor) { this.cursor = cursor; }
+    /** Whether a cursor was set on this component itself. */
+    public boolean isCursorSet() { return cursor != null; }
 
     // CopyOnWriteArrayList, so dispatch can iterate directly instead of taking a
     // defensive `new ArrayList<>(listeners)` snapshot on every event. Pointer moves
@@ -198,19 +209,29 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
     public boolean isMaximumSizeSet() { return maximumSize != null; }
     public Rectangle getBounds()  { return new Rectangle(x, y, width, height); }
 
-    public void setLocation(int x, int y) {
-        boolean moved = this.x != x || this.y != y;
-        this.x = x; this.y = y;
-        if (moved) { repaint(); fireComponentMoved(); fireAncestorBounds(java.awt.event.HierarchyEvent.ANCESTOR_MOVED); }
-    }
+    // As in the JDK, moving and resizing are setBounds, so a subclass overriding setBounds
+    // or reshape sees them; reshape fires the moved/resized and ancestor events. Not through
+    // move/resize: Applet.resize calls setSize.
+    public void setLocation(int x, int y)       { setBounds(x, y, width, height); }
     public void setLocation(Point p)            { setLocation(p.x, p.y); }
-    public void setSize(int w, int h) {
-        boolean resized = width != w || height != h;
-        width = w; height = h;
-        if (resized) { invalidate(); fireComponentResized(); fireAncestorBounds(java.awt.event.HierarchyEvent.ANCESTOR_RESIZED); }
-    }
+    public void setSize(int w, int h)           { setBounds(x, y, w, h); }
     public void setSize(Dimension d)            { setSize(d.width, d.height); }
-    public void setBounds(int x, int y, int w, int h) {
+    /** @deprecated As of JDK version 1.1, replaced by {@code setLocation(int, int)}. */
+    @Deprecated
+    public void move(int x, int y) { setLocation(x, y); }
+    /** @deprecated As of JDK version 1.1, replaced by {@code setSize(int, int)}. */
+    @Deprecated
+    public void resize(int width, int height) { setSize(width, height); }
+    /** @deprecated As of JDK version 1.1, replaced by {@code setSize(Dimension)}. */
+    @Deprecated
+    public void resize(Dimension d) { setSize(d.width, d.height); }
+
+    /** The JDK's setBounds is reshape, so a subclass overriding reshape (JViewport-style) sees every setBounds. */
+    public void setBounds(int x, int y, int w, int h) { reshape(x, y, w, h); }
+
+    /** @deprecated As of JDK version 1.1, replaced by {@code setBounds(int, int, int, int)}. */
+    @Deprecated
+    public void reshape(int x, int y, int w, int h) {
         boolean moved = this.x != x || this.y != y;
         boolean resized = this.width != w || this.height != h;
         this.x = x; this.y = y; this.width = w; this.height = h;
@@ -334,7 +355,12 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
         }
     }
     public void update(Graphics g) { paint(g); }
-    public void paintAll(Graphics g) { paint(g); }
+    /** Paints this component and its subcomponents, when showing. */
+    public void paintAll(Graphics g) {
+        if (isShowing()) {
+            paint(g);
+        }
+    }
     /**
      * Layout validity.
      *
@@ -443,8 +469,201 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
         return (infoflags & (ALLBITS | ABORT)) == 0;
     }
 
+    /**
+     * Checks whether this component "contains" the specified point, where {@code x} and
+     * {@code y} are relative to this component's coordinate system.
+     */
+    public boolean contains(int x, int y) {
+        return inside(x, y);
+    }
+
+    /** @deprecated As of JDK version 1.1, replaced by contains(int, int). */
+    @Deprecated
     public boolean inside(int x, int y) {
         return x >= 0 && x < width && y >= 0 && y < height;
+    }
+
+    public boolean contains(Point p) {
+        return contains(p.x, p.y);
+    }
+
+    /** Returns this component when it contains the point, otherwise {@code null}. */
+    public Component getComponentAt(int x, int y) {
+        return locate(x, y);
+    }
+
+    /** @deprecated As of JDK version 1.1, replaced by getComponentAt(int, int). */
+    @Deprecated
+    public Component locate(int x, int y) {
+        return contains(x, y) ? this : null;
+    }
+
+    public Component getComponentAt(Point p) {
+        return getComponentAt(p.x, p.y);
+    }
+
+    /**
+     * Opaque means "paints every pixel of its bounds": true for a native widget once it has
+     * its (here notional) peer, i.e. after addNotify, false before that and for lightweight
+     * components, which JComponent refines with setOpaque.
+     */
+    public boolean isOpaque() {
+        return notified && !isLightweight();
+    }
+
+    boolean isRecursivelyVisible() {
+        return visible && (parent == null || parent.isRecursivelyVisible());
+    }
+
+    /** Component's version ignores children: only the component itself counts. */
+    boolean isSameOrAncestorOf(Component comp, boolean allowChildren) {
+        return comp == this;
+    }
+
+    /** The topmost ancestor: a Window on desktop, a host-mounted panel root on Android. */
+    final Component getRoot() {
+        Component root = this;
+        while (root.parent != null) root = root.parent;
+        return root;
+    }
+
+    /**
+     * The JDK asks the native pointer peer whether this component's window is under the
+     * mouse, then searches that window. Here the "window" is the tree the last host pointer
+     * event was dispatched into ({@link MouseInfo}): another tree, or no pointer yet, means
+     * the pointer is somewhere else.
+     */
+    final Component findUnderMouseInWindow(PointerInfo pi) {
+        if (!isShowing()) {
+            return null;
+        }
+        Component root = getRoot();
+        if (!MouseInfo.isUnderPointer(root)) {
+            return null;
+        }
+        Point p = root.pointRelativeToComponent(pi.getLocation());
+        if (root instanceof Container) {
+            return ((Container) root).findComponentAt(p.x, p.y, true);
+        }
+        return root.contains(p.x, p.y) ? root : null;
+    }
+
+    final Point pointRelativeToComponent(Point point) {
+        Point compCoords = getLocationOnScreen();
+        return new Point(point.x - compCoords.x, point.y - compCoords.y);
+    }
+
+    /**
+     * Returns the position of the pointer in this component's coordinates when the
+     * component is directly under it (not obscured by a child or sibling), else
+     * {@code null}. The JDK throws HeadlessException in a headless toolkit; the Android
+     * host always has a pointer, so this answers from the last host pointer event.
+     */
+    public Point getMousePosition() throws HeadlessException {
+        PointerInfo pi = MouseInfo.getPointerInfo();
+        synchronized (getTreeLock()) {
+            Component inTheSameWindow = findUnderMouseInWindow(pi);
+            if (!isSameOrAncestorOf(inTheSameWindow, true)) {
+                return null;
+            }
+            return pointRelativeToComponent(pi.getLocation());
+        }
+    }
+
+    private ComponentOrientation componentOrientation = ComponentOrientation.UNKNOWN;
+
+    /**
+     * Sets the language-sensitive orientation used to order elements or text within this
+     * component; layout managers such as FlowLayout read it. Fires a
+     * "componentOrientation" property change.
+     */
+    public void setComponentOrientation(ComponentOrientation o) {
+        ComponentOrientation oldValue = componentOrientation;
+        componentOrientation = o;
+        firePropertyChange("componentOrientation", oldValue, o);
+        invalidate();
+    }
+
+    public ComponentOrientation getComponentOrientation() {
+        return componentOrientation;
+    }
+
+    /** Sets the orientation of this component and, for a container, of every descendant. */
+    public void applyComponentOrientation(ComponentOrientation orientation) {
+        if (orientation == null) {
+            throw new NullPointerException();
+        }
+        setComponentOrientation(orientation);
+    }
+
+    /** Enumeration of the common ways the baseline of a component can change as the size changes. */
+    public enum BaselineResizeBehavior {
+        CONSTANT_ASCENT,
+        CONSTANT_DESCENT,
+        CENTER_OFFSET,
+        OTHER
+    }
+
+    /**
+     * Returns the baseline, measured from the top, or a value &lt; 0 if this component has
+     * none; the default has none.
+     *
+     * @throws IllegalArgumentException if width or height is &lt; 0
+     */
+    public int getBaseline(int width, int height) {
+        if (width < 0 || height < 0) {
+            throw new IllegalArgumentException("Width and height must be >= 0");
+        }
+        return -1;
+    }
+
+    public BaselineResizeBehavior getBaselineResizeBehavior() {
+        return BaselineResizeBehavior.OTHER;
+    }
+
+    /** Prints this component; by default it paints. */
+    public void print(Graphics g) {
+        paint(g);
+    }
+
+    /** Prints this component and its subcomponents, when showing. */
+    public void printAll(Graphics g) {
+        if (isShowing()) {
+            print(g);
+        }
+    }
+
+    /**
+     * Returns the listeners of the given type registered on this component, an empty array
+     * of that type when there are none.
+     *
+     * @throws ClassCastException if listenerType is not a java.util.EventListener
+     */
+    @SuppressWarnings("unchecked")
+    public <T extends java.util.EventListener> T[] getListeners(Class<T> listenerType) {
+        List<? extends java.util.EventListener> l = null;
+        if (listenerType == ComponentListener.class) {
+            l = componentListeners;
+        } else if (listenerType == FocusListener.class) {
+            l = focusListeners;
+        } else if (listenerType == HierarchyListener.class) {
+            l = hierarchyListeners;
+        } else if (listenerType == KeyListener.class) {
+            l = keyListeners;
+        } else if (listenerType == MouseListener.class) {
+            l = mouseListeners;
+        } else if (listenerType == MouseMotionListener.class) {
+            l = mouseMotionListeners;
+        } else if (listenerType == MouseWheelListener.class) {
+            l = mouseWheelListeners;
+        } else if (listenerType == java.beans.PropertyChangeListener.class) {
+            return (T[]) getPropertyChangeListeners();
+        }
+        if (!java.util.EventListener.class.isAssignableFrom(listenerType)) {
+            throw new ClassCastException(listenerType.getName());
+        }
+        T[] result = (T[]) java.lang.reflect.Array.newInstance(listenerType, 0);
+        return l == null ? result : l.toArray(result);
     }
 
     // --- focus (after OpenJDK 8u Component; requests complete synchronously, see KeyboardFocusManager) ---
@@ -827,6 +1046,9 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
      */
     public void dispatchMouseEvent(MouseEvent e) {
         if (e == null) return;
+        // Every host pointer event passes through here; it is where the pointer "is" for
+        // MouseInfo and getMousePosition.
+        MouseInfo.pointerAt(getRoot(), e.getXOnScreen(), e.getYOnScreen());
         // Through the JDK's per-kind hooks, so AWT widgets and plugin subclasses that override
         // processMouseEvent see host-injected input as they would on desktop.
         switch (e.getID()) {
