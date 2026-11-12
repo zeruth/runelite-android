@@ -421,64 +421,206 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
         return x >= 0 && x < width && y >= 0 && y < height;
     }
 
-    public boolean requestFocus(boolean temporary) { return requestFocusInWindow(); }
-    public void requestFocus() { requestFocusInWindow(); }
-    public boolean requestFocusInWindow() { return KeyboardFocusManager.getCurrentKeyboardFocusManager().requestFocus(this); }
+    // --- focus (after OpenJDK 8u Component; requests complete synchronously, see KeyboardFocusManager) ---
+
+    public void requestFocus() { requestFocusHelper(false, java.awt.event.FocusEvent.Cause.UNKNOWN); }
+    // JDK 9+ (9)
+    public void requestFocus(java.awt.event.FocusEvent.Cause cause) { requestFocusHelper(false, cause); }
+    /** Protected on the JDK; public here because host code calls it on plain Components. */
+    public boolean requestFocus(boolean temporary) { return requestFocusHelper(temporary, java.awt.event.FocusEvent.Cause.UNKNOWN); }
+    // JDK 9+ (9)
+    protected boolean requestFocus(boolean temporary, java.awt.event.FocusEvent.Cause cause) { return requestFocusHelper(temporary, cause); }
+    public boolean requestFocusInWindow() { return requestFocusHelper(false, java.awt.event.FocusEvent.Cause.UNKNOWN); }
+    // JDK 9+ (9)
+    public boolean requestFocusInWindow(java.awt.event.FocusEvent.Cause cause) { return requestFocusHelper(false, cause); }
+    protected boolean requestFocusInWindow(boolean temporary) { return requestFocusHelper(temporary, java.awt.event.FocusEvent.Cause.UNKNOWN); }
+    // There is one native window on Android, so a request may always change the focused Window:
+    // requestFocus and requestFocusInWindow behave alike.
+    private boolean requestFocusHelper(boolean temporary, java.awt.event.FocusEvent.Cause cause) {
+        return KeyboardFocusManager.getCurrentKeyboardFocusManager().requestFocus(this, cause, temporary);
+    }
     public boolean isFocusOwner() { return KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner() == this; }
     public float getAlignmentX() { return 0.5f; }
     public float getAlignmentY() { return 0.5f; }
     public boolean hasFocus() { return isFocusOwner(); }
+
+    private static final int FOCUS_TRAVERSABLE_UNKNOWN = 0, FOCUS_TRAVERSABLE_DEFAULT = 1, FOCUS_TRAVERSABLE_SET = 2;
+    private static final String[] FOCUS_TRAVERSAL_KEY_PROPERTY_NAMES = {
+        "forwardFocusTraversalKeys", "backwardFocusTraversalKeys", "upCycleFocusTraversalKeys", "downCycleFocusTraversalKeys"
+    };
     private boolean focusable = true, focusTraversalKeysEnabled = true;
-    private final java.util.Map<Integer, java.util.Set<AWTKeyStroke>> traversalKeys = new java.util.HashMap<>();
-    public void setFocusTraversalKeysEnabled(boolean v) { focusTraversalKeysEnabled = v; }
+    // UNKNOWN until isFocusTraversable runs un-overridden: a subclass overriding the deprecated
+    // isFocusTraversable keeps it UNKNOWN, which DefaultFocusTraversalPolicy reads as explicit.
+    private int isFocusTraversableOverridden = FOCUS_TRAVERSABLE_UNKNOWN;
+    @SuppressWarnings("unchecked")
+    private final java.util.Set<AWTKeyStroke>[] focusTraversalKeys = new java.util.Set[KeyboardFocusManager.TRAVERSAL_KEY_LENGTH];
+
+    public void setFocusTraversalKeysEnabled(boolean focusTraversalKeysEnabled) {
+        boolean old = this.focusTraversalKeysEnabled;
+        this.focusTraversalKeysEnabled = focusTraversalKeysEnabled;
+        firePropertyChange("focusTraversalKeysEnabled", old, focusTraversalKeysEnabled);
+    }
     public boolean getFocusTraversalKeysEnabled() { return focusTraversalKeysEnabled; }
     public void setFocusable(boolean focusable) {
-        boolean old = this.focusable;
-        this.focusable = focusable;
-        if (!focusable) KeyboardFocusManager.getCurrentKeyboardFocusManager().clearFocusIn(this);
+        boolean old;
+        synchronized (this) {
+            old = this.focusable;
+            this.focusable = focusable;
+        }
+        isFocusTraversableOverridden = FOCUS_TRAVERSABLE_SET;
         firePropertyChange("focusable", old, focusable);
-    }
-    public boolean isFocusable() { return focusable; }
-    public void setFocusTraversalKeys(int id, java.util.Set<? extends AWTKeyStroke> keys) {
-        if (id < 0 || id > 3) throw new IllegalArgumentException("invalid traversal key id");
-        if (keys == null) { traversalKeys.remove(id); return; }
-        java.util.Set<AWTKeyStroke> copy = new java.util.HashSet<>(keys);
-        for (AWTKeyStroke key : copy)
-            if (key == null || key.getKeyEventType() == KeyEvent.KEY_TYPED)
-                throw new IllegalArgumentException("invalid traversal key");
-        traversalKeys.put(id, java.util.Collections.unmodifiableSet(copy));
-    }
-    public java.util.Set<AWTKeyStroke> getFocusTraversalKeys(int id) {
-        if (id < 0 || id > 3) throw new IllegalArgumentException("invalid traversal key id");
-        java.util.Set<AWTKeyStroke> keys = traversalKeys.get(id);
-        return keys != null ? keys : parent != null ? parent.getFocusTraversalKeys(id) : java.util.Collections.emptySet();
-    }
-    public boolean areFocusTraversalKeysSet(int id) {
-        if (id < 0 || id > 3) throw new IllegalArgumentException("invalid traversal key id");
-        return traversalKeys.containsKey(id);
-    }
-    public void transferFocus() { transferFocus(false); }
-    public void transferFocusUpCycle() { if (parent != null) parent.requestFocusInWindow(); }
-    public void transferFocusBackward() { transferFocus(true); }
-    private void transferFocus(boolean backwards) {
-        Component root = this;
-        while (root.parent != null) root = root.parent;
-        java.util.List<Component> candidates = new java.util.ArrayList<>();
-        collectFocusable(root, candidates);
-        int size = candidates.size(), index = candidates.indexOf(this);
-        for (int offset = 1; offset <= size; offset++) {
-            Component next = candidates.get(Math.floorMod(index + (backwards ? -offset : offset), size));
-            if (next.requestFocusInWindow()) return;
+        if (old && !focusable) {
+            if (isFocusOwner()) transferFocus(true);
+            KeyboardFocusManager.clearMostRecentFocusOwner(this);
         }
     }
-    private static void collectFocusable(Component component, java.util.List<Component> out) {
-        if (!component.isVisible() || !component.isEnabled()) return;
-        if (component.isFocusable()) out.add(component);
-        if (component instanceof Container)
-            for (Component child : ((Container) component).getComponents()) collectFocusable(child, out);
+    /** @deprecated As of 1.4, replaced by {@link #isFocusable()}. */
+    @Deprecated
+    public boolean isFocusTraversable() {
+        if (isFocusTraversableOverridden == FOCUS_TRAVERSABLE_UNKNOWN) isFocusTraversableOverridden = FOCUS_TRAVERSABLE_DEFAULT;
+        return focusable;
     }
-    public java.awt.Container getFocusCycleRootAncestor() { return parent; }
-    public boolean isFocusCycleRoot(java.awt.Container container) { return false; }
+    public boolean isFocusable() { return isFocusTraversable(); }
+    final boolean isFocusTraversableOverridden() { return isFocusTraversableOverridden != FOCUS_TRAVERSABLE_DEFAULT; }
+
+    /**
+     * Without peers this answers by class, as the desktop peers would: the heavyweight
+     * java.awt components and their subclasses are not lightweight, everything else is.
+     */
+    public boolean isLightweight() {
+        if (this instanceof Window || this instanceof Canvas || this instanceof Panel) return false;
+        // By name: the remaining heavyweights are not all in the shadow.
+        for (Class<?> type = getClass(); type != Component.class; type = type.getSuperclass()) {
+            String name = type.getName();
+            if (name.equals("java.awt.Button") || name.equals("java.awt.Label") || name.equals("java.awt.Checkbox")
+                || name.equals("java.awt.Choice") || name.equals("java.awt.List") || name.equals("java.awt.Scrollbar")
+                || name.equals("java.awt.ScrollPane") || name.equals("java.awt.TextComponent")) return false;
+        }
+        return true;
+    }
+    final boolean canBeFocusOwner() { return isEnabled() && isDisplayable() && isVisible() && isFocusable(); }
+
+    /** Number of traversal key ids this component takes: a Component has no down-cycle keys. */
+    int focusTraversalKeyLength() { return KeyboardFocusManager.TRAVERSAL_KEY_LENGTH - 1; }
+
+    public void setFocusTraversalKeys(int id, java.util.Set<? extends AWTKeyStroke> keystrokes) {
+        if (id < 0 || id >= focusTraversalKeyLength()) throw new IllegalArgumentException("invalid focus traversal key identifier");
+        setFocusTraversalKeys_NoIDCheck(id, keystrokes);
+    }
+    public java.util.Set<AWTKeyStroke> getFocusTraversalKeys(int id) {
+        if (id < 0 || id >= focusTraversalKeyLength()) throw new IllegalArgumentException("invalid focus traversal key identifier");
+        return getFocusTraversalKeys_NoIDCheck(id);
+    }
+    public boolean areFocusTraversalKeysSet(int id) {
+        if (id < 0 || id >= focusTraversalKeyLength()) throw new IllegalArgumentException("invalid focus traversal key identifier");
+        return focusTraversalKeys[id] != null;
+    }
+    final void setFocusTraversalKeys_NoIDCheck(int id, java.util.Set<? extends AWTKeyStroke> keystrokes) {
+        java.util.Set<AWTKeyStroke> oldKeys;
+        synchronized (this) {
+            if (keystrokes != null) {
+                for (AWTKeyStroke keystroke : keystrokes) {
+                    if (keystroke == null) throw new IllegalArgumentException("cannot set null focus traversal key");
+                    if (keystroke.getKeyEventType() == KeyEvent.KEY_TYPED)
+                        throw new IllegalArgumentException("focus traversal keys cannot map to KEY_TYPED events");
+                    for (int i = 0; i < focusTraversalKeyLength(); i++) {
+                        if (i == id) continue;
+                        if (getFocusTraversalKeys_NoIDCheck(i).contains(keystroke))
+                            throw new IllegalArgumentException("focus traversal keys must be unique for a Component");
+                    }
+                }
+            }
+            oldKeys = focusTraversalKeys[id];
+            focusTraversalKeys[id] = keystrokes != null
+                ? java.util.Collections.unmodifiableSet(new java.util.HashSet<AWTKeyStroke>(keystrokes)) : null;
+        }
+        firePropertyChange(FOCUS_TRAVERSAL_KEY_PROPERTY_NAMES[id], oldKeys, keystrokes);
+    }
+    final java.util.Set<AWTKeyStroke> getFocusTraversalKeys_NoIDCheck(int id) {
+        java.util.Set<AWTKeyStroke> keystrokes = focusTraversalKeys[id];
+        if (keystrokes != null) return keystrokes;
+        Container parent = this.parent;
+        return parent != null ? parent.getFocusTraversalKeys(id)
+            : KeyboardFocusManager.getCurrentKeyboardFocusManager().getDefaultFocusTraversalKeys(id);
+    }
+
+    public void transferFocus() { transferFocus(false); }
+    boolean transferFocus(boolean clearOnFailure) {
+        Component toFocus = getNextFocusCandidate();
+        boolean res = false;
+        if (toFocus != null && !toFocus.isFocusOwner() && toFocus != this) {
+            res = toFocus.requestFocusInWindow(java.awt.event.FocusEvent.Cause.TRAVERSAL_FORWARD);
+        }
+        if (clearOnFailure && !res) KeyboardFocusManager.getCurrentKeyboardFocusManager().clearGlobalFocusOwner();
+        return res;
+    }
+    final Component getNextFocusCandidate() {
+        Component[] comp = {this};
+        Container rootAncestor = traversalRoot(comp);
+        Component toFocus = null;
+        if (rootAncestor != null) {
+            FocusTraversalPolicy policy = rootAncestor.getFocusTraversalPolicy();
+            toFocus = policy.getComponentAfter(rootAncestor, comp[0]);
+            if (toFocus == null) toFocus = policy.getDefaultComponent(rootAncestor);
+        }
+        return toFocus;
+    }
+    public void transferFocusBackward() { transferFocusBackward(false); }
+    boolean transferFocusBackward(boolean clearOnFailure) {
+        Component[] comp = {this};
+        Container rootAncestor = traversalRoot(comp);
+        boolean res = false;
+        if (rootAncestor != null) {
+            FocusTraversalPolicy policy = rootAncestor.getFocusTraversalPolicy();
+            Component toFocus = policy.getComponentBefore(rootAncestor, comp[0]);
+            if (toFocus == null) toFocus = policy.getDefaultComponent(rootAncestor);
+            if (toFocus != null) res = toFocus.requestFocusInWindow(java.awt.event.FocusEvent.Cause.TRAVERSAL_BACKWARD);
+        }
+        if (clearOnFailure && !res) KeyboardFocusManager.getCurrentKeyboardFocusManager().clearGlobalFocusOwner();
+        return res;
+    }
+    /** The first showing, focusable traversal root above comp[0]; comp[0] becomes the component below it. */
+    private Container traversalRoot(Component[] comp) {
+        Container rootAncestor = getTraversalRoot();
+        while (rootAncestor != null && !(rootAncestor.isShowing() && rootAncestor.canBeFocusOwner())) {
+            comp[0] = rootAncestor;
+            rootAncestor = rootAncestor.getFocusCycleRootAncestor();
+        }
+        return rootAncestor;
+    }
+    Container getTraversalRoot() { return getFocusCycleRootAncestor(); }
+    /**
+     * A tree the Android host mounts directly (the sidebar panels) stands in for the client
+     * frame it sits in on the desktop, so its root is a focus cycle root like that Window.
+     */
+    final boolean isHostMountedRoot() { return parent == null && hostShowing; }
+    public void transferFocusUpCycle() {
+        Container rootAncestor = getFocusCycleRootAncestor();
+        while (rootAncestor != null && !(rootAncestor.isShowing() && rootAncestor.isFocusable() && rootAncestor.isEnabled())) {
+            rootAncestor = rootAncestor.getFocusCycleRootAncestor();
+        }
+        KeyboardFocusManager manager = KeyboardFocusManager.getCurrentKeyboardFocusManager();
+        if (rootAncestor != null) {
+            Container rootAncestorRootAncestor = rootAncestor.getFocusCycleRootAncestor();
+            manager.setGlobalCurrentFocusCycleRootPriv(rootAncestorRootAncestor != null ? rootAncestorRootAncestor : rootAncestor);
+            rootAncestor.requestFocus(java.awt.event.FocusEvent.Cause.TRAVERSAL_UP);
+        } else {
+            Window window = KeyboardFocusManager.windowOf(this);
+            if (window != null) {
+                Component toFocus = window.getFocusTraversalPolicy().getDefaultComponent(window);
+                if (toFocus != null) {
+                    manager.setGlobalCurrentFocusCycleRootPriv(window);
+                    toFocus.requestFocus(java.awt.event.FocusEvent.Cause.TRAVERSAL_UP);
+                }
+            }
+        }
+    }
+    public Container getFocusCycleRootAncestor() {
+        Container rootAncestor = this.parent;
+        while (rootAncestor != null && !rootAncestor.isFocusCycleRoot()) rootAncestor = rootAncestor.parent;
+        return rootAncestor;
+    }
+    public boolean isFocusCycleRoot(Container container) { return getFocusCycleRootAncestor() == container; }
 
     public void addComponentListener(ComponentListener l)       { if (l != null) componentListeners.add(l); }
     public void removeComponentListener(ComponentListener l)    { componentListeners.remove(l); }
@@ -561,17 +703,26 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
     public final void dispatchEvent(AWTEvent event) {
         if (event == null) throw new NullPointerException("event");
         AWTEvent previous = EventQueue.beginDispatch(event);
-        try { processEvent(event); } finally { EventQueue.endDispatch(previous); }
+        try {
+            if (event instanceof KeyEvent) {
+                // As Component.dispatchEventImpl: a KeyEvent first goes to the focus manager (dispatcher
+                // chain, then redispatchEvent back here); on the way back traversal keys are handled
+                // before the listeners see it.
+                KeyboardFocusManager manager = KeyboardFocusManager.getCurrentKeyboardFocusManager();
+                if (!KeyboardFocusManager.isRedispatching(event)) {
+                    if (manager.dispatchEvent(event)) return;
+                } else {
+                    manager.processKeyEvent(this, (KeyEvent) event);
+                    if (((KeyEvent) event).isConsumed()) return;
+                }
+            }
+            processEvent(event);
+        } finally { EventQueue.endDispatch(previous); }
     }
 
     protected void processEvent(AWTEvent event) {
         if (event instanceof KeyEvent) {
-            KeyEvent key = (KeyEvent) event;
-            if (!key.isConsumed()
-                    && !KeyboardFocusManager.getCurrentKeyboardFocusManager().dispatchKeyEvent(key)
-                    && !key.isConsumed()) {
-                dispatchKeyEvent(key);
-            }
+            dispatchKeyEvent((KeyEvent) event);
         } else if (event instanceof MouseEvent) {
             dispatchMouseEvent((MouseEvent) event);
         } else if (event instanceof java.awt.event.FocusEvent) {

@@ -40,6 +40,62 @@ object SoftKeyboardController {
 
     fun registerView(view: KeyboardInputView) {
         attachedViewRef = WeakReference(view)
+        installFocusBridge()
+    }
+
+    // --- AWT focus -> IME ---------------------------------------------------------------
+
+    private var focusBridgeInstalled = false
+    /** The text component the bridge opened the IME for; the IconStrip toggle and chat sessions leave it null. */
+    @Volatile private var openedFor: WeakReference<java.awt.Component>? = null
+    @Volatile private var suppressFocusBridge = false
+
+    /**
+     * Opens the IME when AWT focus lands on an enabled, editable text component inside a
+     * Window (a Swing dialog or frame), and closes it when focus leaves one the bridge opened
+     * for. Sidebar panels are mounted without a Window and keep their overlay editor.
+     */
+    private fun installFocusBridge() {
+        if (focusBridgeInstalled) return
+        focusBridgeInstalled = true
+        java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager().addPropertyChangeListener("focusOwner",
+            java.beans.PropertyChangeListener { event ->
+                // A focus change fires twice (old -> null, null -> new); deciding on the UI thread
+                // from the settled owner keeps a move between two fields from flashing the IME.
+                if (suppressFocusBridge || event.newValue == null && openedFor == null) return@PropertyChangeListener
+                attachedViewRef?.get()?.let { view -> view.post { reconcileFocus(view) } }
+            })
+    }
+
+    /**
+     * Runs a focus request from SwingPanelHost's tap path: its own overlay editor takes the
+     * text, so the request does not open the IME, and a session the bridge opened is closed.
+     */
+    fun <T> hostEditing(request: () -> T): T {
+        if (openedFor != null) {
+            openedFor = null
+            hide()
+        }
+        suppressFocusBridge = true
+        try {
+            return request()
+        } finally {
+            suppressFocusBridge = false
+        }
+    }
+
+    private fun reconcileFocus(view: KeyboardInputView) {
+        val owner = java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager().focusOwner
+        val text = owner as? javax.swing.text.JTextComponent
+        if (text != null && text.isEnabled && text.isEditable && javax.swing.SwingUtilities.getWindowAncestor(text) != null) {
+            if (openedFor?.get() === text && view.isSessionOpen) return
+            openedFor = WeakReference(text)
+            updatePasswordMode(text is javax.swing.JPasswordField)
+            view.openSession()
+        } else if (openedFor != null) {
+            openedFor = null
+            view.endSession()
+        }
     }
 
     fun unregisterView(view: KeyboardInputView) {
