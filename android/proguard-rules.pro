@@ -179,10 +179,17 @@
 #   take the Unsafe path. ART has a hidden VarHandle from API 28, so 28-32 build the helper;
 #   R8 rewrites its Lookup.findVarHandle fields to DesugarVarHandle below API 33.
 # - VarHandle in hash.LittleEndianByteArray (Murmur3/Farm/City hashes, BloomFilter): the same
-#   probe, then MethodHandles.byteArrayViewVarHandle, outside any catch, which R8 does not
-#   desugar. On API 28-32 that path is unconfirmed until a device runs it. The client hashes
-#   only through Hashing.sha256 (MessageDigest), so a hub plugin using those hashes is the one
-#   exposure there.
+#   probe, then VarHandleLittleEndianBytes.<clinit> calls MethodHandles.byteArrayViewVarHandle
+#   outside any catch (makeGetter's catch starts after the probe). That method is not in the
+#   SDK before API 33, and R8's VarHandle desugaring (minSdk < 33) supports only findVarHandle and
+#   arrayElementVarHandle while it retypes VarHandle to DesugarVarHandle, so the call cannot be
+#   trusted to link on any API. A failure there would surface as ExceptionInInitializerError
+#   from LittleEndianByteArray and break those hashes for good. The rule below removes the
+#   probe call and treats its result as null, so makeGetter takes guava-android's path:
+#   Unsafe where os.arch is aarch64, plain Java elsewhere. Debug builds skip R8 and keep the probe.
+-assumenosideeffects class com.google.common.hash.LittleEndianByteArray$VarHandleLittleEndianBytesMaker {
+    com.google.common.hash.LittleEndianByteArray$LittleEndianBytes tryMakeVarHandleLittleEndianBytes() return null;
+}
 
 # Hub plugins load after R8 runs and link against the host's protobuf runtime.
 # Preserve its public binary surface, including methods only those plugins use.

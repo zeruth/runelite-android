@@ -115,7 +115,11 @@ configurations.all {
 // (Compose, Firebase, play-services, r8, asm, tomlj, flatlaf, sqlite-jdbc) asks for okhttp 4
 // or slf4j 2, so the force only holds them if a future dependency does. Only the app's own
 // classpaths: AGP's tool configurations (lint, R8) bring their own.
-// tools-src/hub-compat-scan.py takes the host versions from these pins and the catalog.
+// tools-src/hub-compat-scan.py takes each host version from build/hub-compat/
+// releaseRuntimeClasspath.txt (`:android:dependencies --configuration releaseRuntimeClasspath`
+// output) when that file exists; without it, from the literal "group:artifact:version"
+// strings in this file (guavaJre, okhttp), then libs.versions.toml (slf4j, logback), then the
+// newest jar in the gradle cache.
 //
 // okio is not forced. Firebase sessions persist through androidx DataStore, which needs
 // okio 3, and `-dontwarn okio.**` would let R8 pass a forced okio 1 and break DataStore
@@ -123,8 +127,8 @@ configurations.all {
 // AsyncTimeout.exit(boolean)/exit(IOException)) is package-private, so only classes in
 // package okio call it: a plugin's shaded okio copy, whose classes are either shadowed by
 // the host's or never load. okhttp 3.14.9 asks for okio 1.17.2 and DataStore raises it;
-// hub-compat-scan.py reads the version that wins from the dependency report, so it scans the
-// okio the APK ships rather than a pin stated here.
+// only the dependency report gives hub-compat-scan.py the okio that wins, since nothing above
+// names one; without the report it scans whatever okio jar the gradle cache offers.
 val hostLibraryPins = listOf(
     "com.squareup.okhttp3:okhttp:3.14.9",
     "org.slf4j:slf4j-api:${libs.versions.slf4j.get()}",
