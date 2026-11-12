@@ -474,9 +474,45 @@ public class Window extends Container {
                 opened = true;
                 dispatchEvent(new java.awt.event.WindowEvent(this, java.awt.event.WindowEvent.WINDOW_OPENED));
             }
-            if (autoRequestFocus) requestFocusInWindow();
+            if (autoRequestFocus) activate();
         }
     }
+
+    /**
+     * What native activation does on the desktop: focus the most recent focus owner,
+     * else the policy's initial component, cause ACTIVATION. With nothing focusable
+     * the window itself takes focus, since there is no native activation to make it
+     * the focused Window on its own.
+     */
+    private void activate() {
+        if (!isFocusableWindow()) return;
+        Component toFocus = getMostRecentFocusOwner();
+        if (toFocus != null && toFocus != this && toFocus.requestFocusInWindow(java.awt.event.FocusEvent.Cause.ACTIVATION)) return;
+        requestFocusInWindow(java.awt.event.FocusEvent.Cause.ACTIVATION);
+    }
+
+    /** Returns the focus owner when this Window is focused, else null. */
+    public Component getFocusOwner() {
+        return isFocused() ? KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner() : null;
+    }
+
+    /**
+     * Returns the component that gets focus when this Window is focused: the focus
+     * owner, the last one it had, or the policy's initial component.
+     */
+    public Component getMostRecentFocusOwner() {
+        if (isFocused()) return getFocusOwner();
+        Component mostRecent = KeyboardFocusManager.getMostRecentFocusOwner(this);
+        if (mostRecent != null) return mostRecent;
+        return isFocusableWindow() ? getFocusTraversalPolicy().getInitialComponent(this) : null;
+    }
+
+    /** Windows are always focus cycle roots. */
+    @Override public final boolean isFocusCycleRoot() { return true; }
+    /** Does nothing: Windows are always focus cycle roots. */
+    @Override public final void setFocusCycleRoot(boolean focusCycleRoot) {}
+    /** Always null: a Window has no focus cycle root ancestor. */
+    @Override public final Container getFocusCycleRootAncestor() { return null; }
     @Override public boolean isShowing() { return isVisible() && !disposed; }
     @Override public boolean isDisplayable() { return !disposed; }
     public boolean isActive() { return KeyboardFocusManager.getCurrentKeyboardFocusManager().getActiveWindow() == this; }
@@ -497,7 +533,7 @@ public class Window extends Container {
     public Window[] getOwnedWindows() { return getAllWindows().stream().filter(w -> w.owner == this).toArray(Window[]::new); }
     public static Window[] getWindows() { return getAllWindows().toArray(new Window[0]); }
     public static Window[] getOwnerlessWindows() { return getAllWindows().stream().filter(w -> w.owner == null).toArray(Window[]::new); }
-    public void toFront() { if (isVisible() && autoRequestFocus) requestFocusInWindow(); }
+    public void toFront() { if (isVisible() && autoRequestFocus) activate(); }
     public void toBack() {}
 
     public void addWindowListener(java.awt.event.WindowListener l) { if (l != null) windowListeners.add(l); }

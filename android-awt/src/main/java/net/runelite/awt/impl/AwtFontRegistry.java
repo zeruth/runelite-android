@@ -57,6 +57,31 @@ import java.util.concurrent.atomic.AtomicInteger;
  * Family name is parsed from the TTF/OTF 'name' table (Windows Unicode BMP record,
  * nameID=1). If parsing fails we fall back to a synthetic "rl-font-N" name; that
  * still works for lookup as long as the caller holds onto {@code font.getFamily()}.
+ *
+ * <h3>Family mapping</h3>
+ * {@link #lookup(String, int)} resolves a {@code Font} name to a Typeface in this order:
+ * <ol>
+ * <li>Logical families, case-insensitive, never overridden by a registered face (as on
+ *     desktop): {@code Dialog} and {@code SansSerif} → {@code sans-serif} (Roboto),
+ *     {@code Serif} → {@code serif} (Noto Serif), {@code Monospaced} and
+ *     {@code DialogInput} → {@code monospace} (Droid Sans Mono). Styles come from the
+ *     system family's own bold/italic members via {@code Typeface.create(tf, style)}.
+ *     The table itself is {@link FontFamilies#androidFamilyFor(String)}.</li>
+ * <li>Families registered by {@code Font.createFont}: exact, then case-insensitive.</li>
+ * <li>Android system families listed in {@code /system/etc/fonts.xml}
+ *     ({@code sans-serif-condensed}, {@code serif-monospace}, {@code casual}, ...), via
+ *     {@code Typeface.create(name, NORMAL)}.</li>
+ * <li>A registered family that starts with the name or that the name starts with
+ *     ({@code "RuneScape"} vs {@code "RuneScape Plain"}).</li>
+ * <li>Any other name (the gamepack's {@code "Helvetica"}, a plugin's {@code "Arial"})
+ *     renders with the primary RuneScape face. This is a deliberate deviation: desktop
+ *     would draw it in Dialog, but on a phone the OSRS face is what those strings were
+ *     drawn in before logical families existed here, and {@code Font.getFamily()} still
+ *     reports {@code Dialog} for such names, as desktop does.</li>
+ * </ol>
+ * The names those families report ({@code getFamily}, {@code getFontName},
+ * {@code GraphicsEnvironment.getAvailableFontFamilyNames}) come from {@link FontFamilies},
+ * which this class feeds on every registration.
  */
 public final class AwtFontRegistry
 {
@@ -76,6 +101,93 @@ public final class AwtFontRegistry
 	{
 		Integer s = tf != null ? FACE_STYLES.get(tf) : null;
 		return s != null ? s : 0;
+	}
+
+	/** Whether {@code tf} was loaded by {@link #register(InputStream)}. */
+	public static boolean isRegistered(Typeface tf)
+	{
+		return tf != null && FACE_STYLES.containsKey(tf);
+	}
+
+	/** 'maxp' numGlyphs of registered faces. */
+	private static final ConcurrentHashMap<Typeface, Integer> GLYPH_COUNTS = new ConcurrentHashMap<>();
+	/** Inverse caret slope from the 'post' italicAngle of registered italic faces. */
+	private static final ConcurrentHashMap<Typeface, Float> ITALIC_SLOPES = new ConcurrentHashMap<>();
+	/** System family name → its NORMAL Typeface, and system font file → its glyph count. */
+	private static final ConcurrentHashMap<String, Typeface> SYSTEM = new ConcurrentHashMap<>();
+	private static final ConcurrentHashMap<String, Integer> SYSTEM_GLYPH_COUNTS = new ConcurrentHashMap<>();
+
+	/** Run-over-rise slope of a registered italic face, NaN when its 'post' table has none. */
+	public static float italicSlope(Typeface tf)
+	{
+		Float s = tf != null ? ITALIC_SLOPES.get(tf) : null;
+		return s != null ? s : Float.NaN;
+	}
+
+	/**
+	 * Glyph count of the face {@code family}/{@code style} renders with, from 'maxp':
+	 * registered faces from their bytes, logical and system families from their regular
+	 * file under /system/fonts. -1 when unknown.
+	 */
+	public static int numGlyphs(String family, int style)
+	{
+		String android = FontFamilies.androidFamilyFor(family);
+		String system = android != null ? android : FontFamilies.registered(family) == null ? FontFamilies.system(family) : null;
+		if (system != null)
+		{
+			return systemGlyphCount(FontFamilies.systemFontFile(system));
+		}
+		Typeface tf = lookup(family, style);
+		Integer n = tf != null ? GLYPH_COUNTS.get(tf) : null;
+		return n != null ? n : -1;
+	}
+
+	private static Typeface systemTypeface(String family)
+	{
+		Typeface tf = SYSTEM.get(family);
+		if (tf == null)
+		{
+			tf = Typeface.create(family, Typeface.NORMAL);
+			Typeface prev = SYSTEM.putIfAbsent(family, tf);
+			if (prev != null) tf = prev;
+		}
+		return tf;
+	}
+
+	private static int systemGlyphCount(String file)
+	{
+		if (file == null) return -1;
+		Integer cached = SYSTEM_GLYPH_COUNTS.get(file);
+		if (cached != null) return cached;
+		int n = -1;
+		try (java.io.RandomAccessFile raf = new java.io.RandomAccessFile(new File("/system/fonts", file), "r"))
+		{
+			long base = 0;
+			if (raf.readInt() == 0x74746366 /* 'ttcf' */)
+			{
+				raf.seek(12);
+				base = raf.readInt() & 0xFFFFFFFFL;
+			}
+			raf.seek(base + 4);
+			int numTables = raf.readUnsignedShort();
+			for (int i = 0; i < numTables; i++)
+			{
+				raf.seek(base + 12 + i * 16L);
+				if (raf.readInt() == 0x6D617870 /* 'maxp' */)
+				{
+					raf.readInt(); // checksum
+					raf.seek((raf.readInt() & 0xFFFFFFFFL) + 4);
+					n = raf.readUnsignedShort();
+					break;
+				}
+			}
+		}
+		catch (Throwable t)
+		{
+			Log.w(TAG, "font: maxp read failed for " + file, t);
+		}
+		SYSTEM_GLYPH_COUNTS.put(file, n);
+		return n;
 	}
 	private static final AtomicInteger SYNTHETIC_COUNTER = new AtomicInteger();
 
@@ -134,6 +246,12 @@ public final class AwtFontRegistry
 		Typeface tf = loadTypeface(bytes, family);
 		if (tf == null) return null;
 		FACE_STYLES.put(tf, style);
+		int glyphs = parseGlyphCount(bytes);
+		if (glyphs > 0) GLYPH_COUNTS.put(tf, glyphs);
+		float slope = parseItalicSlope(bytes);
+		if (!Float.isNaN(slope)) ITALIC_SLOPES.put(tf, slope);
+		String fullName = parseName(bytes, 4);
+		FontFamilies.registerFace(family, style, fullName != null ? fullName : family, parseName(bytes, 6));
 		synchronized (FAMILIES)
 		{
 			slots = FAMILIES.get(family);
@@ -155,9 +273,18 @@ public final class AwtFontRegistry
 
 	/** Best registered face of {@code family} for java.awt.Font style bits: the exact
 	 *  member if registered, else the closest one (the caller synthesizes the rest, see
-	 *  {@link #faceStyle}). Same family fallbacks as {@link #lookup(String)}. */
+	 *  {@link #faceStyle}). Logical and system families return their NORMAL system
+	 *  Typeface, from which {@code Typeface.create(tf, style)} picks the family's real
+	 *  styled member. The order is the family mapping in the class comment. */
 	public static Typeface lookup(String family, int style)
 	{
+		String android = FontFamilies.androidFamilyFor(family);
+		if (android != null) return systemTypeface(android);
+		if (family != null && FontFamilies.registered(family) == null)
+		{
+			String system = FontFamilies.system(family);
+			if (system != null) return systemTypeface(system);
+		}
 		Typeface[] slots = slotsFor(family);
 		if (slots == null) return null;
 		style &= 3;
@@ -170,13 +297,12 @@ public final class AwtFontRegistry
 
 	private static final java.util.Set<String> WARNED = java.util.Collections.synchronizedSet(new java.util.HashSet<>());
 
-	/** Lookup; returns null when {@code family} isn't a registered TTF. Tries an
-	 *  exact match first, then case-insensitive, then a startswith probe (e.g. RL
-	 *  may pass "RuneScape" while the TTF registered itself as "RuneScape Plain").
-	 *  Falls back to the primary "RuneScape" registration when nothing else matches
-	 *  so generic AWT/Swing fonts (Dialog, Helvetica, SansSerif, …) still render in
-	 *  the OSRS face on Android instead of Roboto. Logs the miss once per family
-	 *  so it's easy to spot in logcat. */
+	/** PLAIN lookup. Registered families try an exact match first, then
+	 *  case-insensitive, then a startswith probe (e.g. RL may pass "RuneScape" while
+	 *  the TTF registered itself as "RuneScape Plain"). A name that is neither logical,
+	 *  registered nor a system family falls back to the primary "RuneScape"
+	 *  registration so unknown physical names (Helvetica, Arial, …) still render in the
+	 *  OSRS face; the miss is logged once per family so it's easy to spot in logcat. */
 	public static Typeface lookup(String family)
 	{
 		return lookup(family, java.awt.Font.PLAIN);
@@ -270,6 +396,37 @@ public final class AwtFontRegistry
 			Log.w(TAG, "font: OS/2 parse failed", t);
 		}
 		return style;
+	}
+
+	private static int parseGlyphCount(byte[] bytes)
+	{
+		try
+		{
+			int maxp = findTable(bytes, 0x6D617870 /* 'maxp' */);
+			if (maxp < 0 || maxp + 6 > bytes.length) return -1;
+			return ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN).getShort(maxp + 4) & 0xFFFF;
+		}
+		catch (Throwable t)
+		{
+			return -1;
+		}
+	}
+
+	/** 'post' italicAngle (16.16 degrees, negative leaning right) as run over rise; NaN for
+	 *  an upright or unreadable face. */
+	private static float parseItalicSlope(byte[] bytes)
+	{
+		try
+		{
+			int post = findTable(bytes, 0x706F7374 /* 'post' */);
+			if (post < 0 || post + 8 > bytes.length) return Float.NaN;
+			double degrees = ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN).getInt(post + 4) / 65536.0;
+			return degrees == 0 ? Float.NaN : (float) Math.tan(Math.toRadians(-degrees));
+		}
+		catch (Throwable t)
+		{
+			return Float.NaN;
+		}
 	}
 
 	private static int findTable(byte[] bytes, int wantTag)

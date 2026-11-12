@@ -33,10 +33,53 @@ package net.runelite.awt.impl;
 import javax.sound.sampled.AudioFormat;
 import javax.sound.sampled.LineUnavailableException;
 import javax.sound.sampled.SourceDataLine;
+import javax.sound.sampled.TargetDataLine;
 
-/** Creates independent PCM lines with safe native-track reuse during rapid reopen. */
+/**
+ * Creates independent PCM lines with safe native-track reuse during rapid reopen, and capture
+ * lines over AudioRecord gated by the host's RECORD_AUDIO grant.
+ */
 public final class AndroidAudioBridge {
+    /**
+     * Supplied by the host activity: answers whether RECORD_AUDIO is granted, asking the user
+     * when it is not yet, and blocking the calling (non-UI) thread until they answer.
+     */
+    public interface RecordPermission {
+        boolean request();
+    }
+
+    private static volatile RecordPermission recordPermission;
+
     private AndroidAudioBridge() {
+    }
+
+    /** Installs the host's permission flow; {@code null} leaves the grant to the AudioRecord itself. */
+    public static void setRecordPermission(RecordPermission handler) {
+        recordPermission = handler;
+    }
+
+    public static RecordPermission getRecordPermission() {
+        return recordPermission;
+    }
+
+    /**
+     * Asks the host for RECORD_AUDIO before a capture line opens. Without a host (an app_process
+     * probe running as shell, which holds the permission) AudioRecord's own check decides.
+     */
+    static void requireRecordPermission() throws LineUnavailableException {
+        RecordPermission handler = recordPermission;
+        if (handler != null && !handler.request()) {
+            throw new LineUnavailableException(
+                "Microphone access denied: RECORD_AUDIO was not granted to RuneLite (allow it in the app's permission settings)");
+        }
+    }
+
+    /** A capture line for {@code format}; nothing records until it is opened and started. */
+    public static TargetDataLine openTargetDataLine(AudioFormat format, int bufferSize) throws LineUnavailableException {
+        if (format == null) {
+            throw new LineUnavailableException("AudioFormat required");
+        }
+        return new AndroidTargetDataLine(format, bufferSize);
     }
 
     public static SourceDataLine openSourceDataLine(AudioFormat format, int bufferSize) throws LineUnavailableException {

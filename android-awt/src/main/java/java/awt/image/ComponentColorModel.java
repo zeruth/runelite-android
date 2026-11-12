@@ -312,4 +312,71 @@ public class ComponentColorModel extends ColorModel {
     public int hashCode() {
         return super.hashCode();
     }
+<<<<<<< HEAD
+=======
+    @Override public boolean isCompatibleRaster(Raster raster) { return raster.getTransferType() == transferType && raster.getNumBands() == getNumComponents(); }
+
+    @Override public int[] getComponents(int pixel, int[] components, int offset) {
+        if (getNumComponents() > 1) throw new IllegalArgumentException("More than one component per pixel");
+        if (components == null) components = new int[offset + 1];
+        components[offset] = pixel & ((1 << sizes[0]) - 1);
+        return components;
+    }
+
+    @Override public int[] getComponents(Object pixel, int[] components, int offset) {
+        int n = getNumComponents();
+        if (components == null) components = new int[offset + n];
+        for (int i = 0; i < n; i++) components[offset + i] = SampleModel.transferGet(pixel, i);
+        return components;
+    }
+
+    @Override public int getDataElement(int[] components, int offset) {
+        if (getNumComponents() == 1) return components[offset];
+        throw new IllegalArgumentException("This model returns " + getNumComponents() + " elements in the pixel array.");
+    }
+
+    @Override public Object getDataElements(int[] components, int offset, Object obj) {
+        Object data = array(obj);
+        for (int i = 0; i < getNumComponents(); i++) SampleModel.transferSet(data, i, components[offset + i]);
+        return data;
+    }
+
+    /*
+     * OpenJDK 8u's "non-standard scale": integral samples of a colour space whose
+     * range is not 0..1 (CIEXYZ, Lab) map linearly onto getMinValue..getMaxValue.
+     */
+    private boolean nonStdScale() {
+        ColorSpace cs = getColorSpace();
+        for (int i = 0; i < getNumColorComponents(); i++) {
+            if (cs.getMinValue(i) != 0f || cs.getMaxValue(i) != 1f) return true;
+        }
+        return false;
+    }
+
+    @Override public float[] getNormalizedComponents(int[] components, int offset, float[] normComponents, int normOffset) {
+        normComponents = super.getNormalizedComponents(components, offset, normComponents, normOffset);
+        if (nonStdScale()) {
+            ColorSpace cs = getColorSpace();
+            for (int i = 0; i < getNumColorComponents(); i++) {
+                float min = cs.getMinValue(i);
+                normComponents[normOffset + i] = min + normComponents[normOffset + i] * (cs.getMaxValue(i) - min);
+            }
+        }
+        return normComponents;
+    }
+
+    @Override public int[] getUnnormalizedComponents(float[] normComponents, int normOffset, int[] components, int offset) {
+        if (nonStdScale()) {
+            ColorSpace cs = getColorSpace();
+            float[] unit = normComponents.clone();
+            for (int i = 0; i < getNumColorComponents(); i++) {
+                float min = cs.getMinValue(i);
+                float v = (unit[normOffset + i] - min) / (cs.getMaxValue(i) - min);
+                unit[normOffset + i] = Math.max(0f, Math.min(1f, v));
+            }
+            normComponents = unit;
+        }
+        return super.getUnnormalizedComponents(normComponents, normOffset, components, offset);
+    }
+>>>>>>> up
 }
