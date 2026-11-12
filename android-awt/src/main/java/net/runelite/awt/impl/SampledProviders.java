@@ -37,6 +37,7 @@ import com.sun.media.sound.AuFileReader;
 import com.sun.media.sound.AuFileWriter;
 import com.sun.media.sound.AudioFloatFormatConverter;
 import com.sun.media.sound.PCMtoPCMCodec;
+import com.sun.media.sound.SoftMidiAudioFileReader;
 import com.sun.media.sound.UlawCodec;
 import com.sun.media.sound.WaveExtensibleFileReader;
 import com.sun.media.sound.WaveFileReader;
@@ -58,17 +59,17 @@ import java.util.List;
  * The sampled-audio service providers {@code AudioSystem} iterates, fixed at build time. The JDK
  * finds them with {@code ServiceLoader} over {@code java.desktop}'s {@code provides} clauses; a
  * dexed APK has no such registration for the shadow classes, so the lists are spelled out here, in
- * the JDK's declaration order (the order decides which reader claims a stream first). The MIDI
- * file reader the JDK lists between the AU and WAVE readers is not offered.
+ * the JDK's declaration order (the order decides which reader claims a stream first), including
+ * Gervill's MIDI reader, which renders a standard MIDI file to PCM through the software synthesizer.
  */
 public final class SampledProviders {
     private static final List<AudioFileReader> READERS = Collections.unmodifiableList(Arrays.<AudioFileReader>asList(
-        new AiffFileReader(), new AuFileReader(),
+        new AiffFileReader(), new AuFileReader(), new SoftMidiAudioFileReader(),
         new WaveFileReader(), new WaveFloatFileReader(), new WaveExtensibleFileReader()));
 
     /** The WAVE readers alone, for {@link WavDecoder}'s fast path; disjoint by WAVE format tag. */
     private static final List<AudioFileReader> WAVE_READERS = Collections.unmodifiableList(Arrays.<AudioFileReader>asList(
-        READERS.get(2), READERS.get(3), READERS.get(4)));
+        READERS.get(3), READERS.get(4), READERS.get(5)));
 
     private static final List<AudioFileWriter> WRITERS = Collections.unmodifiableList(Arrays.<AudioFileWriter>asList(
         new AiffFileWriter(), new AuFileWriter(), new WaveFileWriter(), new WaveFloatFileWriter()));

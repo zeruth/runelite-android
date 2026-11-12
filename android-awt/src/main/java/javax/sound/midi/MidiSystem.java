@@ -45,10 +45,11 @@ import javax.sound.midi.spi.MidiFileWriter;
 import javax.sound.midi.spi.SoundbankReader;
 
 import com.sun.media.sound.AutoConnectSequencer;
-import com.sun.media.sound.JDK13Services;
 import com.sun.media.sound.MidiDeviceReceiverEnvelope;
 import com.sun.media.sound.MidiDeviceTransmitterEnvelope;
 import com.sun.media.sound.ReferenceCountingDevice;
+
+import net.runelite.awt.impl.MidiProviders;
 
 /**
  * The {@code MidiSystem} class provides access to the installed MIDI system
@@ -1093,8 +1094,8 @@ public class MidiSystem {
      */
     private static MidiDevice getDefaultDevice(Class<?> deviceClass) {
         List<MidiDeviceProvider> providers = getMidiDeviceProviders();
-        String providerClassName = JDK13Services.getDefaultProviderClassName(deviceClass);
-        String instanceName = JDK13Services.getDefaultInstanceName(deviceClass);
+        String providerClassName = MidiProviders.defaultProviderClassName(deviceClass);
+        String instanceName = MidiProviders.defaultInstanceName(deviceClass);
         MidiDevice device;
 
         if (providerClassName != null) {
@@ -1504,6 +1505,8 @@ public class MidiSystem {
      *         providers are available, a List of length 0 will be returned.
      */
     private static List<?> getProviders(Class<?> providerClass) {
-        return JDK13Services.getProviders(providerClass);
+        // A fixed registry instead of ServiceLoader: a dexed APK registers no
+        // providers for the shadow classes.
+        return MidiProviders.providers(providerClass);
     }
 }
