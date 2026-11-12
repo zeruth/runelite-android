@@ -282,36 +282,56 @@ class ResolutionTest(SurfaceFixture):
         got = scan.unresolved_references(self.surface, [scan.parse_class(shaded.build())])
         self.assertEqual(got, {})
 
-    def test_synthetic_accessors_of_shaded_copy_are_intra_jar(self):
-        # A nested class only the plugin's shaded library has calls accessors that its own
-        # copy of the host-provided outer class defines.
+    def test_synthetic_accessors_between_plugin_only_classes_resolve(self):
+        # Outer and nestmate both exist only in the plugin jar: they link to each other.
+        outer = ClassWriter('com/example/shaded/Outer')
+        outer.method('access$000', '(Lcom/example/shaded/Outer;)I')
+        outer.method('<init>', '(Lcom/example/shaded/Outer$1;)V')
+        inner = ClassWriter('com/example/shaded/Outer$Helper')
+        inner.method_ref('com/example/shaded/Outer', 'access$000', '(Lcom/example/shaded/Outer;)I')
+        inner.method_ref('com/example/shaded/Outer', '<init>', '(Lcom/example/shaded/Outer$1;)V')
+        tag = ClassWriter('com/example/shaded/Outer$1')
+        classes = [scan.parse_class(w.build()) for w in (outer, inner, tag)]
+        self.assertEqual(scan.unresolved_references(self.surface, classes), {})
+
+    def _shaded_container_nest(self):
+        # The plugin shades a host-provided outer class plus nested classes the host lacks,
+        # calling the accessors only the shaded outer defines.
         outer = ClassWriter('java/awt/Container', superclass='java/awt/Component')
         outer.method('access$000', '(Ljava/awt/Container;)I')
         outer.method('<init>', '(Ljava/awt/Container$1;)V')
-        outer.method('validateUnconditionally', '()V')
+        outer.klass('java/awt/Container$Helper')
         inner = ClassWriter('java/awt/Container$Helper')
         inner.method_ref('java/awt/Container', 'access$000', '(Ljava/awt/Container;)I')
         inner.method_ref('java/awt/Container', '<init>', '(Ljava/awt/Container$1;)V')
-        inner.method_ref('java/awt/Container', 'validateUnconditionally', '()V')
-        inner.method_ref('java/awt/Container', 'access$100', '()V')  # not in the shaded copy either
+        inner.klass('java/awt/Container$1')
         tag = ClassWriter('java/awt/Container$1')
-        other = ClassWriter('com/example/User')
-        other.method_ref('java/awt/Container', '<init>', '(Ljava/awt/Container$1;)V')  # not a nestmate
-        classes = [scan.parse_class(w.build()) for w in (outer, inner, tag, other)]
+        tag.method_ref('java/awt/Container', 'access$100', '()V')
+        return [outer, inner, tag]
+
+    def test_nest_of_shadowed_class_never_loads(self):
+        # Only the shaded outer names the nested classes, and the host's outer loads instead,
+        # so the accessor calls never link.
+        classes = [scan.parse_class(w.build()) for w in self._shaded_container_nest()]
+        self.assertEqual(scan.unresolved_references(self.surface, classes), {})
+        overlay = scan.scan_jar_classes(classes)
+        self.assertEqual(scan.live_plugin_classes(self.surface, overlay), set())
+
+    def test_accessors_on_host_provided_class_stay_unresolved_when_live(self):
+        # A plugin class names the nested class, so it loads from the plugin and links against
+        # the host's outer class, which has none of the shaded copy's accessors: a real break.
+        user = ClassWriter('com/example/User')
+        user.klass('java/awt/Container$Helper')
+        classes = [scan.parse_class(w.build()) for w in self._shaded_container_nest() + [user]]
         got = scan.unresolved_references(self.surface, classes)
         self.assertEqual(got, {
-            ('method~', 'java/awt/Container', 'access$000', '(Ljava/awt/Container;)I'): 1,
-            ('method~', 'java/awt/Container', '<init>', '(Ljava/awt/Container$1;)V'): 1,
-            ('method', 'java/awt/Container', 'validateUnconditionally', '()V'): 1,
-            ('method', 'java/awt/Container', 'access$100', '()V'): 1,
+            ('method', 'java/awt/Container', 'access$000', '(Ljava/awt/Container;)I'): 1,
             ('method', 'java/awt/Container', '<init>', '(Ljava/awt/Container$1;)V'): 1,
+            ('method', 'java/awt/Container', 'access$100', '()V'): 1,
         })
-        report = scan.build_report({'p': {'classes': 3, 'unresolved': [list(k) + [n] for k, n in got.items()]}},
-                                   [], [], {}, {})
-        intra = [e for e in report['unresolved'] if e['bucket'] == 'intra-jar']
-        self.assertEqual(sorted(e['name'] for e in intra), ['<init>', 'access$000'])
-        self.assertTrue(all(e['kind'] == 'method' for e in intra))
-        self.assertEqual(report['buckets']['intra-jar'], {'signatures': 2, 'plugins': 1})
+        overlay = scan.scan_jar_classes(classes)
+        self.assertEqual(scan.live_plugin_classes(self.surface, overlay),
+                         {'com/example/User', 'java/awt/Container$Helper', 'java/awt/Container$1'})
 
     def test_jar_source_and_plugin_jar_reader(self):
         data = jar_bytes(host_classes())

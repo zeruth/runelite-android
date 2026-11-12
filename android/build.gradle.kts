@@ -110,15 +110,23 @@ configurations.all {
 }
 
 // Hub plugins link these by name against the host, as they do against runelite-client's
-// classpath on desktop, so the APK ships exactly the versions runelite-client resolves:
-// okhttp/okio through http-api (okhttp 3.14.9 -> okio 1.17.2), slf4j/logback from the
-// catalog. okio 2+ is Kotlin and drops the okio 1.x Buffer.writableSegment(int) and
-// AsyncTimeout.exit(boolean)/exit(IOException) that okio 1.x classes shaded in plugin jars
-// call. Only the app's own classpaths: AGP's tool configurations (lint, R8) bring their own.
+// classpath on desktop, so the APK ships the versions runelite-client resolves: okhttp
+// through http-api, slf4j/logback from the catalog. None of the app's other dependencies
+// (Compose, Firebase, play-services, r8, asm, tomlj, flatlaf, sqlite-jdbc) asks for okhttp 4
+// or slf4j 2, so the force only holds them if a future dependency does. Only the app's own
+// classpaths: AGP's tool configurations (lint, R8) bring their own.
 // tools-src/hub-compat-scan.py takes the host versions from these pins and the catalog.
+//
+// okio is not forced. Firebase sessions persist through androidx DataStore, which needs
+// okio 3, and `-dontwarn okio.**` would let R8 pass a forced okio 1 and break DataStore
+// at run time. okio 2+ keeps okio 1's public Java API. What it drops (Buffer.writableSegment,
+// AsyncTimeout.exit(boolean)/exit(IOException)) is package-private, so only classes in
+// package okio call it: a plugin's shaded okio copy, whose classes are either shadowed by
+// the host's or never load. okioFloor states runelite-client's okio as the minimum, and the scanner
+// resolves against it, the narrowest API the APK can ship.
+val okioFloor = "com.squareup.okio:okio:1.17.2"
 val hostLibraryPins = listOf(
     "com.squareup.okhttp3:okhttp:3.14.9",
-    "com.squareup.okio:okio:1.17.2",
     "org.slf4j:slf4j-api:${libs.versions.slf4j.get()}",
     "ch.qos.logback:logback-classic:${libs.versions.logback.get()}",
     "ch.qos.logback:logback-core:${libs.versions.logback.get()}",
@@ -234,6 +242,7 @@ if (androidSdkAvailable) {
         "implementation"("org.lsposed.hiddenapibypass:hiddenapibypass:4.3")
 
         "implementation"(guavaJre)
+        "implementation"(okioFloor)
         constraints.add("implementation", guavaJre) {
             attributes {
                 attribute(TargetJvmEnvironment.TARGET_JVM_ENVIRONMENT_ATTRIBUTE,
@@ -257,7 +266,9 @@ if (androidSdkAvailable) {
             val pluginApiModules = setOf(
                 "net.sf.jopt-simple:jopt-simple", "com.google.protobuf:protobuf-javalite",
                 "com.google.guava:guava", "com.google.guava:failureaccess", "com.google.code.gson:gson",
-                "com.squareup.okhttp3:okhttp", "com.squareup.okio:okio", "org.slf4j:slf4j-api",
+                // okio 3 resolves to its okio-jvm variant when a dependency raises it.
+                "com.squareup.okhttp3:okhttp", "com.squareup.okio:okio", "com.squareup.okio:okio-jvm",
+                "org.slf4j:slf4j-api",
                 "net.runelite:discord"
             )
             val libraries = configurations.getByName("releaseRuntimeClasspath").incoming.artifactView {

@@ -379,29 +379,48 @@ def scan_jar_classes(classes):
     return dict((c.name, c) for c in classes)
 
 
-def _nest_accessor(referrer, owner, name):
-    """javac's synthetic accessors (access$NNN) and the private-constructor accessors a
-    nestmate calls (<init> taking the synthetic Outer$1 tag) only ever link inside one
-    shaded library's own classes."""
-    if name.startswith('access$'):
-        return True
-    return name == '<init>' and referrer.split('$', 1)[0] == owner.split('$', 1)[0]
+def live_plugin_classes(surface, overlay):
+    """Names of the plugin's classes that can load. Parent-first, a class the host also
+    provides loads from the host, so the plugin's copy never does. A plugin-only nested
+    class of such a class (a shaded library's Outer$1, an access$NNN tag class, a nested
+    class an older library version had) is only named by its shadowed outer and siblings,
+    so it never loads either unless some live class names it. Every other plugin-only
+    class is a root."""
+    def shadowed_nest(name):
+        return '$' in name and name.split('$', 1)[0] in surface
+
+    live = set()
+    stack = [n for n in overlay if n not in surface and not shadowed_nest(n)]
+    while stack:
+        n = stack.pop()
+        if n in live:
+            continue
+        live.add(n)
+        c = overlay[n]
+        named = set(c.class_refs)
+        named.update(owner for _, owner, _, _ in c.member_refs)
+        stack.extend(r for r in named if r in overlay and r not in surface and r not in live)
+    return live
 
 
 def unresolved_references(surface, classes):
     """Resolve every reference of the given plugin classes. Returns
     {(kind, owner, name, desc): referencing-class-count} where kind is 'class',
     'field' or 'method'; 'ownerMissing' is folded into the kind for members whose
-    owner class is absent altogether ('field!' / 'method!'), and 'method~' marks a
-    synthetic accessor that the plugin's own shaded copy of a host class defines
-    (intra-jar version skew, not a host gap)."""
+    owner class is absent altogether ('field!' / 'method!').
+
+    Only classes that can load are scanned (live_plugin_classes): the synthetic accessors
+    (access$NNN, a nestmate's private-constructor <init>) that a shaded library's nested
+    classes call on their host-shadowed outer class never link. Between classes only the
+    plugin defines they resolve through the overlay. A live plugin class that calls one on
+    a host-provided class links against the host copy, which may lack it: that stays
+    unresolved as a real break."""
     overlay = scan_jar_classes(classes)
     resolver = Resolver(surface, overlay)
+    live = live_plugin_classes(surface, overlay)
     out = {}
     for c in classes:
-        if c.name in surface:
-            # Parent-first loading: the host's copy of a class the plugin also shades is the
-            # one that loads, so the shaded copy's own references never link.
+        if c.name not in live:
             continue
         for ref in c.class_refs:
             if not resolver.has_class(ref):
@@ -418,9 +437,6 @@ def unresolved_references(surface, classes):
                 if ancestor is not None:
                     owner, missing = ancestor, True
             kind = ('field' if field else 'method') + ('!' if missing else '')
-            if (not missing and not field and owner in overlay and _nest_accessor(c.name, owner, name)
-                    and _lookup_member(overlay.get, owner, name, desc, field, set())):
-                kind = 'method~'
             key = (kind, owner, name, desc)
             out[key] = out.get(key, 0) + 1
     return out
@@ -460,8 +476,6 @@ BUCKETS = [
     # Not in #62-#72, kept apart so they do not pollute those lists.
     'runelite',
     'other jdk',
-    # Synthetic accessors a plugin's shaded library copy calls on itself (kind 'method~').
-    'intra-jar',
 ]
 
 _RULES = [(re.compile(p), b) for p, b in [
@@ -860,13 +874,13 @@ def build_report(results, manifest_jars, display, counts, meta):
             failed.append({'internalName': internal, 'error': result['error']})
         per_bucket = {}
         for kind, owner, name, desc, n in result['unresolved']:
-            bucket = 'intra-jar' if kind.endswith('~') else classify(owner)
+            bucket = classify(owner)
             per_bucket[bucket] = per_bucket.get(bucket, 0) + 1
             key = sig_key(kind, owner, name, desc)
             entry = signatures.get(key)
             if entry is None:
                 entry = signatures[key] = {
-                    'kind': kind.rstrip('!~'),
+                    'kind': kind.rstrip('!'),
                     'owner': owner,
                     'name': name,
                     'descriptor': desc,
@@ -933,7 +947,7 @@ def render_markdown(report, top_plugins=5, max_per_owner=60):
     w('')
     w('An unresolved signature is a class, field or method a plugin references that none of the host sources (nor the plugin jar itself) defines. `installs` sums the install counts of the plugins referencing it; a signature marked *(class missing)* has no owner class at all.')
     w('')
-    w('Classes a plugin shades that the host also provides are not scanned: the plugin loader is parent-first, so the host copy loads and the shaded copy never links. The `intra-jar` bucket holds synthetic accessors (`access$NNN`, nestmate `<init>`) that a shaded copy defines for itself but the host copy of the same class lacks.')
+    w('Classes a plugin shades that the host also provides are not scanned: the plugin loader is parent-first, so the host copy loads and the shaded copy never links. Nor are the plugin-only nested classes of such a class (`Outer$1`, accessor tag classes) unless a loadable plugin class names them, so their synthetic accessor calls (`access$NNN`, nestmate `<init>`) are not listed; a loadable class that calls one on a host-provided class is listed, because it links against the host copy.')
     w('')
     w('## Buckets')
     w('')
