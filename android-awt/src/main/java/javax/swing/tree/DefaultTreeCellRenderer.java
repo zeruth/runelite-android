@@ -633,12 +633,15 @@ public class DefaultTreeCellRenderer extends JLabel implements TreeCellRenderer
     * See the <a href="#override">Implementation Note</a>
     * for more information.
     */
-    protected void firePropertyChange(String propertyName, Object oldValue, Object newValue) {
-        // Strings get interned...
+    // JDK: protected; the shadow Component declares this overload public, so the
+    // override must be too.
+    public void firePropertyChange(String propertyName, Object oldValue, Object newValue) {
+        // Strings get interned... "html" is BasicHTML.propertyKey, which the shadow
+        // does not declare (no HTML view tree).
         if (propertyName == "text"
                 || ((propertyName == "font" || propertyName == "foreground")
                     && oldValue != newValue
-                    && getClientProperty(javax.swing.plaf.basic.BasicHTML.propertyKey) != null)) {
+                    && getClientProperty("html") != null)) {
 
             super.firePropertyChange(propertyName, oldValue, newValue);
         }
