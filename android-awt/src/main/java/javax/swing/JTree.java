@@ -36,8 +36,6 @@ import javax.swing.tree.*;
 import javax.swing.text.Position;
 import javax.accessibility.*;
 
-import sun.awt.AWTAccessor;
-import sun.awt.AWTAccessor.MouseEventAccessor;
 import sun.swing.SwingUtilities2;
 import sun.swing.SwingUtilities2.Section;
 import static sun.swing.SwingUtilities2.Section.*;
@@ -327,14 +325,30 @@ public class JTree extends JComponent implements Scrollable, Accessible
      * @see #getDropLocation
      * @since 1.6
      */
-    public static final class DropLocation extends TransferHandler.DropLocation {
+    // JDK: extends TransferHandler.DropLocation, which carries only the drop point;
+    // the shadow has no TransferHandler yet, so the point lives here.
+    public static final class DropLocation {
+        private final Point dropPoint;
         private final TreePath path;
         private final int index;
 
         private DropLocation(Point p, TreePath path, int index) {
-            super(p);
+            if (p == null) {
+                throw new IllegalArgumentException("Point cannot be null");
+            }
+            this.dropPoint = new Point(p);
             this.path = path;
             this.index = index;
+        }
+
+        /**
+         * Returns the drop point, representing the mouse's
+         * current location within the component.
+         *
+         * @return the drop point.
+         */
+        public final Point getDropPoint() {
+            return (Point)dropPoint.clone();
         }
 
         /**
@@ -782,12 +796,6 @@ public class JTree extends JComponent implements Scrollable, Accessible
 
         this.editable = flag;
         firePropertyChange(EDITABLE_PROPERTY, oldValue, flag);
-        if (accessibleContext != null) {
-            accessibleContext.firePropertyChange(
-                AccessibleContext.ACCESSIBLE_STATE_PROPERTY,
-                (oldValue ? AccessibleState.EDITABLE : null),
-                (flag ? AccessibleState.EDITABLE : null));
-        }
     }
 
     /**
@@ -858,15 +866,6 @@ public class JTree extends JComponent implements Scrollable, Accessible
         if(treeModel != null && treeModelListener != null)
             treeModel.removeTreeModelListener(treeModelListener);
 
-        if (accessibleContext != null) {
-            if (treeModel != null) {
-                treeModel.removeTreeModelListener((TreeModelListener)accessibleContext);
-            }
-            if (newModel != null) {
-                newModel.addTreeModelListener((TreeModelListener)accessibleContext);
-            }
-        }
-
         treeModel = newModel;
         clearToggledPaths();
         if(treeModel != null) {
@@ -914,9 +913,6 @@ public class JTree extends JComponent implements Scrollable, Accessible
 
         this.rootVisible = rootVisible;
         firePropertyChange(ROOT_VISIBLE_PROPERTY, oldValue, this.rootVisible);
-        if (accessibleContext != null) {
-            ((AccessibleJTree)accessibleContext).fireVisibleDataPropertyChange();
-        }
     }
 
     /**
@@ -946,9 +942,6 @@ public class JTree extends JComponent implements Scrollable, Accessible
         showsRootHandlesSet = true;
         firePropertyChange(SHOWS_ROOT_HANDLES_PROPERTY, oldValue,
                            showsRootHandles);
-        if (accessibleContext != null) {
-            ((AccessibleJTree)accessibleContext).fireVisibleDataPropertyChange();
-        }
         invalidate();
     }
 
@@ -1423,12 +1416,12 @@ public class JTree extends JComponent implements Scrollable, Accessible
      *        actual drop occurred
      * @return any saved state for this component, or <code>null</code> if none
      */
-    Object setDropLocation(TransferHandler.DropLocation location,
+    Object setDropLocation(DropLocation location,
                            Object state,
                            boolean forDrop) {
 
         Object retVal = null;
-        DropLocation treeLocation = (DropLocation)location;
+        DropLocation treeLocation = location;
 
         if (dropMode == DropMode.USE_SELECTION) {
             if (treeLocation == null) {
@@ -1565,10 +1558,8 @@ public class JTree extends JComponent implements Scrollable, Accessible
                                               event.getClickCount(),
                                               event.isPopupTrigger(),
                                               MouseEvent.NOBUTTON);
-                    MouseEventAccessor meAccessor =
-                        AWTAccessor.getMouseEventAccessor();
-                    meAccessor.setCausedByTouchEvent(newEvent,
-                        meAccessor.isCausedByTouchEvent(event));
+                    // The JDK copies the private causedByTouchEvent flag here through
+                    // AWTAccessor; the shadow MouseEvent has no such flag to copy.
 
                     tip = ((JComponent)rComponent).getToolTipText(newEvent);
                 }
@@ -1672,11 +1663,6 @@ public class JTree extends JComponent implements Scrollable, Accessible
 
         leadPath = newPath;
         firePropertyChange(LEAD_SELECTION_PATH_PROPERTY, oldValue, newPath);
-
-        if (accessibleContext != null){
-            ((AccessibleJTree)accessibleContext).
-                fireActiveDescendantPropertyChange(oldValue, newPath);
-        }
     }
 
     /**
@@ -2148,9 +2134,6 @@ public class JTree extends JComponent implements Scrollable, Accessible
 
             if(bounds != null) {
                 scrollRectToVisible(bounds);
-                if (accessibleContext != null) {
-                    ((AccessibleJTree)accessibleContext).fireVisibleDataPropertyChange();
-                }
             }
         }
     }
@@ -2451,10 +2434,6 @@ public class JTree extends JComponent implements Scrollable, Accessible
             this.selectionModel.removeTreeSelectionListener
                                 (selectionRedirector);
         }
-        if (accessibleContext != null) {
-           this.selectionModel.removeTreeSelectionListener((TreeSelectionListener)accessibleContext);
-           selectionModel.addTreeSelectionListener((TreeSelectionListener)accessibleContext);
-        }
 
         this.selectionModel = selectionModel;
         if (selectionRedirector != null) {
@@ -2462,12 +2441,6 @@ public class JTree extends JComponent implements Scrollable, Accessible
         }
         firePropertyChange(SELECTION_MODEL_PROPERTY, oldValue,
                            this.selectionModel);
-
-        if (accessibleContext != null) {
-            accessibleContext.firePropertyChange(
-                    AccessibleContext.ACCESSIBLE_SELECTION_PROPERTY,
-                    Boolean.valueOf(false), Boolean.valueOf(true));
-        }
     }
 
     /**
@@ -2968,9 +2941,6 @@ public class JTree extends JComponent implements Scrollable, Accessible
         firePropertyChange(VISIBLE_ROW_COUNT_PROPERTY, oldCount,
                            visibleRowCount);
         invalidate();
-        if (accessibleContext != null) {
-            ((AccessibleJTree)accessibleContext).fireVisibleDataPropertyChange();
-        }
     }
 
     /**
@@ -3072,14 +3042,9 @@ public class JTree extends JComponent implements Scrollable, Accessible
             values.addElement(expandedData);
         }
 
+        // The JDK re-installs the UI here because JComponent.writeObject uninstalled it
+        // for the write; the shadow JComponent never uninstalls, so there is nothing to undo.
         s.writeObject(values);
-        if (getUIClassID().equals(uiClassID)) {
-            byte count = JComponent.getWriteObjCounter(this);
-            JComponent.setWriteObjCounter(this, --count);
-            if (count == 0 && ui != null) {
-                ui.installUI(this);
-            }
-        }
     }
 
     private void readObject(ObjectInputStream s)
@@ -3584,10 +3549,6 @@ public class JTree extends JComponent implements Scrollable, Accessible
                         }
                         expandedState.put(parentPath, Boolean.TRUE);
                         fireTreeExpanded(parentPath);
-                        if (accessibleContext != null) {
-                            ((AccessibleJTree)accessibleContext).
-                                              fireVisibleDataPropertyChange();
-                        }
                     }
                 }
             }
@@ -3615,10 +3576,6 @@ public class JTree extends JComponent implements Scrollable, Accessible
                         // A descendant was selected, select the parent.
                         addSelectionPath(path);
                     }
-                    if (accessibleContext != null) {
-                        ((AccessibleJTree)accessibleContext).
-                                    fireVisibleDataPropertyChange();
-                    }
                 }
             }
             else {
@@ -3634,10 +3591,6 @@ public class JTree extends JComponent implements Scrollable, Accessible
                     }
                     expandedState.put(path, Boolean.TRUE);
                     fireTreeExpanded(path);
-                    if (accessibleContext != null) {
-                        ((AccessibleJTree)accessibleContext).
-                                          fireVisibleDataPropertyChange();
-                    }
                 }
             }
         }
@@ -4039,7 +3992,9 @@ public class JTree extends JComponent implements Scrollable, Accessible
                 showsRootHandlesSet = false;
             }
         } else {
-            super.setUIProperty(propertyName, value);
+            // JDK: super.setUIProperty; the shadow JComponent has none, and
+            // LookAndFeel.installProperty applies the public setter in its place.
+            LookAndFeel.installProperty(this, propertyName, value);
         }
     }
 
@@ -4084,1487 +4039,9 @@ public class JTree extends JComponent implements Scrollable, Accessible
 // Accessibility support
 ////////////////
 
-    /**
-     * Gets the AccessibleContext associated with this JTree.
-     * For JTrees, the AccessibleContext takes the form of an
-     * AccessibleJTree.
-     * A new AccessibleJTree instance is created if necessary.
-     *
-     * @return an AccessibleJTree that serves as the
-     *         AccessibleContext of this JTree
-     */
-    public AccessibleContext getAccessibleContext() {
-        if (accessibleContext == null) {
-            accessibleContext = new AccessibleJTree();
-        }
-        return accessibleContext;
-    }
-
-    /**
-     * This class implements accessibility support for the
-     * <code>JTree</code> class.  It provides an implementation of the
-     * Java Accessibility API appropriate to tree user-interface elements.
-     * <p>
-     * <strong>Warning:</strong>
-     * Serialized objects of this class will not be compatible with
-     * future Swing releases. The current serialization support is
-     * appropriate for short term storage or RMI between applications running
-     * the same version of Swing.  As of 1.4, support for long term storage
-     * of all JavaBeans&trade;
-     * has been added to the <code>java.beans</code> package.
-     * Please see {@link java.beans.XMLEncoder}.
-     */
-    @SuppressWarnings("serial")
-    protected class AccessibleJTree extends AccessibleJComponent
-            implements AccessibleSelection, TreeSelectionListener,
-                       TreeModelListener, TreeExpansionListener  {
-
-        TreePath   leadSelectionPath;
-        Accessible leadSelectionAccessible;
-
-        public AccessibleJTree() {
-            // Add a tree model listener for JTree
-            TreeModel model = JTree.this.getModel();
-            if (model != null) {
-                model.addTreeModelListener(this);
-            }
-            JTree.this.addTreeExpansionListener(this);
-            JTree.this.addTreeSelectionListener(this);
-            leadSelectionPath = JTree.this.getLeadSelectionPath();
-            leadSelectionAccessible = (leadSelectionPath != null)
-                    ? new AccessibleJTreeNode(JTree.this,
-                                              leadSelectionPath,
-                                              JTree.this)
-                    : null;
-        }
-
-        /**
-         * Tree Selection Listener value change method. Used to fire the
-         * property change
-         *
-         * @param e ListSelectionEvent
-         *
-         */
-        public void valueChanged(TreeSelectionEvent e) {
-            firePropertyChange(AccessibleContext.ACCESSIBLE_SELECTION_PROPERTY,
-                               Boolean.valueOf(false), Boolean.valueOf(true));
-        }
-
-        /**
-         * Fire a visible data property change notification.
-         * A 'visible' data property is one that represents
-         * something about the way the component appears on the
-         * display, where that appearance isn't bound to any other
-         * property. It notifies screen readers  that the visual
-         * appearance of the component has changed, so they can
-         * notify the user.
-         */
-        public void fireVisibleDataPropertyChange() {
-           firePropertyChange(AccessibleContext.ACCESSIBLE_VISIBLE_DATA_PROPERTY,
-                              Boolean.valueOf(false), Boolean.valueOf(true));
-        }
-
-        // Fire the visible data changes for the model changes.
-
-        /**
-         * Tree Model Node change notification.
-         *
-         * @param e  a Tree Model event
-         */
-        public void treeNodesChanged(TreeModelEvent e) {
-           fireVisibleDataPropertyChange();
-        }
-
-        /**
-         * Tree Model Node change notification.
-         *
-         * @param e  a Tree node insertion event
-         */
-        public void treeNodesInserted(TreeModelEvent e) {
-           fireVisibleDataPropertyChange();
-        }
-
-        /**
-         * Tree Model Node change notification.
-         *
-         * @param e  a Tree node(s) removal event
-         */
-        public  void treeNodesRemoved(TreeModelEvent e) {
-           fireVisibleDataPropertyChange();
-        }
-
-        /**
-         * Tree Model structure change change notification.
-         *
-         * @param e  a Tree Model event
-         */
-        public  void treeStructureChanged(TreeModelEvent e) {
-           fireVisibleDataPropertyChange();
-        }
-
-        /**
-         * Tree Collapsed notification.
-         *
-         * @param e  a TreeExpansionEvent
-         */
-        public  void treeCollapsed(TreeExpansionEvent e) {
-            fireVisibleDataPropertyChange();
-            TreePath path = e.getPath();
-            if (path != null) {
-                // Set parent to null so AccessibleJTreeNode computes
-                // its parent.
-                AccessibleJTreeNode node = new AccessibleJTreeNode(JTree.this,
-                                                                   path,
-                                                                   null);
-                PropertyChangeEvent pce = new PropertyChangeEvent(node,
-                    AccessibleContext.ACCESSIBLE_STATE_PROPERTY,
-                    AccessibleState.EXPANDED,
-                    AccessibleState.COLLAPSED);
-                firePropertyChange(AccessibleContext.ACCESSIBLE_STATE_PROPERTY,
-                                   null, pce);
-            }
-        }
-
-        /**
-         * Tree Model Expansion notification.
-         *
-         * @param e  a Tree node insertion event
-         */
-        public  void treeExpanded(TreeExpansionEvent e) {
-            fireVisibleDataPropertyChange();
-            TreePath path = e.getPath();
-            if (path != null) {
-                // TIGER - 4839971
-                // Set parent to null so AccessibleJTreeNode computes
-                // its parent.
-                AccessibleJTreeNode node = new AccessibleJTreeNode(JTree.this,
-                                                                   path,
-                                                                   null);
-                PropertyChangeEvent pce = new PropertyChangeEvent(node,
-                    AccessibleContext.ACCESSIBLE_STATE_PROPERTY,
-                    AccessibleState.COLLAPSED,
-                    AccessibleState.EXPANDED);
-                firePropertyChange(AccessibleContext.ACCESSIBLE_STATE_PROPERTY,
-                                   null, pce);
-            }
-        }
-
-        /**
-        *  Fire an active descendant property change notification.
-        *  The active descendant is used for objects such as list,
-        *  tree, and table, which may have transient children.
-        *  It notifies screen readers the active child of the component
-        *  has been changed so user can be notified from there.
-        *
-        * @param oldPath - lead path of previous active child
-        * @param newPath - lead path of current active child
-        *
-        */
-        void fireActiveDescendantPropertyChange(TreePath oldPath, TreePath newPath){
-            if(oldPath != newPath){
-                Accessible oldLSA = (oldPath != null)
-                                    ? new AccessibleJTreeNode(JTree.this,
-                                                              oldPath,
-                                                              null)
-                                    : null;
-
-                Accessible newLSA = (newPath != null)
-                                    ? new AccessibleJTreeNode(JTree.this,
-                                                              newPath,
-                                                              null)
-                                    : null;
-                firePropertyChange(AccessibleContext.ACCESSIBLE_ACTIVE_DESCENDANT_PROPERTY,
-                                                                oldLSA, newLSA);
-            }
-        }
-
-        private AccessibleContext getCurrentAccessibleContext() {
-            Component c = getCurrentComponent();
-            if (c instanceof Accessible) {
-                return c.getAccessibleContext();
-            } else {
-                return null;
-            }
-        }
-
-        private Component getCurrentComponent() {
-            // is the object visible?
-            // if so, get row, selected, focus & leaf state,
-            // and then get the renderer component and return it
-            TreeModel model = JTree.this.getModel();
-            if (model == null) {
-                return null;
-            }
-            Object treeRoot = model.getRoot();
-            if (treeRoot == null)
-                return null;
-
-            TreePath path = new TreePath(treeRoot);
-            if (JTree.this.isVisible(path)) {
-                TreeCellRenderer r = JTree.this.getCellRenderer();
-                TreeUI ui = JTree.this.getUI();
-                if (ui != null) {
-                    int row = ui.getRowForPath(JTree.this, path);
-                    int lsr = JTree.this.getLeadSelectionRow();
-                    boolean hasFocus = JTree.this.isFocusOwner()
-                                       && (lsr == row);
-                    boolean selected = JTree.this.isPathSelected(path);
-                    boolean expanded = JTree.this.isExpanded(path);
-
-                    return r.getTreeCellRendererComponent(JTree.this,
-                        treeRoot, selected, expanded,
-                        model.isLeaf(treeRoot), row, hasFocus);
-                }
-            }
-            return null;
-        }
-
-        // Overridden methods from AccessibleJComponent
-
-        /**
-         * Get the role of this object.
-         *
-         * @return an instance of AccessibleRole describing the role of the
-         * object
-         * @see AccessibleRole
-         */
-        public AccessibleRole getAccessibleRole() {
-            return AccessibleRole.TREE;
-        }
-
-        /**
-         * Returns the <code>Accessible</code> child, if one exists,
-         * contained at the local coordinate <code>Point</code>.
-         * Otherwise returns <code>null</code>.
-         *
-         * @param p point in local coordinates of this <code>Accessible</code>
-         * @return the <code>Accessible</code>, if it exists,
-         *    at the specified location; else <code>null</code>
-         */
-        public Accessible getAccessibleAt(Point p) {
-            TreePath path = getClosestPathForLocation(p.x, p.y);
-            if (path != null) {
-                // JTree.this is NOT the parent; parent will get computed later
-                return new AccessibleJTreeNode(JTree.this, path, null);
-            } else {
-                return null;
-            }
-        }
-
-        /**
-         * Returns the number of top-level children nodes of this
-         * JTree.  Each of these nodes may in turn have children nodes.
-         *
-         * @return the number of accessible children nodes in the tree.
-         */
-        public int getAccessibleChildrenCount() {
-            TreeModel model = JTree.this.getModel();
-            if (model == null) {
-                return 0;
-            }
-            if (isRootVisible()) {
-                return 1;    // the root node
-            }
-
-            Object treeRoot = model.getRoot();
-            if (treeRoot == null)
-                return 0;
-            // return the root's first set of children count
-            return model.getChildCount(treeRoot);
-        }
-
-        /**
-         * Return the nth Accessible child of the object.
-         *
-         * @param i zero-based index of child
-         * @return the nth Accessible child of the object
-         */
-        public Accessible getAccessibleChild(int i) {
-            TreeModel model = JTree.this.getModel();
-            if (model == null) {
-                return null;
-            }
-
-            Object treeRoot = model.getRoot();
-            if (treeRoot == null) {
-                return null;
-            }
-
-            if (isRootVisible()) {
-                if (i == 0) {    // return the root node Accessible
-                    Object[] objPath = { treeRoot };
-                    if (objPath[0] == null)
-                        return null;
-                    TreePath path = new TreePath(objPath);
-                    return new AccessibleJTreeNode(JTree.this, path, JTree.this);
-                } else {
-                    return null;
-                }
-            }
-
-            // return Accessible for one of root's child nodes
-            int count = model.getChildCount(treeRoot);
-            if (i < 0 || i >= count) {
-                return null;
-            }
-            Object obj = model.getChild(treeRoot, i);
-            if (obj == null)
-                return null;
-            Object[] objPath = { treeRoot, obj };
-            TreePath path = new TreePath(objPath);
-            return new AccessibleJTreeNode(JTree.this, path, JTree.this);
-        }
-
-        /**
-         * Get the index of this object in its accessible parent.
-         *
-         * @return the index of this object in its parent.  Since a JTree
-         * top-level object does not have an accessible parent.
-         * @see #getAccessibleParent
-         */
-        public int getAccessibleIndexInParent() {
-            // didn't ever need to override this...
-            return super.getAccessibleIndexInParent();
-        }
-
-        // AccessibleSelection methods
-        /**
-         * Get the AccessibleSelection associated with this object.  In the
-         * implementation of the Java Accessibility API for this class,
-         * return this object, which is responsible for implementing the
-         * AccessibleSelection interface on behalf of itself.
-         *
-         * @return this object
-         */
-        public AccessibleSelection getAccessibleSelection() {
-            return this;
-        }
-
-        /**
-         * Returns the number of items currently selected.
-         * If no items are selected, the return value will be 0.
-         *
-         * @return the number of items currently selected.
-         */
-        public int getAccessibleSelectionCount() {
-            Object[] rootPath = new Object[1];
-            rootPath[0] = treeModel.getRoot();
-            if (rootPath[0] == null)
-                return 0;
-
-            TreePath childPath = new TreePath(rootPath);
-            if (JTree.this.isPathSelected(childPath)) {
-                return 1;
-            } else {
-                return 0;
-            }
-        }
-
-        /**
-         * Returns an Accessible representing the specified selected item
-         * in the object.  If there isn't a selection, or there are
-         * fewer items selected than the integer passed in, the return
-         * value will be null.
-         *
-         * @param i the zero-based index of selected items
-         * @return an Accessible containing the selected item
-         */
-        public Accessible getAccessibleSelection(int i) {
-            // The JTree can have only one accessible child, the root.
-            if (i == 0) {
-                Object[] rootPath = new Object[1];
-                rootPath[0] = treeModel.getRoot();
-                if (rootPath[0] == null)
-                    return null;
-                TreePath childPath = new TreePath(rootPath);
-                if (JTree.this.isPathSelected(childPath)) {
-                    return new AccessibleJTreeNode(JTree.this, childPath, JTree.this);
-                }
-            }
-            return null;
-        }
-
-        /**
-         * Returns true if the current child of this object is selected.
-         *
-         * @param i the zero-based index of the child in this Accessible object.
-         * @see AccessibleContext#getAccessibleChild
-         */
-        public boolean isAccessibleChildSelected(int i) {
-            // The JTree can have only one accessible child, the root.
-            if (i == 0) {
-                Object[] rootPath = new Object[1];
-                rootPath[0] = treeModel.getRoot();
-                if (rootPath[0] == null)
-                    return false;
-                TreePath childPath = new TreePath(rootPath);
-                return JTree.this.isPathSelected(childPath);
-            } else {
-                return false;
-            }
-        }
-
-        /**
-         * Adds the specified selected item in the object to the object's
-         * selection.  If the object supports multiple selections,
-         * the specified item is added to any existing selection, otherwise
-         * it replaces any existing selection in the object.  If the
-         * specified item is already selected, this method has no effect.
-         *
-         * @param i the zero-based index of selectable items
-         */
-        public void addAccessibleSelection(int i) {
-           TreeModel model = JTree.this.getModel();
-           if (model != null) {
-               if (i == 0) {
-                   Object[] objPath = {model.getRoot()};
-                   if (objPath[0] == null)
-                        return;
-                   TreePath path = new TreePath(objPath);
-                   JTree.this.addSelectionPath(path);
-                }
-            }
-        }
-
-        /**
-         * Removes the specified selected item in the object from the object's
-         * selection.  If the specified item isn't currently selected, this
-         * method has no effect.
-         *
-         * @param i the zero-based index of selectable items
-         */
-        public void removeAccessibleSelection(int i) {
-            TreeModel model = JTree.this.getModel();
-            if (model != null) {
-                if (i == 0) {
-                    Object[] objPath = {model.getRoot()};
-                    if (objPath[0] == null)
-                        return;
-                    TreePath path = new TreePath(objPath);
-                    JTree.this.removeSelectionPath(path);
-                }
-            }
-        }
-
-        /**
-         * Clears the selection in the object, so that nothing in the
-         * object is selected.
-         */
-        public void clearAccessibleSelection() {
-            int childCount = getAccessibleChildrenCount();
-            for (int i = 0; i < childCount; i++) {
-                removeAccessibleSelection(i);
-            }
-        }
-
-        /**
-         * Causes every selected item in the object to be selected
-         * if the object supports multiple selections.
-         */
-        public void selectAllAccessibleSelection() {
-            TreeModel model = JTree.this.getModel();
-            if (model != null) {
-                Object[] objPath = {model.getRoot()};
-                if (objPath[0] == null)
-                    return;
-                TreePath path = new TreePath(objPath);
-                JTree.this.addSelectionPath(path);
-            }
-        }
-
-        /**
-         * This class implements accessibility support for the
-         * <code>JTree</code> child.  It provides an implementation of the
-         * Java Accessibility API appropriate to tree nodes.
-         */
-        protected class AccessibleJTreeNode extends AccessibleContext
-            implements Accessible, AccessibleComponent, AccessibleSelection,
-            AccessibleAction {
-
-            private JTree tree = null;
-            private TreeModel treeModel = null;
-            private Object obj = null;
-            private TreePath path = null;
-            private Accessible accessibleParent = null;
-            private int index = 0;
-            private boolean isLeaf = false;
-
-            /**
-             *  Constructs an AccessibleJTreeNode
-             * @since 1.4
-             */
-            public AccessibleJTreeNode(JTree t, TreePath p, Accessible ap) {
-                tree = t;
-                path = p;
-                accessibleParent = ap;
-                treeModel = t.getModel();
-                obj = p.getLastPathComponent();
-                if (treeModel != null) {
-                    isLeaf = treeModel.isLeaf(obj);
-                }
-            }
-
-            private TreePath getChildTreePath(int i) {
-                // Tree nodes can't be so complex that they have
-                // two sets of children -> we're ignoring that case
-                if (i < 0 || i >= getAccessibleChildrenCount()) {
-                    return null;
-                } else {
-                    Object childObj = treeModel.getChild(obj, i);
-                    Object[] objPath = path.getPath();
-                    Object[] objChildPath = new Object[objPath.length+1];
-                    java.lang.System.arraycopy(objPath, 0, objChildPath, 0, objPath.length);
-                    objChildPath[objChildPath.length-1] = childObj;
-                    return new TreePath(objChildPath);
-                }
-            }
-
-            /**
-             * Get the AccessibleContext associated with this tree node.
-             * In the implementation of the Java Accessibility API for
-             * this class, return this object, which is its own
-             * AccessibleContext.
-             *
-             * @return this object
-             */
-            public AccessibleContext getAccessibleContext() {
-                return this;
-            }
-
-            private AccessibleContext getCurrentAccessibleContext() {
-                Component c = getCurrentComponent();
-                if (c instanceof Accessible) {
-                    return c.getAccessibleContext();
-                } else {
-                    return null;
-                }
-            }
-
-            private Component getCurrentComponent() {
-                // is the object visible?
-                // if so, get row, selected, focus & leaf state,
-                // and then get the renderer component and return it
-                if (tree.isVisible(path)) {
-                    TreeCellRenderer r = tree.getCellRenderer();
-                    if (r == null) {
-                        return null;
-                    }
-                    TreeUI ui = tree.getUI();
-                    if (ui != null) {
-                        int row = ui.getRowForPath(JTree.this, path);
-                        boolean selected = tree.isPathSelected(path);
-                        boolean expanded = tree.isExpanded(path);
-                        boolean hasFocus = false; // how to tell?? -PK
-                        return r.getTreeCellRendererComponent(tree, obj,
-                            selected, expanded, isLeaf, row, hasFocus);
-                    }
-                }
-                return null;
-            }
-
-        // AccessibleContext methods
-
-             /**
-              * Get the accessible name of this object.
-              *
-              * @return the localized name of the object; null if this
-              * object does not have a name
-              */
-             public String getAccessibleName() {
-                AccessibleContext ac = getCurrentAccessibleContext();
-                if (ac != null) {
-                    String name = ac.getAccessibleName();
-                    if ((name != null) && (name != "")) {
-                        return ac.getAccessibleName();
-                    } else {
-                        return null;
-                    }
-                }
-                if ((accessibleName != null) && (accessibleName != "")) {
-                    return accessibleName;
-                } else {
-                    // fall back to the client property
-                    return (String)getClientProperty(AccessibleContext.ACCESSIBLE_NAME_PROPERTY);
-                }
-            }
-
-            /**
-             * Set the localized accessible name of this object.
-             *
-             * @param s the new localized name of the object.
-             */
-            public void setAccessibleName(String s) {
-                AccessibleContext ac = getCurrentAccessibleContext();
-                if (ac != null) {
-                    ac.setAccessibleName(s);
-                } else {
-                    super.setAccessibleName(s);
-                }
-            }
-
-            //
-            // *** should check tooltip text for desc. (needs MouseEvent)
-            //
-            /**
-             * Get the accessible description of this object.
-             *
-             * @return the localized description of the object; null if
-             * this object does not have a description
-             */
-            public String getAccessibleDescription() {
-                AccessibleContext ac = getCurrentAccessibleContext();
-                if (ac != null) {
-                    return ac.getAccessibleDescription();
-                } else {
-                    return super.getAccessibleDescription();
-                }
-            }
-
-            /**
-             * Set the accessible description of this object.
-             *
-             * @param s the new localized description of the object
-             */
-            public void setAccessibleDescription(String s) {
-                AccessibleContext ac = getCurrentAccessibleContext();
-                if (ac != null) {
-                    ac.setAccessibleDescription(s);
-                } else {
-                    super.setAccessibleDescription(s);
-                }
-            }
-
-            /**
-             * Get the role of this object.
-             *
-             * @return an instance of AccessibleRole describing the role of the object
-             * @see AccessibleRole
-             */
-            public AccessibleRole getAccessibleRole() {
-                AccessibleContext ac = getCurrentAccessibleContext();
-                if (ac != null) {
-                    return ac.getAccessibleRole();
-                } else {
-                    return AccessibleRole.UNKNOWN;
-                }
-            }
-
-            /**
-             * Get the state set of this object.
-             *
-             * @return an instance of AccessibleStateSet containing the
-             * current state set of the object
-             * @see AccessibleState
-             */
-            public AccessibleStateSet getAccessibleStateSet() {
-                AccessibleContext ac = getCurrentAccessibleContext();
-                AccessibleStateSet states;
-                if (ac != null) {
-                    states = ac.getAccessibleStateSet();
-                } else {
-                    states = new AccessibleStateSet();
-                }
-                // need to test here, 'cause the underlying component
-                // is a cellRenderer, which is never showing...
-                if (isShowing()) {
-                    states.add(AccessibleState.SHOWING);
-                } else if (states.contains(AccessibleState.SHOWING)) {
-                    states.remove(AccessibleState.SHOWING);
-                }
-                if (isVisible()) {
-                    states.add(AccessibleState.VISIBLE);
-                } else if (states.contains(AccessibleState.VISIBLE)) {
-                    states.remove(AccessibleState.VISIBLE);
-                }
-                if (tree.isPathSelected(path)){
-                    states.add(AccessibleState.SELECTED);
-                }
-                if (path == getLeadSelectionPath()) {
-                    states.add(AccessibleState.ACTIVE);
-                }
-                if (!isLeaf) {
-                    states.add(AccessibleState.EXPANDABLE);
-                }
-                if (tree.isExpanded(path)) {
-                    states.add(AccessibleState.EXPANDED);
-                } else {
-                    states.add(AccessibleState.COLLAPSED);
-                }
-                if (tree.isEditable()) {
-                    states.add(AccessibleState.EDITABLE);
-                }
-                return states;
-            }
-
-            /**
-             * Get the Accessible parent of this object.
-             *
-             * @return the Accessible parent of this object; null if this
-             * object does not have an Accessible parent
-             */
-            public Accessible getAccessibleParent() {
-                // someone wants to know, so we need to create our parent
-                // if we don't have one (hey, we're a talented kid!)
-                if (accessibleParent == null) {
-                    Object[] objPath = path.getPath();
-                    if (objPath.length > 1) {
-                        Object objParent = objPath[objPath.length-2];
-                        if (treeModel != null) {
-                            index = treeModel.getIndexOfChild(objParent, obj);
-                        }
-                        Object[] objParentPath = new Object[objPath.length-1];
-                        java.lang.System.arraycopy(objPath, 0, objParentPath,
-                                                   0, objPath.length-1);
-                        TreePath parentPath = new TreePath(objParentPath);
-                        accessibleParent = new AccessibleJTreeNode(tree,
-                                                                   parentPath,
-                                                                   null);
-                        this.setAccessibleParent(accessibleParent);
-                    } else if (treeModel != null) {
-                        accessibleParent = tree; // we're the top!
-                        index = 0; // we're an only child!
-                        this.setAccessibleParent(accessibleParent);
-                    }
-                }
-                return accessibleParent;
-            }
-
-            /**
-             * Get the index of this object in its accessible parent.
-             *
-             * @return the index of this object in its parent; -1 if this
-             * object does not have an accessible parent.
-             * @see #getAccessibleParent
-             */
-            public int getAccessibleIndexInParent() {
-                // index is invalid 'till we have an accessibleParent...
-                if (accessibleParent == null) {
-                    getAccessibleParent();
-                }
-                Object[] objPath = path.getPath();
-                if (objPath.length > 1) {
-                    Object objParent = objPath[objPath.length-2];
-                    if (treeModel != null) {
-                        index = treeModel.getIndexOfChild(objParent, obj);
-                    }
-                }
-                return index;
-            }
-
-            /**
-             * Returns the number of accessible children in the object.
-             *
-             * @return the number of accessible children in the object.
-             */
-            public int getAccessibleChildrenCount() {
-                // Tree nodes can't be so complex that they have
-                // two sets of children -> we're ignoring that case
-                return treeModel.getChildCount(obj);
-            }
-
-            /**
-             * Return the specified Accessible child of the object.
-             *
-             * @param i zero-based index of child
-             * @return the Accessible child of the object
-             */
-            public Accessible getAccessibleChild(int i) {
-                // Tree nodes can't be so complex that they have
-                // two sets of children -> we're ignoring that case
-                if (i < 0 || i >= getAccessibleChildrenCount()) {
-                    return null;
-                } else {
-                    Object childObj = treeModel.getChild(obj, i);
-                    Object[] objPath = path.getPath();
-                    Object[] objChildPath = new Object[objPath.length+1];
-                    java.lang.System.arraycopy(objPath, 0, objChildPath, 0, objPath.length);
-                    objChildPath[objChildPath.length-1] = childObj;
-                    TreePath childPath = new TreePath(objChildPath);
-                    return new AccessibleJTreeNode(JTree.this, childPath, this);
-                }
-            }
-
-            /**
-             * Gets the locale of the component. If the component does not have
-             * a locale, then the locale of its parent is returned.
-             *
-             * @return This component's locale. If this component does not have
-             * a locale, the locale of its parent is returned.
-             * @exception IllegalComponentStateException
-             * If the Component does not have its own locale and has not yet
-             * been added to a containment hierarchy such that the locale can be
-             * determined from the containing parent.
-             * @see #setLocale
-             */
-            public Locale getLocale() {
-                AccessibleContext ac = getCurrentAccessibleContext();
-                if (ac != null) {
-                    return ac.getLocale();
-                } else {
-                    return tree.getLocale();
-                }
-            }
-
-            /**
-             * Add a PropertyChangeListener to the listener list.
-             * The listener is registered for all properties.
-             *
-             * @param l  The PropertyChangeListener to be added
-             */
-            public void addPropertyChangeListener(PropertyChangeListener l) {
-                AccessibleContext ac = getCurrentAccessibleContext();
-                if (ac != null) {
-                    ac.addPropertyChangeListener(l);
-                } else {
-                    super.addPropertyChangeListener(l);
-                }
-            }
-
-            /**
-             * Remove a PropertyChangeListener from the listener list.
-             * This removes a PropertyChangeListener that was registered
-             * for all properties.
-             *
-             * @param l  The PropertyChangeListener to be removed
-             */
-            public void removePropertyChangeListener(PropertyChangeListener l) {
-                AccessibleContext ac = getCurrentAccessibleContext();
-                if (ac != null) {
-                    ac.removePropertyChangeListener(l);
-                } else {
-                    super.removePropertyChangeListener(l);
-                }
-            }
-
-            /**
-             * Get the AccessibleAction associated with this object.  In the
-             * implementation of the Java Accessibility API for this class,
-             * return this object, which is responsible for implementing the
-             * AccessibleAction interface on behalf of itself.
-             *
-             * @return this object
-             */
-            public AccessibleAction getAccessibleAction() {
-                return this;
-            }
-
-            /**
-             * Get the AccessibleComponent associated with this object.  In the
-             * implementation of the Java Accessibility API for this class,
-             * return this object, which is responsible for implementing the
-             * AccessibleComponent interface on behalf of itself.
-             *
-             * @return this object
-             */
-            public AccessibleComponent getAccessibleComponent() {
-                return this; // to override getBounds()
-            }
-
-            /**
-             * Get the AccessibleSelection associated with this object if one
-             * exists.  Otherwise return null.
-             *
-             * @return the AccessibleSelection, or null
-             */
-            public AccessibleSelection getAccessibleSelection() {
-                AccessibleContext ac = getCurrentAccessibleContext();
-                if (ac != null && isLeaf) {
-                    return getCurrentAccessibleContext().getAccessibleSelection();
-                } else {
-                    return this;
-                }
-            }
-
-            /**
-             * Get the AccessibleText associated with this object if one
-             * exists.  Otherwise return null.
-             *
-             * @return the AccessibleText, or null
-             */
-            public AccessibleText getAccessibleText() {
-                AccessibleContext ac = getCurrentAccessibleContext();
-                if (ac != null) {
-                    return getCurrentAccessibleContext().getAccessibleText();
-                } else {
-                    return null;
-                }
-            }
-
-            /**
-             * Get the AccessibleValue associated with this object if one
-             * exists.  Otherwise return null.
-             *
-             * @return the AccessibleValue, or null
-             */
-            public AccessibleValue getAccessibleValue() {
-                AccessibleContext ac = getCurrentAccessibleContext();
-                if (ac != null) {
-                    return getCurrentAccessibleContext().getAccessibleValue();
-                } else {
-                    return null;
-                }
-            }
-
-
-        // AccessibleComponent methods
-
-            /**
-             * Get the background color of this object.
-             *
-             * @return the background color, if supported, of the object;
-             * otherwise, null
-             */
-            public Color getBackground() {
-                AccessibleContext ac = getCurrentAccessibleContext();
-                if (ac instanceof AccessibleComponent) {
-                    return ((AccessibleComponent) ac).getBackground();
-                } else {
-                    Component c = getCurrentComponent();
-                    if (c != null) {
-                        return c.getBackground();
-                    } else {
-                        return null;
-                    }
-                }
-            }
-
-            /**
-             * Set the background color of this object.
-             *
-             * @param c the new Color for the background
-             */
-            public void setBackground(Color c) {
-                AccessibleContext ac = getCurrentAccessibleContext();
-                if (ac instanceof AccessibleComponent) {
-                    ((AccessibleComponent) ac).setBackground(c);
-                } else {
-                    Component cp = getCurrentComponent();
-                    if (cp != null) {
-                        cp.setBackground(c);
-                    }
-                }
-            }
-
-
-            /**
-             * Get the foreground color of this object.
-             *
-             * @return the foreground color, if supported, of the object;
-             * otherwise, null
-             */
-            public Color getForeground() {
-                AccessibleContext ac = getCurrentAccessibleContext();
-                if (ac instanceof AccessibleComponent) {
-                    return ((AccessibleComponent) ac).getForeground();
-                } else {
-                    Component c = getCurrentComponent();
-                    if (c != null) {
-                        return c.getForeground();
-                    } else {
-                        return null;
-                    }
-                }
-            }
-
-            public void setForeground(Color c) {
-                AccessibleContext ac = getCurrentAccessibleContext();
-                if (ac instanceof AccessibleComponent) {
-                    ((AccessibleComponent) ac).setForeground(c);
-                } else {
-                    Component cp = getCurrentComponent();
-                    if (cp != null) {
-                        cp.setForeground(c);
-                    }
-                }
-            }
-
-            public Cursor getCursor() {
-                AccessibleContext ac = getCurrentAccessibleContext();
-                if (ac instanceof AccessibleComponent) {
-                    return ((AccessibleComponent) ac).getCursor();
-                } else {
-                    Component c = getCurrentComponent();
-                    if (c != null) {
-                        return c.getCursor();
-                    } else {
-                        Accessible ap = getAccessibleParent();
-                        if (ap instanceof AccessibleComponent) {
-                            return ((AccessibleComponent) ap).getCursor();
-                        } else {
-                            return null;
-                        }
-                    }
-                }
-            }
-
-            public void setCursor(Cursor c) {
-                AccessibleContext ac = getCurrentAccessibleContext();
-                if (ac instanceof AccessibleComponent) {
-                    ((AccessibleComponent) ac).setCursor(c);
-                } else {
-                    Component cp = getCurrentComponent();
-                    if (cp != null) {
-                        cp.setCursor(c);
-                    }
-                }
-            }
-
-            public Font getFont() {
-                AccessibleContext ac = getCurrentAccessibleContext();
-                if (ac instanceof AccessibleComponent) {
-                    return ((AccessibleComponent) ac).getFont();
-                } else {
-                    Component c = getCurrentComponent();
-                    if (c != null) {
-                        return c.getFont();
-                    } else {
-                        return null;
-                    }
-                }
-            }
-
-            public void setFont(Font f) {
-                AccessibleContext ac = getCurrentAccessibleContext();
-                if (ac instanceof AccessibleComponent) {
-                    ((AccessibleComponent) ac).setFont(f);
-                } else {
-                    Component c = getCurrentComponent();
-                    if (c != null) {
-                        c.setFont(f);
-                    }
-                }
-            }
-
-            public FontMetrics getFontMetrics(Font f) {
-                AccessibleContext ac = getCurrentAccessibleContext();
-                if (ac instanceof AccessibleComponent) {
-                    return ((AccessibleComponent) ac).getFontMetrics(f);
-                } else {
-                    Component c = getCurrentComponent();
-                    if (c != null) {
-                        return c.getFontMetrics(f);
-                    } else {
-                        return null;
-                    }
-                }
-            }
-
-            public boolean isEnabled() {
-                AccessibleContext ac = getCurrentAccessibleContext();
-                if (ac instanceof AccessibleComponent) {
-                    return ((AccessibleComponent) ac).isEnabled();
-                } else {
-                    Component c = getCurrentComponent();
-                    if (c != null) {
-                        return c.isEnabled();
-                    } else {
-                        return false;
-                    }
-                }
-            }
-
-            public void setEnabled(boolean b) {
-                AccessibleContext ac = getCurrentAccessibleContext();
-                if (ac instanceof AccessibleComponent) {
-                    ((AccessibleComponent) ac).setEnabled(b);
-                } else {
-                    Component c = getCurrentComponent();
-                    if (c != null) {
-                        c.setEnabled(b);
-                    }
-                }
-            }
-
-            public boolean isVisible() {
-                Rectangle pathBounds = tree.getPathBounds(path);
-                Rectangle parentBounds = tree.getVisibleRect();
-                return pathBounds != null && parentBounds != null &&
-                        parentBounds.intersects(pathBounds);
-            }
-
-            public void setVisible(boolean b) {
-            }
-
-            public boolean isShowing() {
-                return (tree.isShowing() && isVisible());
-            }
-
-            public boolean contains(Point p) {
-                AccessibleContext ac = getCurrentAccessibleContext();
-                if (ac instanceof AccessibleComponent) {
-                    Rectangle r = ((AccessibleComponent) ac).getBounds();
-                    return r.contains(p);
-                } else {
-                    Component c = getCurrentComponent();
-                    if (c != null) {
-                        Rectangle r = c.getBounds();
-                        return r.contains(p);
-                    } else {
-                        return getBounds().contains(p);
-                    }
-                }
-            }
-
-            public Point getLocationOnScreen() {
-                if (tree != null) {
-                    Point treeLocation = tree.getLocationOnScreen();
-                    Rectangle pathBounds = tree.getPathBounds(path);
-                    if (treeLocation != null && pathBounds != null) {
-                        Point nodeLocation = new Point(pathBounds.x,
-                                                       pathBounds.y);
-                        nodeLocation.translate(treeLocation.x, treeLocation.y);
-                        return nodeLocation;
-                    } else {
-                        return null;
-                    }
-                } else {
-                    return null;
-                }
-            }
-
-            protected Point getLocationInJTree() {
-                Rectangle r = tree.getPathBounds(path);
-                if (r != null) {
-                    return r.getLocation();
-                } else {
-                    return null;
-                }
-            }
-
-            public Point getLocation() {
-                Rectangle r = getBounds();
-                if (r != null) {
-                    return r.getLocation();
-                } else {
-                    return null;
-                }
-            }
-
-            public void setLocation(Point p) {
-            }
-
-            public Rectangle getBounds() {
-                Rectangle r = tree.getPathBounds(path);
-                Accessible parent = getAccessibleParent();
-                if (parent != null) {
-                    if (parent instanceof AccessibleJTreeNode) {
-                        Point parentLoc = ((AccessibleJTreeNode) parent).getLocationInJTree();
-                        if (parentLoc != null && r != null) {
-                            r.translate(-parentLoc.x, -parentLoc.y);
-                        } else {
-                            return null;        // not visible!
-                        }
-                    }
-                }
-                return r;
-            }
-
-            public void setBounds(Rectangle r) {
-                AccessibleContext ac = getCurrentAccessibleContext();
-                if (ac instanceof AccessibleComponent) {
-                    ((AccessibleComponent) ac).setBounds(r);
-                } else {
-                    Component c = getCurrentComponent();
-                    if (c != null) {
-                        c.setBounds(r);
-                    }
-                }
-            }
-
-            public Dimension getSize() {
-                return getBounds().getSize();
-            }
-
-            public void setSize (Dimension d) {
-                AccessibleContext ac = getCurrentAccessibleContext();
-                if (ac instanceof AccessibleComponent) {
-                    ((AccessibleComponent) ac).setSize(d);
-                } else {
-                    Component c = getCurrentComponent();
-                    if (c != null) {
-                        c.setSize(d);
-                    }
-                }
-            }
-
-            /**
-             * Returns the <code>Accessible</code> child, if one exists,
-             * contained at the local coordinate <code>Point</code>.
-             * Otherwise returns <code>null</code>.
-             *
-             * @param p point in local coordinates of this
-             *    <code>Accessible</code>
-             * @return the <code>Accessible</code>, if it exists,
-             *    at the specified location; else <code>null</code>
-             */
-            public Accessible getAccessibleAt(Point p) {
-                AccessibleContext ac = getCurrentAccessibleContext();
-                if (ac instanceof AccessibleComponent) {
-                    return ((AccessibleComponent) ac).getAccessibleAt(p);
-                } else {
-                    return null;
-                }
-            }
-
-            @SuppressWarnings("deprecation")
-            public boolean isFocusTraversable() {
-                AccessibleContext ac = getCurrentAccessibleContext();
-                if (ac instanceof AccessibleComponent) {
-                    return ((AccessibleComponent) ac).isFocusTraversable();
-                } else {
-                    Component c = getCurrentComponent();
-                    if (c != null) {
-                        return c.isFocusTraversable();
-                    } else {
-                        return false;
-                    }
-                }
-            }
-
-            public void requestFocus() {
-                AccessibleContext ac = getCurrentAccessibleContext();
-                if (ac instanceof AccessibleComponent) {
-                    ((AccessibleComponent) ac).requestFocus();
-                } else {
-                    Component c = getCurrentComponent();
-                    if (c != null) {
-                        c.requestFocus();
-                    }
-                }
-            }
-
-            public void addFocusListener(FocusListener l) {
-                AccessibleContext ac = getCurrentAccessibleContext();
-                if (ac instanceof AccessibleComponent) {
-                    ((AccessibleComponent) ac).addFocusListener(l);
-                } else {
-                    Component c = getCurrentComponent();
-                    if (c != null) {
-                        c.addFocusListener(l);
-                    }
-                }
-            }
-
-            public void removeFocusListener(FocusListener l) {
-                AccessibleContext ac = getCurrentAccessibleContext();
-                if (ac instanceof AccessibleComponent) {
-                    ((AccessibleComponent) ac).removeFocusListener(l);
-                } else {
-                    Component c = getCurrentComponent();
-                    if (c != null) {
-                        c.removeFocusListener(l);
-                    }
-                }
-            }
-
-        // AccessibleSelection methods
-
-            /**
-             * Returns the number of items currently selected.
-             * If no items are selected, the return value will be 0.
-             *
-             * @return the number of items currently selected.
-             */
-            public int getAccessibleSelectionCount() {
-                int count = 0;
-                int childCount = getAccessibleChildrenCount();
-                for (int i = 0; i < childCount; i++) {
-                    TreePath childPath = getChildTreePath(i);
-                    if (tree.isPathSelected(childPath)) {
-                       count++;
-                    }
-                }
-                return count;
-            }
-
-            /**
-             * Returns an Accessible representing the specified selected item
-             * in the object.  If there isn't a selection, or there are
-             * fewer items selected than the integer passed in, the return
-             * value will be null.
-             *
-             * @param i the zero-based index of selected items
-             * @return an Accessible containing the selected item
-             */
-            public Accessible getAccessibleSelection(int i) {
-                int childCount = getAccessibleChildrenCount();
-                if (i < 0 || i >= childCount) {
-                    return null;        // out of range
-                }
-                int count = 0;
-                for (int j = 0; j < childCount && i >= count; j++) {
-                    TreePath childPath = getChildTreePath(j);
-                    if (tree.isPathSelected(childPath)) {
-                        if (count == i) {
-                            return new AccessibleJTreeNode(tree, childPath, this);
-                        } else {
-                            count++;
-                        }
-                    }
-                }
-                return null;
-            }
-
-            /**
-             * Returns true if the current child of this object is selected.
-             *
-             * @param i the zero-based index of the child in this Accessible
-             * object.
-             * @see AccessibleContext#getAccessibleChild
-             */
-            public boolean isAccessibleChildSelected(int i) {
-                int childCount = getAccessibleChildrenCount();
-                if (i < 0 || i >= childCount) {
-                    return false;       // out of range
-                } else {
-                    TreePath childPath = getChildTreePath(i);
-                    return tree.isPathSelected(childPath);
-                }
-            }
-
-            /**
-             * Adds the specified selected item in the object to the object's
-             * selection.  If the object supports multiple selections,
-             * the specified item is added to any existing selection, otherwise
-             * it replaces any existing selection in the object.  If the
-             * specified item is already selected, this method has no effect.
-             *
-             * @param i the zero-based index of selectable items
-             */
-            public void addAccessibleSelection(int i) {
-               TreeModel model = JTree.this.getModel();
-               if (model != null) {
-                   if (i >= 0 && i < getAccessibleChildrenCount()) {
-                       TreePath path = getChildTreePath(i);
-                       JTree.this.addSelectionPath(path);
-                    }
-                }
-            }
-
-            /**
-             * Removes the specified selected item in the object from the
-             * object's
-             * selection.  If the specified item isn't currently selected, this
-             * method has no effect.
-             *
-             * @param i the zero-based index of selectable items
-             */
-            public void removeAccessibleSelection(int i) {
-               TreeModel model = JTree.this.getModel();
-               if (model != null) {
-                   if (i >= 0 && i < getAccessibleChildrenCount()) {
-                       TreePath path = getChildTreePath(i);
-                       JTree.this.removeSelectionPath(path);
-                    }
-                }
-            }
-
-            /**
-             * Clears the selection in the object, so that nothing in the
-             * object is selected.
-             */
-            public void clearAccessibleSelection() {
-                int childCount = getAccessibleChildrenCount();
-                for (int i = 0; i < childCount; i++) {
-                    removeAccessibleSelection(i);
-                }
-            }
-
-            /**
-             * Causes every selected item in the object to be selected
-             * if the object supports multiple selections.
-             */
-            public void selectAllAccessibleSelection() {
-               TreeModel model = JTree.this.getModel();
-               if (model != null) {
-                   int childCount = getAccessibleChildrenCount();
-                   TreePath path;
-                   for (int i = 0; i < childCount; i++) {
-                       path = getChildTreePath(i);
-                       JTree.this.addSelectionPath(path);
-                   }
-                }
-            }
-
-        // AccessibleAction methods
-
-            /**
-             * Returns the number of accessible actions available in this
-             * tree node.  If this node is not a leaf, there is at least
-             * one action (toggle expand), in addition to any available
-             * on the object behind the TreeCellRenderer.
-             *
-             * @return the number of Actions in this object
-             */
-            public int getAccessibleActionCount() {
-                AccessibleContext ac = getCurrentAccessibleContext();
-                if (ac != null) {
-                    AccessibleAction aa = ac.getAccessibleAction();
-                    if (aa != null) {
-                        return (aa.getAccessibleActionCount() + (isLeaf ? 0 : 1));
-                    }
-                }
-                return isLeaf ? 0 : 1;
-            }
-
-            /**
-             * Return a description of the specified action of the tree node.
-             * If this node is not a leaf, there is at least one action
-             * description (toggle expand), in addition to any available
-             * on the object behind the TreeCellRenderer.
-             *
-             * @param i zero-based index of the actions
-             * @return a description of the action
-             */
-            public String getAccessibleActionDescription(int i) {
-                if (i < 0 || i >= getAccessibleActionCount()) {
-                    return null;
-                }
-                AccessibleContext ac = getCurrentAccessibleContext();
-                if (i == 0) {
-                    // TIGER - 4766636
-                    return AccessibleAction.TOGGLE_EXPAND;
-                } else if (ac != null) {
-                    AccessibleAction aa = ac.getAccessibleAction();
-                    if (aa != null) {
-                        return aa.getAccessibleActionDescription(i - 1);
-                    }
-                }
-                return null;
-            }
-
-            /**
-             * Perform the specified Action on the tree node.  If this node
-             * is not a leaf, there is at least one action which can be
-             * done (toggle expand), in addition to any available on the
-             * object behind the TreeCellRenderer.
-             *
-             * @param i zero-based index of actions
-             * @return true if the the action was performed; else false.
-             */
-            public boolean doAccessibleAction(int i) {
-                if (i < 0 || i >= getAccessibleActionCount()) {
-                    return false;
-                }
-                AccessibleContext ac = getCurrentAccessibleContext();
-                if (i == 0) {
-                    if (JTree.this.isExpanded(path)) {
-                        JTree.this.collapsePath(path);
-                    } else {
-                        JTree.this.expandPath(path);
-                    }
-                    return true;
-                } else if (ac != null) {
-                    AccessibleAction aa = ac.getAccessibleAction();
-                    if (aa != null) {
-                        return aa.doAccessibleAction(i - 1);
-                    }
-                }
-                return false;
-            }
-
-        } // inner class AccessibleJTreeNode
-
-    }  // inner class AccessibleJTree
+    // The JDK's AccessibleJTree / AccessibleJTreeNode are not ported: the shadow's
+    // javax.accessibility has no AccessibleSelection, AccessibleState or
+    // AccessibleJComponent to build them on, and Android exposes no Java Access
+    // Bridge to consume them. getAccessibleContext() is JComponent's plain context.
 
 } // End of class JTree

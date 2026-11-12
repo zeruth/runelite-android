@@ -81,6 +81,11 @@ public class JComponent extends Container {
     public void setBorder(Border border) { Border old = this.border; this.border = border; firePropertyChange("border", old, border); revalidate(); repaint(); }
 
     public String getToolTipText() { return toolTipText; }
+    /** The tip for the point of {@code event}; components with per-cell tips (JTree) override it. */
+    public String getToolTipText(java.awt.event.MouseEvent event) { return getToolTipText(); }
+
+    /** The JDK's shared listener list that Swing subclasses register their typed listeners in. */
+    protected javax.swing.event.EventListenerList listenerList = new javax.swing.event.EventListenerList();
     public void setToolTipText(String text) { String old = this.toolTipText; this.toolTipText = text; firePropertyChange(TOOL_TIP_TEXT_KEY, old, text); }
 
     // Sizing is inherited from Component — JComponent used to keep parallel `preferred` /
