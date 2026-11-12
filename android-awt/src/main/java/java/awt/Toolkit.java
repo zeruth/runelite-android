@@ -95,6 +95,47 @@ public abstract class Toolkit {
         return getDefaultToolkit().getSystemEventQueueImpl();
     }
 
+    /**
+     * The JDK looks the key up in awt.properties. Android ships no AWT resource bundles; the
+     * callers pass the English awt.properties text as the default, so returning it gives the
+     * JDK's English result.
+     */
+    public static String getProperty(String key, String defaultValue) {
+        return defaultValue;
+    }
+
+    /**
+     * The nearest ancestor with a native window. The host draws every component into its window's
+     * backbuffer, so that ancestor is the enclosing Window; {@code null} for a detached component.
+     */
+    protected static Container getNativeContainer(Component c) {
+        Container parent = c.getParent();
+        while (parent != null && !(parent instanceof Window)) {
+            parent = parent.getParent();
+        }
+        return parent;
+    }
+
+    /**
+     * {@code null}, as the JDK's base class: {@link java.awt.dnd.DragSource} creates its touch
+     * recognizer itself, so no toolkit-specific recognizer exists.
+     */
+    public <T extends java.awt.dnd.DragGestureRecognizer> T createDragGestureRecognizer(
+            Class<T> abstractRecognizerClass, java.awt.dnd.DragSource ds, Component c, int srcActions,
+            java.awt.dnd.DragGestureListener dgl) {
+        return null;
+    }
+
+    /**
+     * The highlight's own style, else no attributes: the Android IME draws its composing span
+     * itself, so there is no platform highlight style to map to.
+     */
+    public java.util.Map<java.awt.font.TextAttribute, ?> mapInputMethodHighlight(
+            java.awt.im.InputMethodHighlight highlight) throws HeadlessException {
+        java.util.Map<java.awt.font.TextAttribute, ?> style = highlight.getStyle();
+        return style != null ? style : java.util.Collections.<java.awt.font.TextAttribute, Object>emptyMap();
+    }
+
     public Clipboard getSystemClipboard() {
         return clipboard;
     }
@@ -372,6 +413,15 @@ public abstract class Toolkit {
         long mask = 0;
         for (SelectiveListener selective : listeners) mask |= selective.eventMask;
         enabledOnToolkitMask = mask;
+    }
+
+    /** The number of listeners wanting events of this mask, as the JDK's per-bit counter reports it. */
+    synchronized int countAWTEventListeners(long eventMask) {
+        int count = 0;
+        for (SelectiveListener selective : awtEventListeners) {
+            if ((selective.eventMask & eventMask) != 0) count++;
+        }
+        return count;
     }
 
     /** True when some AWTEventListener wants events of this mask (Container uses it for ContainerEvents). */

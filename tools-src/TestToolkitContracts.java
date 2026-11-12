@@ -5,6 +5,7 @@ import java.awt.event.KeyEvent;
 import java.awt.image.BufferedImage;
 import java.awt.image.ImageObserver;
 import java.awt.image.MemoryImageSource;
+import java.awt.image.PixelGrabber;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.io.ByteArrayOutputStream;
@@ -62,18 +63,27 @@ public final class TestToolkitContracts {
         out.writeInt(body.length); out.write(name); out.write(body); out.writeInt((int) crc.getValue());
     }
 
-    /** Draws the image into an ARGB buffer, waiting for the JDK's asynchronous toolkit images. */
-    static BufferedImage pixels(Image image, int width, int height) throws Exception {
-        BufferedImage target = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+    /**
+     * The image's default-RGB pixels, waiting for the JDK's asynchronous toolkit images. Grabbed
+     * rather than drawn: in the patched run the JDK's BufferedImage sits over the shadow rasters,
+     * which its Java2D surface code cannot draw into.
+     */
+    static int[] pixels(Image image, int width, int height) throws Exception {
+        if (image instanceof BufferedImage) {
+            return ((BufferedImage) image).getRGB(0, 0, width, height, null, 0, width);
+        }
+        // The JDK's toolkit images learn their size only through prepareImage, not through a grabber.
+        Toolkit toolkit = Toolkit.getDefaultToolkit();
+        toolkit.prepareImage(image, -1, -1, null);
         long deadline = System.currentTimeMillis() + 10000;
-        while (true) {
-            Graphics2D g = target.createGraphics();
-            boolean done = g.drawImage(image, 0, 0, null);
-            g.dispose();
-            if (done) return target;
+        int done = ImageObserver.ALLBITS | ImageObserver.ERROR | ImageObserver.ABORT;
+        while ((toolkit.checkImage(image, -1, -1, null) & done) == 0) {
             check(System.currentTimeMillis() < deadline, "image never finished loading");
             Thread.sleep(10);
         }
+        PixelGrabber grabber = new PixelGrabber(image, 0, 0, width, height, true);
+        check(grabber.grabPixels(10000), "image never finished loading: status " + grabber.getStatus());
+        return (int[]) grabber.getPixels();
     }
 
     public static void main(String[] args) throws Exception {
@@ -83,16 +93,16 @@ public final class TestToolkitContracts {
 
         Image decoded = toolkit.createImage(png());
         check(decoded != null, "createImage(byte[]) returns an image");
-        BufferedImage drawn = pixels(decoded, 2, 1);
+        int[] drawn = pixels(decoded, 2, 1);
         check(decoded.getWidth(null) == 2 && decoded.getHeight(null) == 1, "decoded PNG size");
-        check(drawn.getRGB(0, 0) == 0xffff0000 && drawn.getRGB(1, 0) == 0xff0000ff, "decoded PNG pixels");
+        check(drawn[0] == 0xffff0000 && drawn[1] == 0xff0000ff, "decoded PNG pixels: " + Arrays.toString(drawn));
         byte[] padded = png();
         byte[] framed = new byte[padded.length + 4];
         System.arraycopy(padded, 0, framed, 2, padded.length);
-        check(pixels(toolkit.createImage(framed, 2, padded.length), 2, 1).getRGB(1, 0) == 0xff0000ff, "createImage(byte[], off, len)");
+        check(pixels(toolkit.createImage(framed, 2, padded.length), 2, 1)[1] == 0xff0000ff, "createImage(byte[], off, len)");
 
         Image produced = toolkit.createImage(new MemoryImageSource(1, 1, new int[]{0xff00ff00}, 0, 1));
-        check(pixels(produced, 1, 1).getRGB(0, 0) == 0xff00ff00, "createImage(ImageProducer)");
+        check(pixels(produced, 1, 1)[0] == 0xff00ff00, "createImage(ImageProducer)");
 
         if (!shadow) {
             if (GraphicsEnvironment.isHeadless()) {
@@ -187,6 +197,9 @@ public final class TestToolkitContracts {
         toolkit.beep();
         check(beeps.get() == 1, "beep goes to the host beeper");
         System.out.println("PASS: Toolkit host metrics, desktop properties, images, input state and fixed values");
+        // The host toolkit's queue is not the AppContext's, so the JDK's AWTAutoShutdown never
+        // stops its dispatch thread on the host JVM.
+        System.exit(0);
     }
     }
 }
