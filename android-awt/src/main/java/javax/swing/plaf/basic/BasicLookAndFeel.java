@@ -48,7 +48,18 @@ public abstract class BasicLookAndFeel extends LookAndFeel {
 
     // The ComponentUI class table and the per-component defaults arrive with
     // the Basic delegates; until then a subclass (FlatLaf) supplies its own.
-    protected void initClassDefaults(UIDefaults table) {}
+    protected void initClassDefaults(UIDefaults table) {
+        final String basicPackageName = "javax.swing.plaf.basic.";
+        // LabelUI is listed because DefaultTreeCellRenderer is a JLabel: under a JDK JLabel
+        // (the host contracts) a missing delegate leaves the renderer 0 high, so every row
+        // measures 0 wide. The shadow JLabel sizes itself and does not ask for a delegate.
+        Object[] uiDefaults = {
+                  "LabelUI", basicPackageName + "BasicLabelUI",
+                   "TreeUI", basicPackageName + "BasicTreeUI",
+        };
+
+        table.putDefaults(uiDefaults);
+    }
 
     /** The JDK's Basic system colors, loaded natively when the subclass is a native look and feel. */
     protected void initSystemColorDefaults(UIDefaults table) {
@@ -84,7 +95,36 @@ public abstract class BasicLookAndFeel extends LookAndFeel {
         loadSystemColors(table, defaultSystemColors, isNativeLookAndFeel());
     }
 
-    protected void initComponentDefaults(UIDefaults table) {}
+    /**
+     * The JDK's Basic per-component defaults for the delegates the shadow has
+     * ported (the Tree section). The JDK's gif node icons are not bundled;
+     * DefaultTreeCellRenderer draws no icon when they are absent.
+     */
+    protected void initComponentDefaults(UIDefaults table) {
+        Object dialogPlain12 = new javax.swing.plaf.FontUIResource("Dialog", java.awt.Font.PLAIN, 12);
+        Object[] defaults = {
+            "Tree.font", dialogPlain12,
+            "Tree.background", table.get("window"),
+            "Tree.foreground", table.get("textText"),
+            "Tree.hash", table.get("controlShadow"),
+            "Tree.textForeground", table.get("textText"),
+            "Tree.textBackground", table.get("text"),
+            "Tree.selectionForeground", table.get("textHighlightText"),
+            "Tree.selectionBackground", table.get("textHighlight"),
+            "Tree.selectionBorderColor", new ColorUIResource(Color.black),
+            "Tree.dropLineColor", table.get("controlShadow"),
+            "Tree.leftChildIndent", Integer.valueOf(7),
+            "Tree.rightChildIndent", Integer.valueOf(13),
+            "Tree.rowHeight", Integer.valueOf(16),
+            "Tree.scrollsOnExpand", Boolean.TRUE,
+            "Tree.timeFactor", Long.valueOf(1000L),
+            "Tree.changeSelectionWithFocus", Boolean.TRUE,
+            "Tree.drawsFocusBorderAroundIcon", Boolean.FALSE,
+            "Tree.lineTypeDashed", Boolean.FALSE,
+            "Tree.paintLines", Boolean.TRUE,
+        };
+        table.putDefaults(defaults);
+    }
 
     /**
      * Populates {@code table} with the {@code name-color} pairs in
@@ -114,6 +154,17 @@ public abstract class BasicLookAndFeel extends LookAndFeel {
                 table.put(systemColors[i], new ColorUIResource(color));
             }
         }
+    }
+
+    /**
+     * Returns {@code ui} when it is a {@code klass}, otherwise null. The JDK
+     * also unwraps a {@code MultiLookAndFeel} UI, which the shadow never creates.
+     */
+    static Object getUIOfType(javax.swing.plaf.ComponentUI ui, Class<?> klass) {
+        if (klass.isInstance(ui)) {
+            return ui;
+        }
+        return null;
     }
 
     @Override public void initialize() {}
