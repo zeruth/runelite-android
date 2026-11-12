@@ -17,9 +17,10 @@ import static org.objectweb.asm.Opcodes.*;
  * Lowers the bootstraps D8 9.5 cannot desugar at min-api 26 in a hub jar, before D8 runs.
  *
  * <p>D8 desugars every invokedynamic javac emits (LambdaMetafactory, StringConcatFactory,
- * ObjectMethods, SwitchBootstraps) and dynamic constants whose bootstrap is a static of the
- * class itself, but refuses a dynamic constant bootstrapped by
- * {@code java.lang.invoke.ConstantBootstraps} (a JDK 11 class Android does not have). Each such
+ * ObjectMethods, SwitchBootstraps), but refuses every {@code ldc} of a dynamic constant: those
+ * bootstrapped by {@code java.lang.invoke.ConstantBootstraps} (a JDK 11 class Android does not
+ * have) and those with a static bootstrap of their own (the fixture test found D8 rejects even
+ * the holder-class shape). Each such
  * {@code ldc} becomes a call to a private static synchronized accessor added to the same class,
  * which evaluates the constant once and caches it: the JVM's resolve-once semantics, and the
  * class's own access to private bootstrap targets, both survive. The matrix of what is lowered
@@ -29,6 +30,9 @@ public final class IndyLowering {
     private static final String CONSTANT_BOOTSTRAPS = "java/lang/invoke/ConstantBootstraps";
     private static final String ACCESSOR = "$condy$";
     private static final Type OBJECT = Type.getObjectType("java/lang/Object");
+    private static final Type STRING = Type.getObjectType("java/lang/String");
+    private static final Type CLASS = Type.getObjectType("java/lang/Class");
+    private static final Type LOOKUP = Type.getObjectType("java/lang/invoke/MethodHandles$Lookup");
 
     private IndyLowering() {}
 
@@ -45,8 +49,7 @@ public final class IndyLowering {
     }
 
     static boolean lowered(ConstantDynamic constant) {
-        Handle bsm = constant.getBootstrapMethod();
-        return bsm.getTag() == H_INVOKESTATIC && bsm.getOwner().equals(CONSTANT_BOOTSTRAPS);
+        return constant.getBootstrapMethod().getTag() == H_INVOKESTATIC;
     }
 
     private static final class Lowering extends ClassVisitor {
@@ -136,6 +139,10 @@ public final class IndyLowering {
         private void push(GeneratorAdapter g, ConstantDynamic constant) {
             Type type = Type.getType(constant.getDescriptor());
             String name = constant.getName();
+            if (!constant.getBootstrapMethod().getOwner().equals(CONSTANT_BOOTSTRAPS)) {
+                callBootstrap(g, constant, type);
+                return;
+            }
             String bootstrap = constant.getBootstrapMethod().getName();
             int argc = constant.getBootstrapMethodArgumentCount();
             switch (bootstrap) {
@@ -175,6 +182,35 @@ public final class IndyLowering {
                 default:
                     throw unsupported(constant, "ConstantBootstraps." + bootstrap);
             }
+        }
+
+        /**
+         * Any other static bootstrap (the class's own, as JaCoCo and bytecode tools emit): called as
+         * the JVM resolves the constant, with the lookup of the class holding the {@code ldc}.
+         * D8 9.5 refuses these at every API level ("unsupported constant type").
+         */
+        private void callBootstrap(GeneratorAdapter g, ConstantDynamic constant, Type type) {
+            Handle bsm = constant.getBootstrapMethod();
+            Type[] parameters = Type.getArgumentTypes(bsm.getDesc());
+            int argc = constant.getBootstrapMethodArgumentCount();
+            // A varargs bootstrap would collect its trailing arguments; fixed arity is all that is lowered.
+            if (parameters.length != 3 + argc) {
+                throw unsupported(constant, bsm.getOwner() + "." + bsm.getName() + " with " + argc
+                        + " static arguments for " + (parameters.length - 3) + " parameters");
+            }
+            // MethodHandles.lookup() is caller-sensitive on ART too (API 26), so this is the
+            // holder's own full-privilege lookup, the one the JVM hands the bootstrap.
+            g.visitMethodInsn(INVOKESTATIC, "java/lang/invoke/MethodHandles", "lookup", "()" + LOOKUP.getDescriptor(), false);
+            adapt(g, LOOKUP, parameters[0]);
+            g.push(constant.getName());
+            adapt(g, STRING, parameters[1]);
+            g.push(type);
+            adapt(g, CLASS, parameters[2]);
+            for (int i = 0; i < argc; i++) {
+                adapt(g, pushArgument(g, constant, constant.getBootstrapMethodArgument(i)), parameters[3 + i]);
+            }
+            g.visitMethodInsn(INVOKESTATIC, bsm.getOwner(), bsm.getName(), bsm.getDesc(), bsm.isInterface());
+            adapt(g, Type.getReturnType(bsm.getDesc()), type);
         }
 
         /** ConstantBootstraps.invoke: the trailing static arguments, adapted to the handle's parameters. */

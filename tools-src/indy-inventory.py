@@ -9,7 +9,7 @@ bootstrap constants after the recipe. Dynamic constants are ``condy Owner.method
 EnumDesc labels of a typeSwitch). Counts are constant-pool entries, i.e. distinct call sites per
 class.
 
-    python tools-src/indy-inventory.py                    # build/hub-cache jars + data/*injected*.jar
+    python tools-src/indy-inventory.py                    # build/hub-cache jars + the injected client
     python tools-src/indy-inventory.py some.jar dir/ --json out.json
 
 test-runtime-plugin-dex.py imports this module to check its fixtures and D8's output.
@@ -148,8 +148,40 @@ def inventory(path):
     return jar_bootstraps(path)
 
 
+def client_jars():
+    """The injected client the app downloads: data/*injected*.jar, else net.runelite:injected-client
+    at gradle.properties' project.build.version from the Gradle cache (runelite-client depends on it)."""
+    jars = sorted((ROOT / 'data').glob('*injected*.jar'))
+    if jars:
+        return jars
+    version = None
+    properties = ROOT / 'gradle.properties'
+    if properties.is_file():
+        for line in properties.read_text(encoding='utf-8').splitlines():
+            if line.startswith('project.build.version='):
+                version = line.split('=', 1)[1].strip()
+    if not version:
+        return []
+    cache = Path.home() / '.gradle' / 'caches' / 'modules-2' / 'files-2.1' / 'net.runelite' / 'injected-client' / version
+    return sorted(cache.rglob('injected-client-%s.jar' % version))
+
+
 def default_inputs():
-    return sorted((ROOT / 'build' / 'hub-cache').rglob('*.jar')) + sorted((ROOT / 'data').glob('*injected*.jar'))
+    hub = ROOT / 'build' / 'hub-cache'
+    return ([hub] if hub.is_dir() else []) + client_jars()
+
+
+def expand(inputs):
+    """A directory stands for its loose class files (if any) and, one entry each, its jars."""
+    result = []
+    for path in inputs:
+        if path.is_dir():
+            if next(path.rglob('*.class'), None) is not None:
+                result.append(path)
+            result.extend(sorted(path.rglob('*.jar')))
+        else:
+            result.append(path)
+    return result
 
 
 def main(argv=None):
@@ -157,7 +189,7 @@ def main(argv=None):
     parser.add_argument('inputs', nargs='*', type=Path, help='jars, class files or class directories')
     parser.add_argument('--json', type=Path, help='write {kind: {count, jars: [...]}} here')
     args = parser.parse_args(argv)
-    inputs = args.inputs or default_inputs()
+    inputs = expand(args.inputs or default_inputs())
     if not inputs:
         raise SystemExit('nothing to scan: pass jars, or run hub-compat-scan.py to fill build/hub-cache')
     totals = collections.Counter()

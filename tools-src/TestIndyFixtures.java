@@ -23,6 +23,8 @@ import static org.objectweb.asm.Opcodes.*;
  *
  * <pre>
  * condy DIR            write IndyCondyFixture.class: one ldc per ConstantBootstraps kind
+ * selfcondy DIR        write IndySelfCondyFixture.class: a dynamic constant whose bootstrap is a
+ *                      private static of the class itself (the JaCoCo $jacocoData shape)
  * transform IN OUT     run PluginClassTransform over every entry, exactly as PluginDexer does
  * </pre>
  */
@@ -30,11 +32,15 @@ public class TestIndyFixtures {
     private static final String CB = "java/lang/invoke/ConstantBootstraps";
     private static final String L = "Ljava/lang/invoke/MethodHandles$Lookup;Ljava/lang/String;Ljava/lang/Class;";
     private static final String NAME = "IndyCondyFixture";
+    private static final String SELF = "IndySelfCondyFixture";
 
     public static void main(String[] args) throws Exception {
         switch (args[0]) {
             case "condy":
                 Files.write(Paths.get(args[1], NAME + ".class"), condyFixture());
+                break;
+            case "selfcondy":
+                Files.write(Paths.get(args[1], SELF + ".class"), selfCondyFixture());
                 break;
             case "transform":
                 transform(Paths.get(args[1]), Paths.get(args[2]));
@@ -144,6 +150,66 @@ public class TestIndyFixtures {
         main.visitFieldInsn(GETSTATIC, "java/lang/System", "out", "Ljava/io/PrintStream;");
         main.visitLdcInsn("PASS: ConstantBootstraps");
         main.visitMethodInsn(INVOKEVIRTUAL, "java/io/PrintStream", "println", "(Ljava/lang/Object;)V", false);
+        main.visitInsn(RETURN);
+        main.visitMaxs(0, 0);
+        main.visitEnd();
+        cw.visitEnd();
+        return cw.toByteArray();
+    }
+
+    private static byte[] selfCondyFixture() {
+        // No static arguments and a holder-class bootstrap, the simplest shape there is; D8 9.5
+        // still refuses it, so IndyLowering calls the bootstrap itself.
+        String bootstrapDesc = "(" + L + ")Ljava/lang/String;";
+        ConstantDynamic value = new ConstantDynamic("greeting", "Ljava/lang/String;",
+            new Handle(H_INVOKESTATIC, SELF, "$bootstrap", bootstrapDesc, false));
+
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
+        cw.visit(V11, ACC_PUBLIC | ACC_SUPER, SELF, null, "java/lang/Object", null);
+        cw.visitField(ACC_PRIVATE | ACC_STATIC, "calls", "I", null, null).visitEnd();
+
+        // private static String $bootstrap(Lookup, String name, Class type) { calls++; return name + ":" + type.getName(); }
+        MethodVisitor bsm = cw.visitMethod(ACC_PRIVATE | ACC_STATIC, "$bootstrap", bootstrapDesc, null, null);
+        bsm.visitCode();
+        bsm.visitFieldInsn(GETSTATIC, SELF, "calls", "I");
+        bsm.visitInsn(ICONST_1);
+        bsm.visitInsn(IADD);
+        bsm.visitFieldInsn(PUTSTATIC, SELF, "calls", "I");
+        bsm.visitTypeInsn(NEW, "java/lang/StringBuilder");
+        bsm.visitInsn(DUP);
+        bsm.visitVarInsn(ALOAD, 1);
+        bsm.visitMethodInsn(INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false);
+        bsm.visitLdcInsn(":");
+        bsm.visitMethodInsn(INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false);
+        bsm.visitVarInsn(ALOAD, 2);
+        bsm.visitMethodInsn(INVOKEVIRTUAL, "java/lang/Class", "getName", "()Ljava/lang/String;", false);
+        bsm.visitMethodInsn(INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false);
+        bsm.visitMethodInsn(INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false);
+        bsm.visitInsn(ARETURN);
+        bsm.visitMaxs(0, 0);
+        bsm.visitEnd();
+
+        MethodVisitor get = cw.visitMethod(ACC_STATIC, "get", "()Ljava/lang/String;", null, null);
+        get.visitCode();
+        get.visitLdcInsn(value);
+        get.visitInsn(ARETURN);
+        get.visitMaxs(0, 0);
+        get.visitEnd();
+
+        // Two uses, then the evaluation count: greeting:java.lang.String twice and 1 when it resolves once.
+        MethodVisitor main = cw.visitMethod(ACC_PUBLIC | ACC_STATIC, "main", "([Ljava/lang/String;)V", null, null);
+        main.visitCode();
+        for (int i = 0; i < 2; i++) {
+            main.visitFieldInsn(GETSTATIC, "java/lang/System", "out", "Ljava/io/PrintStream;");
+            main.visitMethodInsn(INVOKESTATIC, SELF, "get", "()Ljava/lang/String;", false);
+            main.visitMethodInsn(INVOKEVIRTUAL, "java/io/PrintStream", "println", "(Ljava/lang/String;)V", false);
+        }
+        main.visitFieldInsn(GETSTATIC, "java/lang/System", "out", "Ljava/io/PrintStream;");
+        main.visitFieldInsn(GETSTATIC, SELF, "calls", "I");
+        main.visitMethodInsn(INVOKEVIRTUAL, "java/io/PrintStream", "println", "(I)V", false);
+        main.visitFieldInsn(GETSTATIC, "java/lang/System", "out", "Ljava/io/PrintStream;");
+        main.visitLdcInsn("PASS: self-bootstrapped dynamic constant");
+        main.visitMethodInsn(INVOKEVIRTUAL, "java/io/PrintStream", "println", "(Ljava/lang/String;)V", false);
         main.visitInsn(RETURN);
         main.visitMaxs(0, 0);
         main.visitEnd();

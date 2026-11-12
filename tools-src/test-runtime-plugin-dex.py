@@ -21,6 +21,7 @@ import re
 import shutil
 import struct
 import subprocess
+import sys
 import zipfile
 
 
@@ -64,7 +65,10 @@ FIXTURES = {
         "condy ConstantBootstraps.invoke",
         "condy ConstantBootstraps.explicitCast",
     ]),
+    "IndySelfCondyFixture": (None, ["condy IndySelfCondyFixture.$bootstrap"]),
 }
+# Fixtures with no javac flags come from TestIndyFixtures; this is its mode for each.
+GENERATED = {"IndyCondyFixture": "condy", "IndySelfCondyFixture": "selfcondy"}
 # Dex map item types ART at API 26 cannot use: invoke-custom call sites, and method handles
 # (const-method-handle is API 28; a call site needs one for its bootstrap).
 DEX_CALL_SITE_ID = 0x0007
@@ -74,6 +78,8 @@ DEX_METHOD_HANDLE = 0x0008
 def load_inventory():
     spec = importlib.util.spec_from_file_location("indy_inventory", TOOLS / "indy-inventory.py")
     module = importlib.util.module_from_spec(spec)
+    # Importing would otherwise leave tools-src/__pycache__ in the tree.
+    sys.dont_write_bytecode = True
     spec.loader.exec_module(module)
     return module
 
@@ -176,7 +182,7 @@ def host_fixtures(args, out):
             shutil.rmtree(classes)
         classes.mkdir(parents=True)
         if flags is None:
-            run("generate " + name, java, "-cp", tools_cp, "TestIndyFixtures", "condy", classes)
+            run("generate " + name, java, "-cp", tools_cp, "TestIndyFixtures", GENERATED[name], classes)
         else:
             run("compile " + name, javac, *flags, "-encoding", "UTF-8", "-d", classes, TOOLS / (name + ".java"))
         found = inventory.inventory(classes)
@@ -188,7 +194,8 @@ def host_fixtures(args, out):
         lowered_jar = out / "fixtures" / (name + "-transformed.jar")
         jar_directory(classes, raw_jar)
         run("transform " + name, java, "-Xverify:all", "-cp", tools_cp, "TestIndyFixtures", "transform", raw_jar, lowered_jar)
-        left = {k: n for k, n in inventory.jar_bootstraps(lowered_jar).items() if k.startswith("condy ConstantBootstraps.")}
+        # "condy " is an ldc; "condy-arg " (typeSwitch EnumDesc labels) goes with its call site to D8.
+        left = {k: n for k, n in inventory.jar_bootstraps(lowered_jar).items() if k.startswith("condy ")}
         if left:
             raise SystemExit(f"{name}: PluginClassTransform left {left}")
 
