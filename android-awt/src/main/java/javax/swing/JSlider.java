@@ -31,7 +31,46 @@
 package javax.swing;
 import java.awt.*;
 import javax.swing.event.*;
-public class JSlider extends JComponent implements SwingConstants {
+public class JSlider extends JComponent implements SwingConstants, javax.accessibility.Accessible {
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJSlider();
+        }
+        return accessibleContext;
+    }
+
+    /** Accessibility support for sliders: role SLIDER, valued by the slider's model. */
+    protected class AccessibleJSlider extends AccessibleJComponent implements javax.accessibility.AccessibleValue {
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.SLIDER;
+        }
+
+        public javax.accessibility.AccessibleValue getAccessibleValue() {
+            return this;
+        }
+
+        public Number getCurrentAccessibleValue() {
+            return Integer.valueOf(getValue());
+        }
+
+        public boolean setCurrentAccessibleValue(Number n) {
+            if (n == null) {
+                return false;
+            }
+            setValue(n.intValue());
+            return true;
+        }
+
+        public Number getMinimumAccessibleValue() {
+            return Integer.valueOf(getMinimum());
+        }
+
+        public Number getMaximumAccessibleValue() {
+            BoundedRangeModel model = getModel();
+            return Integer.valueOf(model.getMaximum() - model.getExtent());
+        }
+    }
     private BoundedRangeModel model;
     private int orientation, majorTickSpacing, minorTickSpacing;
     private boolean paintTicks,paintLabels,snapToTicks,inverted;

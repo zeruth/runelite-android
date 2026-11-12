@@ -41,19 +41,20 @@ public class AdjustmentEvent extends AWTEvent {
 
     public static final int UNIT_INCREMENT = 1;
     public static final int UNIT_DECREMENT = 2;
-    public static final int BLOCK_INCREMENT = 3;
-    public static final int BLOCK_DECREMENT = 4;
+    // The JDK's values: plugins compiled against it inline these, so 3 must stay BLOCK_DECREMENT.
+    public static final int BLOCK_DECREMENT = 3;
+    public static final int BLOCK_INCREMENT = 4;
     public static final int TRACK = 5;
 
     private final int adjustmentType;
     private final int value;
     private final boolean isAdjusting;
 
-    public AdjustmentEvent(Object source, int id, int type, int value) {
+    public AdjustmentEvent(java.awt.Adjustable source, int id, int type, int value) {
         this(source, id, type, value, false);
     }
 
-    public AdjustmentEvent(Object source, int id, int type, int value, boolean isAdjusting) {
+    public AdjustmentEvent(java.awt.Adjustable source, int id, int type, int value, boolean isAdjusting) {
         super(source, id);
         this.adjustmentType = type;
         this.value = value;
@@ -63,5 +64,5 @@ public class AdjustmentEvent extends AWTEvent {
     public int getAdjustmentType() { return adjustmentType; }
     public int getValue() { return value; }
     public boolean getValueIsAdjusting() { return isAdjusting; }
-    public Object getAdjustable() { return source; }
+    public java.awt.Adjustable getAdjustable() { return (java.awt.Adjustable) source; }
 }

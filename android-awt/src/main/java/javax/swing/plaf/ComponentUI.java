@@ -49,7 +49,22 @@ public abstract class ComponentUI {
 
     public static ComponentUI createUI(JComponent c) { return null; }
 
-    public int getBaseline(JComponent c, int width, int height) { return -1; }
+    public int getBaseline(JComponent c, int width, int height) {
+        if (c == null) {
+            throw new NullPointerException("Component must be non-null");
+        }
+        if (width < 0 || height < 0) {
+            throw new IllegalArgumentException("Width and height must be >= 0");
+        }
+        return -1;
+    }
+
+    public java.awt.Component.BaselineResizeBehavior getBaselineResizeBehavior(JComponent c) {
+        if (c == null) {
+            throw new NullPointerException("Component must be non-null");
+        }
+        return java.awt.Component.BaselineResizeBehavior.OTHER;
+    }
 
     public int getAccessibleChildrenCount(JComponent c) { return 0; }
     public Accessible getAccessibleChild(JComponent c, int i) { return null; }

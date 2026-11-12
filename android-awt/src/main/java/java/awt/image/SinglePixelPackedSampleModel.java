@@ -79,20 +79,25 @@ public class SinglePixelPackedSampleModel extends SampleModel {
         return bitSizes.clone();
     }
 
-    @Override
-    public int[] getSampleSize(int band, int[] iArray) {
-        int[] out = (iArray == null) ? new int[1] : iArray;
-        out[0] = bitSizes[band];
-        return out;
+    public int getOffset(int x, int y) {
+        return y * scanlineStride + x;
     }
 
     @Override
     public int getSample(int x, int y, int b, DataBuffer data) {
+        checkPixel(x, y);
         return (data.getElem(y * scanlineStride + x) & bitMasks[b]) >>> bitOffsets[b];
+    }
+
+    private void checkPixel(int x, int y) {
+        if (x < 0 || y < 0 || x >= width || y >= height) {
+            throw new ArrayIndexOutOfBoundsException("Coordinate out of bounds!");
+        }
     }
 
     @Override
     public void setSample(int x, int y, int b, int s, DataBuffer data) {
+        checkPixel(x, y);
         int idx = y * scanlineStride + x;
         int prev = data.getElem(idx);
         data.setElem(idx, (prev & ~bitMasks[b]) | ((s << bitOffsets[b]) & bitMasks[b]));
@@ -115,11 +120,12 @@ public class SinglePixelPackedSampleModel extends SampleModel {
         }
     }
     @Override public Object getDataElements(int x, int y, Object out, DataBuffer data) {
+        checkPixel(x, y);
         Object result = transferArray(out, 1);
         transferSet(result, 0, data.getElem(y * scanlineStride + x));
         return result;
     }
-    @Override public void setDataElements(int x, int y, Object in, DataBuffer data) { data.setElem(y * scanlineStride + x, transferGet(in, 0)); }
+    @Override public void setDataElements(int x, int y, Object in, DataBuffer data) { checkPixel(x, y); data.setElem(y * scanlineStride + x, transferGet(in, 0)); }
     @Override public SampleModel createSubsetSampleModel(int[] bands) {
         int[] masks = new int[bands.length];
         for (int i = 0; i < masks.length; i++) masks[i] = bitMasks[bands[i]];
