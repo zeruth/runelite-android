@@ -48,6 +48,8 @@ public class JComponent extends Container {
     public static final String TOOL_TIP_TEXT_KEY = "ToolTipText";
 
     protected javax.swing.plaf.ComponentUI ui;
+    /** A list of event listeners for this component. */
+    protected javax.swing.event.EventListenerList listenerList = new javax.swing.event.EventListenerList();
 
     /**
      * A JComponent is not {@link javax.accessibility.Accessible} itself (the JDK leaves that to
@@ -144,7 +146,6 @@ public class JComponent extends Container {
     }
 
     private Border border;
-    private String toolTipText;
     private boolean doubleBuffered = true;
     private boolean opaque;
     private float alignmentX = 0.5f;
@@ -164,15 +165,42 @@ public class JComponent extends Container {
             }
         });
     }
-    /** A list of event listeners for this component; subclasses keep theirs here, as in the JDK. */
-    protected javax.swing.event.EventListenerList listenerList = new javax.swing.event.EventListenerList();
     public Border getBorder() { return border; }
     // Border drives getInsets(), which every layout manager reads — a border change is a
     // layout change.
     public void setBorder(Border border) { Border old = this.border; this.border = border; firePropertyChange("border", old, border); revalidate(); repaint(); }
 
-    public String getToolTipText() { return toolTipText; }
-    public void setToolTipText(String text) { String old = this.toolTipText; this.toolTipText = text; firePropertyChange(TOOL_TIP_TEXT_KEY, old, text); }
+    /**
+     * Registers the text to display in a tool tip. As in the JDK the text is
+     * kept as the {@link #TOOL_TIP_TEXT_KEY} client property, and a component
+     * with text is registered with the {@link ToolTipManager}.
+     */
+    public void setToolTipText(String text) {
+        String oldText = getToolTipText();
+        putClientProperty(TOOL_TIP_TEXT_KEY, text);
+        firePropertyChange(TOOL_TIP_TEXT_KEY, oldText, text);
+        ToolTipManager toolTipManager = ToolTipManager.sharedInstance();
+        if (text != null) {
+            if (oldText == null) {
+                toolTipManager.registerComponent(this);
+            }
+        } else {
+            toolTipManager.unregisterComponent(this);
+        }
+    }
+    public String getToolTipText() { return (String) getClientProperty(TOOL_TIP_TEXT_KEY); }
+    /** The tip for a mouse position; components with per-region tips (tabs, cells) override it. */
+    public String getToolTipText(java.awt.event.MouseEvent event) { return getToolTipText(); }
+    /** Where the tip goes in this component's coordinates, or {@code null} for under the pointer. */
+    public java.awt.Point getToolTipLocation(java.awt.event.MouseEvent event) { return null; }
+    /** Where a component popup menu opens, or {@code null} for the look and feel's choice. */
+    public java.awt.Point getPopupLocation(java.awt.event.MouseEvent event) { return null; }
+    /** The tip ToolTipManager shows for this component; override to customize it. */
+    public JToolTip createToolTip() {
+        JToolTip tip = new JToolTip();
+        tip.setComponent(this);
+        return tip;
+    }
 
     // Sizing is inherited from Component — JComponent used to keep parallel `preferred` /
     // `minimum` / `maximum` fields, but that made `isPreferredSizeSet()` (which reads
@@ -222,13 +250,37 @@ public class JComponent extends Container {
     public float getAlignmentY() { return alignmentY; }
     public void setAlignmentY(float f) { this.alignmentY = f; }
 
+    private java.beans.VetoableChangeSupport vetoableChangeSupport;
+
+    public synchronized void addVetoableChangeListener(java.beans.VetoableChangeListener listener) {
+        if (vetoableChangeSupport == null) vetoableChangeSupport = new java.beans.VetoableChangeSupport(this);
+        vetoableChangeSupport.addVetoableChangeListener(listener);
+    }
+
+    public synchronized void removeVetoableChangeListener(java.beans.VetoableChangeListener listener) {
+        if (vetoableChangeSupport == null) return;
+        vetoableChangeSupport.removeVetoableChangeListener(listener);
+    }
+
+    public synchronized java.beans.VetoableChangeListener[] getVetoableChangeListeners() {
+        if (vetoableChangeSupport == null) return new java.beans.VetoableChangeListener[0];
+        return vetoableChangeSupport.getVetoableChangeListeners();
+    }
+
+    protected void fireVetoableChange(String propertyName, Object oldValue, Object newValue)
+            throws java.beans.PropertyVetoException {
+        if (vetoableChangeSupport == null) return;
+        vetoableChangeSupport.fireVetoableChange(propertyName, oldValue, newValue);
+    }
+
     public void addAncestorListener(AncestorListener l) { listenerList.add(AncestorListener.class, l); }
     public void removeAncestorListener(AncestorListener l) { listenerList.remove(AncestorListener.class, l); }
     public AncestorListener[] getAncestorListeners() { return listenerList.getListeners(AncestorListener.class); }
 
     /**
-     * The listeners of the given type: AncestorListener and PropertyChangeListener from their
-     * own registries, anything a subclass added to {@link #listenerList}, else Component's.
+     * The listeners of the given type: AncestorListener, VetoableChangeListener and
+     * PropertyChangeListener from their own registries, anything a subclass added to
+     * {@link #listenerList}, else Component's.
      */
     @SuppressWarnings("unchecked")
     @Override
@@ -236,6 +288,8 @@ public class JComponent extends Container {
         T[] result;
         if (listenerType == AncestorListener.class) {
             result = (T[]) getAncestorListeners();
+        } else if (listenerType == java.beans.VetoableChangeListener.class) {
+            result = (T[]) getVetoableChangeListeners();
         } else if (listenerType == PropertyChangeListener.class) {
             result = (T[]) getPropertyChangeListeners();
         } else {

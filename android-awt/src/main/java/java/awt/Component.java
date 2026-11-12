@@ -173,13 +173,6 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
     final java.util.Locale ownLocale() { return locale; }
     private void invalidateIfValid() { if (isValid()) invalidate(); }
 
-    public boolean contains(int x, int y) { return inside(x, y); }
-    public boolean contains(Point p) { return contains(p.x, p.y); }
-
-    /** @deprecated As of 1.4, replaced by {@link #isFocusable()}. */
-    @Deprecated
-    public boolean isFocusTraversable() { return isFocusable(); }
-
     public Container getParent()  { return parent; }
     void setParent(Container p) {
         Container previous = parent;

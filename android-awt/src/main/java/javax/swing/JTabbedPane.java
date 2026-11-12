@@ -362,7 +362,7 @@ public class JTabbedPane extends JComponent implements SwingConstants, javax.acc
     public void insertTab(String title,Icon icon,Component component,String tip,int index) {
         if(index<0||index>tabs.size())throw new IndexOutOfBoundsException("tab index");
         int existing=component==null?-1:tabs.indexOf(component);if(existing>=0){removeTabAt(existing);if(existing<index)index--;}
-        Page page=new Page();page.tip=tip;tabs.add(index,component);titles.add(index,title==null?"":title);icons.add(index,icon);pages.add(index,page);
+        Page page=new Page();page.tip=tip;if(tip!=null)ToolTipManager.sharedInstance().registerComponent(this);tabs.add(index,component);titles.add(index,title==null?"":title);icons.add(index,icon);pages.add(index,page);
         if(component!=null){super.add(component);component.setVisible(false);}
         if(tabs.size()==1)setSelectedIndex(0);else if(selectedIndex>=index)selectedIndex++;
         updateVisibleTabs();revalidate();repaint();
@@ -390,7 +390,13 @@ public class JTabbedPane extends JComponent implements SwingConstants, javax.acc
     public Icon getDisabledIconAt(int index) { return pages.get(index).disabledIcon; }
     public void setDisabledIconAt(int index, Icon value) { pages.get(index).disabledIcon=value;repaint(); }
     public String getToolTipTextAt(int index) { return pages.get(index).tip; }
-    public void setToolTipTextAt(int index, String value) { pages.get(index).tip=value;repaint(); }
+    public void setToolTipTextAt(int index, String value) { pages.get(index).tip=value;if(value!=null)ToolTipManager.sharedInstance().registerComponent(this);repaint(); }
+    /** The JDK's per-tab tip: the tab under the pointer, else the pane's own. */
+    @Override public String getToolTipText(java.awt.event.MouseEvent event) {
+        int index=indexAtLocation(event.getX(),event.getY());
+        if(index>=0&&index<pages.size()&&pages.get(index).tip!=null)return pages.get(index).tip;
+        return super.getToolTipText(event);
+    }
     public Color getForegroundAt(int index) { return pages.get(index).foreground; }
     public void setForegroundAt(int index, Color value) { pages.get(index).foreground=value;repaint(); }
     public Color getBackgroundAt(int index) { return pages.get(index).background; }
