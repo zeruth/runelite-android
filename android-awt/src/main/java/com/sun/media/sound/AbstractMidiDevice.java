@@ -74,11 +74,6 @@ abstract class AbstractMidiDevice implements MidiDevice, ReferenceCountingDevice
     private List<Object> openKeepingObjects;
 
     /**
-     * This is the device handle returned from native code.
-     */
-    protected volatile long id;
-
-    /**
      * Constructs an AbstractMidiDevice with the specified info object.
      * @param info the description of the device
      */
@@ -300,10 +295,6 @@ abstract class AbstractMidiDevice implements MidiDevice, ReferenceCountingDevice
             }
         }
         return tras;
-    }
-
-    final long getId() {
-        return id;
     }
 
     // REFERENCE COUNTING

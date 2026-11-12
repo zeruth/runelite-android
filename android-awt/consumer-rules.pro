@@ -57,6 +57,11 @@
 # contracts patch the compressed-audio reader and codec over the JDK's sound API).
 -keep class net.runelite.awt.impl.MediaCodecAudioDecoder { <init>(); }
 
+# javax.sound.midi needs no rule of its own: MidiProviders and SampledProviders construct
+# the Gervill providers directly (no ServiceLoader, no Class.forName), and the only by-name
+# load in com.sun.media.sound (JARSoundbankReader) loads classes from the user's jar. No
+# soundbank is bundled (0 bytes); SoftSynthesizer generates and caches EmergencySoundbank.
+
 # ----------------------------------------------------------------------------
 # rlawt shim. Published with a stable FQN that the injected runelite-client jar
 # references by string from its AWTContext factory path. Small surface, kept

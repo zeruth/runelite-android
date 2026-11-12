@@ -242,6 +242,28 @@ public final class TestMidiContracts {
         check("Gervill".equals(synthesizer.getDeviceInfo().getName()), "default synthesizer " + synthesizer.getDeviceInfo());
         check(!sequencer.isOpen() && !synthesizer.isOpen(), "defaults come closed");
         results.put("sequencer.sync", Arrays.toString(sequencer.getMasterSyncModes()) + " " + Arrays.toString(sequencer.getSlaveSyncModes()));
+
+        // The fallback Android always takes (it has no gm.dls or system soundfont): the generated
+        // bank must match the JDK's instrument for instrument.
+        Soundbank emergency = (Soundbank) Class.forName("com.sun.media.sound.EmergencySoundbank")
+            .getMethod("createSoundbank").invoke(null);
+        Instrument[] instruments = emergency.getInstruments();
+        check(instruments.length > 0, "the emergency soundbank has no instruments");
+        StringBuilder names = new StringBuilder();
+        for (Instrument instrument : instruments) {
+            names.append(instrument.getPatch().getBank()).append(':').append(instrument.getPatch().getProgram())
+                .append(' ').append(instrument.getName()).append(';');
+        }
+        results.put("emergency.soundbank", emergency.getName() + " / " + emergency.getVendor() + " instruments "
+            + instruments.length + " resources " + emergency.getResources().length);
+        results.put("emergency.instruments", names.toString());
+        // The size of the soundbank-emg.sf2 cache SoftSynthesizer writes on first use (MidiProviders documents it).
+        ByteArrayOutputStream saved = new ByteArrayOutputStream();
+        emergency.getClass().getMethod("save", java.io.OutputStream.class).invoke(emergency, saved);
+        System.out.println("emergency soundbank: " + instruments.length + " instruments, " + saved.size() + " bytes as SF2");
+        results.put("emergency.sf2.bytes", Integer.toString(saved.size()));
+        Soundbank defaults = synthesizer.getDefaultSoundbank();
+        check(defaults != null && defaults.getInstruments().length > 0, "the synthesizer has no default soundbank");
     }
 
     static String describe(MidiDevice.Info info) {

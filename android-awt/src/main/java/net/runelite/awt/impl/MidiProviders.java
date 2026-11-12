@@ -60,6 +60,13 @@ import java.util.List;
  * No soundbank ships in the APK (0 bytes): {@code SoftSynthesizer} generates the JDK's emergency
  * soundbank on first use and caches it as {@code .gervill/soundbank-emg.sf2} under
  * {@code user.home}, or under {@code java.io.tmpdir} where ART leaves the home empty.
+ * {@code TestMidiContracts} prints the size of that SF2 ("emergency soundbank: ... bytes") and
+ * checks it is byte for byte the JDK's size; it lives on disk, not in the APK.
+ * <p>
+ * APK size budget: MIDI adds code only, no assets. That is the 132 {@code com.sun.media.sound}
+ * sources (about 1.7 MB of Java, Gervill being most of it), so at most 0.5 MB of dex before R8
+ * strips the classes nothing reaches. {@code :android-awt:assembleDebug} must not grow the AAR's
+ * {@code classes.jar} past that, and the module must ship no {@code assets/} directory.
  */
 public final class MidiProviders {
     private static final List<MidiDeviceProvider> DEVICES = Collections.unmodifiableList(
