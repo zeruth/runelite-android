@@ -118,8 +118,8 @@ public final class TestManagementContracts {
 
     static void runtimeAndMemory(){
         RuntimeMXBean runtime=ManagementFactory.getRuntimeMXBean();long now=System.currentTimeMillis();
-        // Off procfs and off Android the shadow has no pid source (its ProcessHandle asks this bean back).
-        range("pid",runtime.getPid(),1,Long.MAX_VALUE);check(runtime.getName().startsWith(runtime.getPid()+"@"),"pid@host name");
+        // A real pid everywhere: /proc/self on Linux, Process.myPid on Android, the JDK's native pid on other hosts.
+        check(runtime.getPid()>0&&runtime.getPid()==ProcessHandle.current().pid(),"pid = "+runtime.getPid());check(runtime.getName().startsWith(runtime.getPid()+"@"),"pid@host name");
         check(runtime.getStartTime()>0&&runtime.getStartTime()<=now&&runtime.getUptime()>=0&&runtime.getUptime()<=now-runtime.getStartTime()+1000,"start time and uptime");
         check(runtime.getInputArguments()!=null&&runtime.getSystemProperties().get("java.vm.name").equals(System.getProperty("java.vm.name")),"input arguments and system properties");
         check(runtime.getClassPath().equals(System.getProperty("java.class.path","")),"class path");

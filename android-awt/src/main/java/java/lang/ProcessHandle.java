@@ -63,7 +63,7 @@ import java.util.stream.Stream;
  *
  * <p>The Android APIs are reached reflectively so the class also compiles, and is patched
  * over {@code java.base}, in the host contract run; there the pid falls back to
- * {@code /proc/self} and then to the {@code RuntimeMXBean} name.
+ * {@code /proc/self} and then to the host JDK's native {@code ProcessHandleImpl} pid.
  */
 public interface ProcessHandle extends Comparable<ProcessHandle> {
 
@@ -467,19 +467,17 @@ public interface ProcessHandle extends Comparable<ProcessHandle> {
             try {
                 return Long.parseLong(Files.readSymbolicLink(Paths.get("/proc/self")).toString());
             } catch (IOException | RuntimeException noProc) {
-                // not Linux: ask the management bean, "pid@host" on every JDK
+                // not Linux: a host JDK with this class patched over java.base (Windows, macOS)
             }
-            Object name = call("java.lang.management.RuntimeMXBean", "getName", runtimeBean());
-            if (name instanceof String) {
-                String text = (String) name;
-                int at = text.indexOf('@');
-                try {
-                    return Long.parseLong(at < 0 ? text : text.substring(0, at));
-                } catch (NumberFormatException unknown) {
-                    // fall through
-                }
+            // The JDK's own native pid, reachable because the shadow sits in java.base's java.lang;
+            // absent on ART. The management beans cannot be asked: their pid comes from here.
+            try {
+                Method native0 = Class.forName("java.lang.ProcessHandleImpl").getDeclaredMethod("getCurrentPid0");
+                native0.setAccessible(true);
+                return ((Number) native0.invoke(null)).longValue();
+            } catch (ReflectiveOperationException | LinkageError | RuntimeException absent) {
+                return -1;
             }
-            return -1;
         }
 
         static Object runtimeBean() {
