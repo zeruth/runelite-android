@@ -38,6 +38,8 @@ import javax.swing.event.ChangeListener;
 // Adjustable, as on the JDK, rather than SwingConstants: both declare HORIZONTAL/VERTICAL
 // with the same values, and AdjustmentEvent takes an Adjustable source.
 public class JScrollBar extends JComponent implements java.awt.Adjustable, javax.accessibility.Accessible {
+    private static final String uiClassID = "ScrollBarUI";
+    public String getUIClassID() { return uiClassID; }
     private static final long serialVersionUID = 1L;
 
     public javax.accessibility.AccessibleContext getAccessibleContext() {

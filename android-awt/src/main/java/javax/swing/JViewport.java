@@ -37,6 +37,10 @@ import java.awt.Rectangle;
 import javax.swing.event.ChangeListener;
 
 public class JViewport extends JComponent implements javax.accessibility.Accessible {
+    private static final String uiClassID = "ViewportUI";
+    public javax.swing.plaf.ViewportUI getUI() { return (javax.swing.plaf.ViewportUI) ui; }
+    public void setUI(javax.swing.plaf.ViewportUI ui) { super.setUI(ui); }
+    public String getUIClassID() { return uiClassID; }
 
     public javax.accessibility.AccessibleContext getAccessibleContext() {
         if (accessibleContext == null) {

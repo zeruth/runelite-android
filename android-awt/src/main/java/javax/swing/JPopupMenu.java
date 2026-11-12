@@ -34,6 +34,10 @@ import java.awt.Component;
 import javax.swing.event.PopupMenuListener;
 
 public class JPopupMenu extends JComponent implements javax.accessibility.Accessible, MenuElement {
+    private static final String uiClassID = "PopupMenuUI";
+    public javax.swing.plaf.PopupMenuUI getUI() { return (javax.swing.plaf.PopupMenuUI) ui; }
+    public void setUI(javax.swing.plaf.PopupMenuUI ui) { super.setUI(ui); }
+    public String getUIClassID() { return uiClassID; }
 
     public javax.accessibility.AccessibleContext getAccessibleContext() {
         if (accessibleContext == null) {

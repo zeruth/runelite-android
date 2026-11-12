@@ -35,6 +35,10 @@ import java.awt.Container;
 import javax.swing.border.Border;
 
 public class JScrollPane extends JComponent implements ScrollPaneConstants, javax.accessibility.Accessible {
+    private static final String uiClassID = "ScrollPaneUI";
+    public javax.swing.plaf.ScrollPaneUI getUI() { return (javax.swing.plaf.ScrollPaneUI) ui; }
+    public void setUI(javax.swing.plaf.ScrollPaneUI ui) { super.setUI(ui); }
+    public String getUIClassID() { return uiClassID; }
 
     public javax.accessibility.AccessibleContext getAccessibleContext() {
         if (accessibleContext == null) {
