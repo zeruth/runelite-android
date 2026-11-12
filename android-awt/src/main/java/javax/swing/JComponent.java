@@ -81,6 +81,8 @@ public class JComponent extends Container {
     public void setBorder(Border border) { Border old = this.border; this.border = border; firePropertyChange("border", old, border); revalidate(); repaint(); }
 
     public String getToolTipText() { return toolTipText; }
+    /** Per-location tooltip; components with cells (JTable, JList) override it. */
+    public String getToolTipText(java.awt.event.MouseEvent event) { return getToolTipText(); }
     public void setToolTipText(String text) { String old = this.toolTipText; this.toolTipText = text; firePropertyChange(TOOL_TIP_TEXT_KEY, old, text); }
 
     // Sizing is inherited from Component — JComponent used to keep parallel `preferred` /
