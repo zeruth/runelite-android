@@ -58,6 +58,14 @@ public abstract class SampleModel {
     public abstract int getSample(int x, int y, int b, DataBuffer data);
     public abstract void setSample(int x, int y, int b, int s, DataBuffer data);
 
+    public float getSampleFloat(int x, int y, int b, DataBuffer data) {
+        return (float) getSample(x, y, b, data);
+    }
+
+    public void setSample(int x, int y, int b, float s, DataBuffer data) {
+        setSample(x, y, b, (int) s, data);
+    }
+
     public int[] getPixel(int x, int y, int[] iArray, DataBuffer data) {
         int[] pixel = (iArray == null) ? new int[numBands] : iArray;
         for (int i = 0; i < numBands; i++) {

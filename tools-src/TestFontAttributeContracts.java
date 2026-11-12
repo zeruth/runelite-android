@@ -72,6 +72,63 @@ public final class TestFontAttributeContracts {
                 RenderingHints.VALUE_TEXT_ANTIALIAS_DEFAULT, RenderingHints.VALUE_FRACTIONALMETRICS_OFF);
         check("frc aa default not aa", !aaDefault.isAntiAliased());
 
+        // FontRenderContext compares hint values by identity, so every value of both keys
+        // must be its own object and every one must give a context unequal to the others.
+        Object[] aaValues = {
+            RenderingHints.VALUE_TEXT_ANTIALIAS_ON, RenderingHints.VALUE_TEXT_ANTIALIAS_OFF,
+            RenderingHints.VALUE_TEXT_ANTIALIAS_DEFAULT, RenderingHints.VALUE_TEXT_ANTIALIAS_GASP,
+            RenderingHints.VALUE_TEXT_ANTIALIAS_LCD_HRGB, RenderingHints.VALUE_TEXT_ANTIALIAS_LCD_HBGR,
+            RenderingHints.VALUE_TEXT_ANTIALIAS_LCD_VRGB, RenderingHints.VALUE_TEXT_ANTIALIAS_LCD_VBGR,
+        };
+        Object[] fmValues = {
+            RenderingHints.VALUE_FRACTIONALMETRICS_ON, RenderingHints.VALUE_FRACTIONALMETRICS_OFF,
+            RenderingHints.VALUE_FRACTIONALMETRICS_DEFAULT,
+        };
+        Object[] allValues = new Object[aaValues.length + fmValues.length];
+        System.arraycopy(aaValues, 0, allValues, 0, aaValues.length);
+        System.arraycopy(fmValues, 0, allValues, aaValues.length, fmValues.length);
+        boolean distinct = true;
+        for (int i = 0; i < allValues.length; i++) {
+            for (int j = i + 1; j < allValues.length; j++) {
+                if (allValues[i] == allValues[j]) distinct = false;
+            }
+        }
+        check("frc hint values distinct objects", distinct);
+        boolean aaContextsDistinct = true;
+        boolean aaFlags = true;
+        for (int i = 0; i < aaValues.length; i++) {
+            FontRenderContext a = new FontRenderContext(null, aaValues[i], RenderingHints.VALUE_FRACTIONALMETRICS_OFF);
+            if (a.getAntiAliasingHint() != aaValues[i]) aaFlags = false;
+            boolean expectAa = i != 1 && i != 2;
+            if (a.isAntiAliased() != expectAa) aaFlags = false;
+            for (int j = 0; j < aaValues.length; j++) {
+                FontRenderContext b = new FontRenderContext(null, aaValues[j], RenderingHints.VALUE_FRACTIONALMETRICS_OFF);
+                if (a.equals(b) != (i == j)) aaContextsDistinct = false;
+            }
+        }
+        check("frc each aa value kept and classified", aaFlags);
+        check("frc contexts equal only for the same aa value", aaContextsDistinct);
+        boolean fmFlags = true;
+        for (int i = 0; i < fmValues.length; i++) {
+            FontRenderContext f = new FontRenderContext(null, RenderingHints.VALUE_TEXT_ANTIALIAS_OFF, fmValues[i]);
+            if (f.getFractionalMetricsHint() != fmValues[i] || f.usesFractionalMetrics() != (i == 0)) fmFlags = false;
+            for (int j = 0; j < fmValues.length; j++) {
+                FontRenderContext g = new FontRenderContext(null, RenderingHints.VALUE_TEXT_ANTIALIAS_OFF, fmValues[j]);
+                if (f.equals(g) != (i == j)) fmFlags = false;
+            }
+        }
+        check("frc each fm value kept, classified and distinct", fmFlags);
+        check("frc aa value rejected as fm hint", throwsIae(new Runnable() {
+            public void run() {
+                new FontRenderContext(null, RenderingHints.VALUE_TEXT_ANTIALIAS_ON, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+            }
+        }));
+        check("frc null hint rejected", throwsIae(new Runnable() {
+            public void run() {
+                new FontRenderContext(null, null, RenderingHints.VALUE_FRACTIONALMETRICS_ON);
+            }
+        }));
+
         check("frc bad aa hint", throwsIae(new Runnable() {
             public void run() {
                 new FontRenderContext(null, RenderingHints.VALUE_ANTIALIAS_ON, RenderingHints.VALUE_FRACTIONALMETRICS_ON);
