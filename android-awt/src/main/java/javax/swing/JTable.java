@@ -85,8 +85,7 @@ public class JTable extends JComponent implements javax.swing.event.TableModelLi
     private java.awt.Color selectionBackground = new java.awt.Color(0x3875D6), selectionForeground = java.awt.Color.WHITE, gridColor = java.awt.Color.GRAY;
     protected boolean showHorizontalLines = true, showVerticalLines = true;
     protected boolean cellSelectionEnabled;
-    private boolean fillsViewportHeight, autoCreateRowSorter, dragEnabled, surrendersFocusOnKeystroke, updateSelectionOnSort = true;
-    private DropMode dropMode = DropMode.USE_SELECTION;
+    private boolean fillsViewportHeight, autoCreateRowSorter, surrendersFocusOnKeystroke, updateSelectionOnSort = true;
     protected java.awt.Dimension preferredViewportSize = new java.awt.Dimension(450, 400);
     private int selectedModelIndex(int view){return view<0||view>=getRowCount()?-1:convertRowIndexToModel(view);}
     private void rememberSelection(){
@@ -272,10 +271,6 @@ public class JTable extends JComponent implements javax.swing.event.TableModelLi
     public boolean getAutoCreateRowSorter() { return autoCreateRowSorter; }
     public void setUpdateSelectionOnSort(boolean update) { boolean old=updateSelectionOnSort;updateSelectionOnSort=update;firePropertyChange("updateSelectionOnSort",old,update); }
     public boolean getUpdateSelectionOnSort() { return updateSelectionOnSort; }
-    public void setDragEnabled(boolean value) { dragEnabled = value; }
-    public boolean getDragEnabled() { return dragEnabled; }
-    public final void setDropMode(DropMode mode) { if(mode==null)throw new IllegalArgumentException("null is not a supported drop mode for JTable"); dropMode = mode; }
-    public final DropMode getDropMode() { return dropMode; }
     public void setSurrendersFocusOnKeystroke(boolean value) { surrendersFocusOnKeystroke = value; }
     public boolean getSurrendersFocusOnKeystroke() { return surrendersFocusOnKeystroke; }
     public void setPreferredScrollableViewportSize(java.awt.Dimension size) { preferredViewportSize = size; }
