@@ -132,8 +132,10 @@ public class TestLayoutContracts {
         check(g.minimumLayoutSize(panel).equals(new Dimension(48, 30)), "group minimum " + g.minimumLayoutSize(panel));
         panel.setSize(110, 50);
         panel.doLayout();
-        bounds(a, 5, 20, 20, 10, "group centred rigid");
-        bounds(b, 33, 15, 72, 20, "group resizable");
+        // The top-level sequential wrapper gives its parallel group min(max(40, pref), max) = 20,
+        // so the CENTER group centres inside its own 20px span, not the host's 40.
+        bounds(a, 5, 10, 20, 10, "group centred rigid");
+        bounds(b, 33, 5, 72, 20, "group resizable");
 
         // PREFERRED_SIZE overrides pin a resizable component at its preferred size; a
         // trailing parallel group right-aligns inside its own (non-growing) span.

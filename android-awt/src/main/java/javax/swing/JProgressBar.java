@@ -58,14 +58,40 @@ public class JProgressBar extends JComponent implements SwingConstants {
     public int getMaximum() { return model.getMaximum(); }
     public void setMaximum(int n) { model.setMaximum(n); }
     public boolean isStringPainted() { return stringPainted; }
-    public void setStringPainted(boolean b) { stringPainted = b; }
+    public void setStringPainted(boolean b) {
+        boolean old = stringPainted;
+        stringPainted = b;
+        firePropertyChange("stringPainted", old, stringPainted);
+        if (stringPainted != old) {
+            revalidate();
+            repaint();
+        }
+    }
     public boolean isBorderPainted() { return borderPainted; }
     public void setBorderPainted(boolean b) { boolean old = borderPainted; borderPainted = b; firePropertyChange("borderPainted", old, b); if (old != b) repaint(); }
     @Override protected void paintBorder(java.awt.Graphics g) { if (borderPainted) super.paintBorder(g); }
-    public String getString() { return progressString; }
-    public void setString(String s) { progressString = s; }
+    /** As on the JDK: without an explicit string, the percent complete in the default locale. */
+    public String getString() {
+        if (progressString != null) {
+            return progressString;
+        }
+        return java.text.NumberFormat.getPercentInstance().format(getPercentComplete());
+    }
+    public void setString(String s) {
+        String old = progressString;
+        progressString = s;
+        firePropertyChange("string", old, progressString);
+        if (progressString == null || old == null || !progressString.equals(old)) {
+            repaint();
+        }
+    }
     public boolean isIndeterminate() { return indeterminate; }
-    public void setIndeterminate(boolean b) { indeterminate = b; }
+    /** Fires "indeterminate": BasicProgressBarUI starts and stops its animation timer on it. */
+    public void setIndeterminate(boolean b) {
+        boolean old = indeterminate;
+        indeterminate = b;
+        firePropertyChange("indeterminate", old, indeterminate);
+    }
     public BoundedRangeModel getModel() { return model; }
     public void setModel(BoundedRangeModel m) { java.util.Objects.requireNonNull(m);BoundedRangeModel old=model;old.removeChangeListener(modelListener);model=m;m.addChangeListener(modelListener);firePropertyChange("model",old,m);repaint(); }
     public double getPercentComplete() {
@@ -104,9 +130,7 @@ public class JProgressBar extends JComponent implements SwingConstants {
             }
         }
         if (stringPainted) {
-            String s = progressString != null
-                ? progressString
-                : ((int) (getPercentComplete() * 100)) + "%";
+            String s = getString();
             java.awt.Font f = getFont();
             if (f != null) g.setFont(f);
             java.awt.FontMetrics fm = g.getFontMetrics();

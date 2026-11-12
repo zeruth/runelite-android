@@ -94,6 +94,7 @@ public class BufferedImage extends Image implements RenderedImage {
         if (imageType == TYPE_BYTE_BINARY) sm = new MultiPixelPackedSampleModel(DataBuffer.TYPE_BYTE, width, height, 1);
         else if (imageType == TYPE_3BYTE_BGR) sm = new PixelInterleavedSampleModel(DataBuffer.TYPE_BYTE, width, height, 3, width * 3, new int[]{2, 1, 0});
         else if (imageType == TYPE_4BYTE_ABGR || imageType == TYPE_4BYTE_ABGR_PRE) sm = new PixelInterleavedSampleModel(DataBuffer.TYPE_BYTE, width, height, 4, width * 4, new int[]{3, 2, 1, 0});
+        else if (imageType == TYPE_BYTE_INDEXED) sm = new PixelInterleavedSampleModel(DataBuffer.TYPE_BYTE, width, height, 1, width, new int[]{0});
         else sm = colorModel.createCompatibleSampleModel(width, height);
         this.raster = Raster.createWritableRaster(sm, sm.createDataBuffer(), ORIGIN);
         DataBuffer data = raster.getDataBuffer();
@@ -102,22 +103,43 @@ public class BufferedImage extends Image implements RenderedImage {
     }
 
     public BufferedImage(int width, int height, int imageType, IndexColorModel model) {
-        if (imageType != TYPE_BYTE_BINARY && imageType != TYPE_BYTE_INDEXED) throw new IllegalArgumentException("Indexed image type required");
-        this.imageType = imageType; colorModel = java.util.Objects.requireNonNull(model); properties = null; pixels = null;
-        int bits = model.getMapSize() <= 2 ? 1 : model.getMapSize() <= 4 ? 2 : 4;
-        if (imageType == TYPE_BYTE_BINARY && model.getMapSize() > 16) throw new IllegalArgumentException("Binary image palette is too large");
-        SampleModel sm = imageType == TYPE_BYTE_BINARY ? new MultiPixelPackedSampleModel(DataBuffer.TYPE_BYTE, width, height, bits) : model.createCompatibleSampleModel(width, height);
-        raster = Raster.createWritableRaster(sm, sm.createDataBuffer(), ORIGIN);
+        if (model.hasAlpha() && model.isAlphaPremultiplied()) {
+            throw new IllegalArgumentException("This image types do not have premultiplied alpha.");
+        }
+        this.imageType = imageType; colorModel = model; properties = null; pixels = null;
+        switch (imageType) {
+            case TYPE_BYTE_BINARY: {
+                int mapSize = model.getMapSize();
+                int bits;
+                if (mapSize <= 2) bits = 1;
+                else if (mapSize <= 4) bits = 2;
+                else if (mapSize <= 16) bits = 4;
+                else throw new IllegalArgumentException("Color map for TYPE_BYTE_BINARY must have no more than 16 entries");
+                raster = Raster.createPackedRaster(DataBuffer.TYPE_BYTE, width, height, 1, bits, null);
+                break;
+            }
+            case TYPE_BYTE_INDEXED:
+                raster = Raster.createInterleavedRaster(DataBuffer.TYPE_BYTE, width, height, 1, null);
+                break;
+            default:
+                throw new IllegalArgumentException("Invalid image type (" + imageType + ").  Image type must"
+                    + " be either TYPE_BYTE_BINARY or  TYPE_BYTE_INDEXED");
+        }
+        if (!model.isCompatibleRaster(raster)) {
+            throw new IllegalArgumentException("Incompatible image type and IndexColorModel");
+        }
     }
 
     public BufferedImage(ColorModel cm, WritableRaster raster, boolean isRasterPremultiplied, Hashtable<?, ?> properties) {
         java.util.Objects.requireNonNull(cm); java.util.Objects.requireNonNull(raster);
         if(raster.getMinX()!=0||raster.getMinY()!=0)throw new IllegalArgumentException("Image raster origin must be zero");
-        if(!cm.isCompatibleRaster(raster))throw new IllegalArgumentException("Incompatible color model and raster");
+        if(!cm.isCompatibleRaster(raster))throw new IllegalArgumentException("Raster "+raster+" is incompatible with ColorModel "+cm);
+        // The type is read off the model as given, before its alpha state is forced to
+        // the raster's, which is the order the desktop constructor uses.
+        this.imageType = detectType(cm, raster);
         this.colorModel = cm.coerceData(raster,isRasterPremultiplied);
         this.raster = raster;
         this.properties = properties;
-        this.imageType = TYPE_CUSTOM;
         DataBuffer db = raster.getDataBuffer();
         if (db instanceof DataBufferInt) {
             this.pixels = ((DataBufferInt) db).getData();
@@ -126,7 +148,81 @@ public class BufferedImage extends Image implements RenderedImage {
         }
     }
 
+    /**
+     * The predefined type a color model and raster amount to, or TYPE_CUSTOM: the
+     * desktop recognises its own layouts the same way, so an image rebuilt from
+     * {@code getColorModel()} and {@code getRaster()} keeps its type.
+     */
+    private static int detectType(ColorModel cm, WritableRaster raster) {
+        SampleModel sm = raster.getSampleModel();
+        int bands = raster.getNumBands();
+        int transfer = raster.getTransferType();
+        boolean pre = cm.isAlphaPremultiplied();
+        boolean srgb = cm.getColorSpace().isCS_sRGB();
+        if (cm instanceof DirectColorModel && sm instanceof SinglePixelPackedSampleModel && srgb && (bands == 3 || bands == 4)) {
+            DirectColorModel dcm = (DirectColorModel) cm;
+            int r = dcm.getRedMask(), g = dcm.getGreenMask(), b = dcm.getBlueMask();
+            if (transfer == DataBuffer.TYPE_INT) {
+                if (r == 0xff0000 && g == 0xff00 && b == 0xff) {
+                    if (!cm.hasAlpha()) return TYPE_INT_RGB;
+                    if (dcm.getAlphaMask() == 0xff000000) return pre ? TYPE_INT_ARGB_PRE : TYPE_INT_ARGB;
+                } else if (r == 0xff && g == 0xff00 && b == 0xff0000 && !cm.hasAlpha()) {
+                    return TYPE_INT_BGR;
+                }
+            } else if (transfer == DataBuffer.TYPE_USHORT && !cm.hasAlpha()) {
+                if (r == 0xf800 && g == 0x7e0 && b == 0x1f) return TYPE_USHORT_565_RGB;
+                if (r == 0x7c00 && g == 0x3e0 && b == 0x1f) return TYPE_USHORT_555_RGB;
+            }
+            return TYPE_CUSTOM;
+        }
+        if (cm instanceof IndexColorModel && bands == 1 && (!cm.hasAlpha() || !pre)) {
+            if (sm instanceof MultiPixelPackedSampleModel && transfer == DataBuffer.TYPE_BYTE
+                    && ((MultiPixelPackedSampleModel) sm).getPixelBitStride() <= 4) return TYPE_BYTE_BINARY;
+            if (sm instanceof ComponentSampleModel && transfer == DataBuffer.TYPE_BYTE
+                    && ((ComponentSampleModel) sm).getPixelStride() == 1 && cm.getPixelSize() <= 8) return TYPE_BYTE_INDEXED;
+            return TYPE_CUSTOM;
+        }
+        if (cm instanceof ComponentColorModel && sm instanceof PixelInterleavedSampleModel) {
+            PixelInterleavedSampleModel pism = (PixelInterleavedSampleModel) sm;
+            if (bands == 1 && cm.getColorSpace().getType() == java.awt.color.ColorSpace.TYPE_GRAY && !cm.hasAlpha()
+                    && pism.getPixelStride() == 1) {
+                if (transfer == DataBuffer.TYPE_BYTE && cm.getComponentSize(0) == 8) return TYPE_BYTE_GRAY;
+                if (transfer == DataBuffer.TYPE_USHORT && cm.getComponentSize(0) == 16) return TYPE_USHORT_GRAY;
+            }
+            if (transfer == DataBuffer.TYPE_BYTE && srgb && (bands == 3 || bands == 4) && pism.getPixelStride() == bands) {
+                int[] offs = pism.getBandOffsets();
+                for (int i = 0; i < bands; i++) if (cm.getComponentSize(i) != 8) return TYPE_CUSTOM;
+                if (offs[0] == bands - 1 && offs[1] == bands - 2 && offs[2] == bands - 3) {
+                    if (bands == 3 && !cm.hasAlpha()) return TYPE_3BYTE_BGR;
+                    if (bands == 4 && offs[3] == 0 && cm.hasAlpha()) return pre ? TYPE_4BYTE_ABGR_PRE : TYPE_4BYTE_ABGR;
+                }
+            }
+        }
+        return TYPE_CUSTOM;
+    }
+
     public int getType()           { return imageType; }
+
+    public WritableRaster getAlphaRaster() {
+        return colorModel.getAlphaRaster(raster);
+    }
+
+    public void setData(Raster r) {
+        int w = r.getWidth();
+        int h = r.getHeight();
+        int startX = r.getMinX();
+        int startY = r.getMinY();
+        java.awt.Rectangle clip = new java.awt.Rectangle(startX, startY, w, h)
+            .intersection(new java.awt.Rectangle(0, 0, raster.getWidth(), raster.getHeight()));
+        if (clip.isEmpty()) {
+            return;
+        }
+        int[] row = null;
+        for (int y = clip.y; y < clip.y + clip.height; y++) {
+            row = r.getPixels(clip.x, y, clip.width, 1, row);
+            raster.setPixels(clip.x, y, clip.width, 1, row);
+        }
+    }
     public ColorModel getColorModel() { return colorModel; }
     public WritableRaster getRaster() { return raster; }
     public int getWidth()          { return raster.getWidth(); }
@@ -166,7 +262,7 @@ public class BufferedImage extends Image implements RenderedImage {
     }
     public int[] getRGB(int startX,int startY,int w,int h,int[] rgbArray,int offset,int scansize){
         checkRegion(startX, startY, w, h);
-        int[] out=rgbArray==null?new int[offset+(h==0?0:(h-1)*scansize+w)]:rgbArray;
+        int[] out=rgbArray==null?new int[offset+h*scansize]:rgbArray;
         int kind = directRgbKind();
         if (kind != 0 && w != 0 && h != 0) {
             int source = pixelIndex(startX, startY), stride = ((SinglePixelPackedSampleModel)raster.getSampleModel()).getScanlineStride();
