@@ -110,6 +110,19 @@ public final class BufferedBackedVolatileImage extends VolatileImage {
     @Override public int getWidth(ImageObserver observer) { return width; }
     @Override public int getHeight(ImageObserver observer) { return height; }
 
+    /**
+     * As desktop's SunVolatileImage: a volatile image carries no properties. Declared
+     * here because {@code Image.getProperty} is abstract on the JDK, which the host
+     * contract run patches this class over.
+     */
+    @Override
+    public Object getProperty(String name, ImageObserver observer) {
+        if (name == null) {
+            throw new NullPointerException("null property name is not allowed");
+        }
+        return UndefinedProperty;
+    }
+
     @Override
     public Graphics2D createGraphics() {
         return backing().createGraphics();
