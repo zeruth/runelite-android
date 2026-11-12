@@ -29,6 +29,8 @@ Header options (space separated after ``// host-contract:``):
     args=A,B             program arguments for every run
     patched-args=A,B     program arguments for the patched run only (``shadow`` lets a test guard the
                          checks that assert a documented divergence from the JDK)
+    jvm-args=A,B         JVM options for every run, before the module flags (``--add-exports=...`` for a test
+                         that reaches a JDK-internal class reflectively)
     fixture=keystore     a throw-away PKCS12 keystore (password ``test-only``, CN=localhost) is generated
                          and its path appended to the arguments
 """
@@ -572,6 +574,9 @@ class Contract:
             arguments.append(str(fixtures[fixture]))
         return arguments
 
+    def jvm_arguments(self):
+        return [a for a in self.options.get("jvm-args", "").split(",") if a]
+
 
 def contracts():
     found = []
@@ -653,7 +658,8 @@ def main():
             log_option = os.path.relpath(log, REPO).replace("\\", "/")  # a drive letter's colon breaks -Xlog parsing
         except ValueError:
             log_option = str(log)
-        jvm = ["-Djava.awt.headless=true", f"-Xlog:class+load:file={log_option}:none", *flags, "-cp", tests_dir, contract.name]
+        jvm = ["-Djava.awt.headless=true", f"-Xlog:class+load:file={log_option}:none", *contract.jvm_arguments(), *flags,
+               "-cp", tests_dir, contract.name]
         code, output, elapsed = run(tool, "java", jvm + contract.arguments(mode, fixtures), timeout=180)
         status = "pass" if code == 0 else "error" if code == "timeout" else "fail"
         results.append((contract.name, mode, status, elapsed, output))
