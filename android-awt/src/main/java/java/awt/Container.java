@@ -138,6 +138,9 @@ public class Container extends Component {
     }
 
     private void insert(Component comp, Object constraints, int index) {
+        // A move within this container raises no remove/add notifications (see detach), so
+        // only a component new to it fires COMPONENT_ADDED.
+        boolean added = comp.parent != this;
         if (comp.parent != null) {
             detach(comp);
             if (index > children.size()) {
@@ -154,6 +157,7 @@ public class Container extends Component {
                 layout.addLayoutComponent((String) constraints, comp);
             }
         }
+        if (added) fireContainerEvent(java.awt.event.ContainerEvent.COMPONENT_ADDED, comp);
     }
 
     public void remove(int index) {
@@ -163,6 +167,7 @@ public class Container extends Component {
             c.setParent(null);
         }
         invalidate();
+        if (c != null) fireContainerEvent(java.awt.event.ContainerEvent.COMPONENT_REMOVED, c);
     }
 
     /*
@@ -175,17 +180,20 @@ public class Container extends Component {
             if (layout != null) layout.removeLayoutComponent(comp);
             comp.setParent(null);
             invalidate();
+            fireContainerEvent(java.awt.event.ContainerEvent.COMPONENT_REMOVED, comp);
         }
     }
 
     public void removeAll() {
         if (children.isEmpty()) return;
-        for (Component c : children) {
+        Component[] removed = children.toArray(new Component[0]);
+        for (Component c : removed) {
             if (layout != null) layout.removeLayoutComponent(c);
             c.setParent(null);
         }
         children.clear();
         invalidate();
+        for (Component c : removed) fireContainerEvent(java.awt.event.ContainerEvent.COMPONENT_REMOVED, c);
     }
 
     public int getComponentZOrder(Component comp) {
@@ -443,6 +451,48 @@ public class Container extends Component {
             if (d != null && (d.width > 0 || d.height > 0)) return d;
         }
         return super.getMinimumSize();
+    }
+
+    // ---- ContainerEvents -------------------------------------------------------------------
+
+    private final List<java.awt.event.ContainerListener> containerListeners = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    public void addContainerListener(java.awt.event.ContainerListener l) { if (l != null) containerListeners.add(l); }
+    public void removeContainerListener(java.awt.event.ContainerListener l) { containerListeners.remove(l); }
+    public java.awt.event.ContainerListener[] getContainerListeners() {
+        return containerListeners.toArray(new java.awt.event.ContainerListener[0]);
+    }
+
+    /** As the JDK's addImpl/remove: built only when a listener, mask or AWTEventListener wants it. */
+    private void fireContainerEvent(int id, Component child) {
+        if (containerListeners.isEmpty() && (eventMask & AWTEvent.CONTAINER_EVENT_MASK) == 0
+                && !Toolkit.enabledOnToolkit(AWTEvent.CONTAINER_EVENT_MASK)) return;
+        dispatchEvent(new java.awt.event.ContainerEvent(this, id, child));
+    }
+
+    @Override boolean eventEnabled(AWTEvent event) {
+        int id = event.getID();
+        if (id == java.awt.event.ContainerEvent.COMPONENT_ADDED || id == java.awt.event.ContainerEvent.COMPONENT_REMOVED) {
+            return (eventMask & AWTEvent.CONTAINER_EVENT_MASK) != 0 || !containerListeners.isEmpty();
+        }
+        return super.eventEnabled(event);
+    }
+
+    @Override protected void processEvent(AWTEvent event) {
+        if (event instanceof java.awt.event.ContainerEvent) {
+            processContainerEvent((java.awt.event.ContainerEvent) event);
+            return;
+        }
+        super.processEvent(event);
+    }
+
+    protected void processContainerEvent(java.awt.event.ContainerEvent e) {
+        for (java.awt.event.ContainerListener l : containerListeners) {
+            switch (e.getID()) {
+                case java.awt.event.ContainerEvent.COMPONENT_ADDED: l.componentAdded(e); break;
+                case java.awt.event.ContainerEvent.COMPONENT_REMOVED: l.componentRemoved(e); break;
+            }
+        }
     }
 
     // --- focus (after OpenJDK 8u Container) ---
