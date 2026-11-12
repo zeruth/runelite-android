@@ -84,6 +84,8 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
     // The component AWT would consider "entered" for a real mouse pointer.
     private var hovered: Component? = null // AWT thread only
     private var hoverPoint = Point() // AWT thread only, root coordinates
+    // The hovered component's effective cursor, resolved on the EDT for the pointer icon.
+    @Volatile private var hoverCursor: java.awt.Cursor? = null
     // Latest pointer positions in logical px; moves are coalesced into one queued EDT task.
     @Volatile private var dragX = 0
     @Volatile private var dragY = 0
@@ -308,6 +310,7 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
         swingPopup = null
         gesture = null
         hovered = null
+        hoverCursor = null
         panel?.let { SwingUtil.deactivate(it) }
         root?.let { java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager().clearFocusIn(it); it.setHostShowing(false) }
         root = null
@@ -697,6 +700,7 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
     /** Move the entered component, sending EXITED/ENTERED as AWT does when the pointer crosses. */
     private fun hover(target: Component?, x: Int = hoverPoint.x, y: Int = hoverPoint.y) {
         hoverPoint = Point(x, y)
+        if (target == null) hoverCursor = null
         val previous = hovered
         if (previous === target) return
         hovered = target
@@ -711,7 +715,21 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
         val target = sink(base, hit(base, x, y))
         hover(target, x, y)
         send(target, MouseEvent.MOUSE_MOVED, x, y)
+        // After MOVED: handlers set the cursor there (split-pane dividers, link labels).
+        hoverCursor = effectiveCursor(target)
     }
+
+    /** Component.getCursor as the JDK resolves it: an unset cursor is the nearest ancestor's. */
+    private fun effectiveCursor(target: Component?): java.awt.Cursor? {
+        var c = target
+        while (c != null) {
+            c.cursor?.let { return it }
+            c = c.parent
+        }
+        return null
+    }
+
+    override fun awtCursor(x: Float, y: Float): java.awt.Cursor? = hoverCursor
 
     /**
      * Show the tooltip ToolTipManager would for the pointer at (x, y): the deepest
