@@ -442,6 +442,14 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
         return (infoflags & (ALLBITS | ABORT)) == 0;
     }
 
+    public boolean contains(int x, int y) {
+        return inside(x, y);
+    }
+
+    public boolean contains(Point p) {
+        return contains(p.x, p.y);
+    }
+
     public boolean inside(int x, int y) {
         return x >= 0 && x < width && y >= 0 && y < height;
     }

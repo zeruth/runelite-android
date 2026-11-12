@@ -165,6 +165,30 @@ public class JComponent extends Container {
         repaint(0, r.x, r.y, r.width, r.height);
     }
 
+    /** The UI delegate defines the hit shape, as on the JDK. */
+    @Override
+    public boolean contains(int x, int y) {
+        return (ui != null) ? ui.contains(this, x, y) : super.contains(x, y);
+    }
+
+    /**
+     * Deliberately a dirty-region request rather than a synchronous paint: the panels are
+     * rasterized by the sidebar host on its own frame, so there is no surface to paint into
+     * from the caller's stack. The region lands in the next host frame.
+     */
+    public void paintImmediately(int x, int y, int w, int h) {
+        repaint(0, x, y, w, h);
+    }
+
+    public void paintImmediately(java.awt.Rectangle r) {
+        paintImmediately(r.x, r.y, r.width, r.height);
+    }
+
+    /** Swing's default: painting of a component does not have to start at it. */
+    protected boolean isPaintingOrigin() {
+        return false;
+    }
+
     private ActionMap actionMap;
     private final InputMap[] inputMaps = new InputMap[3];
     public ActionMap getActionMap() { if (actionMap == null) actionMap = new ActionMap(); return actionMap; }
