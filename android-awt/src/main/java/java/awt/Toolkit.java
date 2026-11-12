@@ -143,7 +143,15 @@ public abstract class Toolkit {
      */
     @Deprecated
     public FontMetrics getFontMetrics(Font font) {
-        return net.runelite.awt.impl.BufferedImageFontMetrics.forFont(font);
+        // Through a Graphics rather than BufferedImageFontMetrics directly: Toolkit then names no
+        // android.*-backed class, so the host contracts can patch it over the JDK's.
+        return MetricsGraphics.INSTANCE.getFontMetrics(font);
+    }
+
+    private static final class MetricsGraphics {
+        /** getFontMetrics(Font) keeps no state, so one Graphics serves every thread. */
+        static final Graphics INSTANCE = new java.awt.image.BufferedImage(
+            1, 1, java.awt.image.BufferedImage.TYPE_INT_ARGB).createGraphics();
     }
 
     public Image createImage(int[] pixels, int width, int height) {
