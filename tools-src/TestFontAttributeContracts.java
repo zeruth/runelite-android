@@ -1,11 +1,20 @@
 // host-contract
 import java.awt.Color;
+import java.awt.Composite;
+import java.awt.Font;
+import java.awt.FontMetrics;
+import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.GraphicsConfiguration;
+import java.awt.Image;
+import java.awt.Paint;
 import java.awt.Rectangle;
 import java.awt.RenderingHints;
 import java.awt.Shape;
+import java.awt.Stroke;
 import java.awt.font.FontRenderContext;
 import java.awt.font.GlyphJustificationInfo;
+import java.awt.font.GlyphVector;
 import java.awt.font.GraphicAttribute;
 import java.awt.font.ImageGraphicAttribute;
 import java.awt.font.OpenType;
@@ -14,9 +23,16 @@ import java.awt.font.TransformAttribute;
 import java.awt.geom.AffineTransform;
 import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
+import java.awt.image.BufferedImageOp;
+import java.awt.image.ImageObserver;
+import java.awt.image.ImageProducer;
+import java.awt.image.RenderedImage;
+import java.awt.image.renderable.RenderableImage;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.nio.charset.StandardCharsets;
+import java.text.AttributedCharacterIterator;
+import java.util.Map;
 
 /**
  * java.awt.font value classes: FontRenderContext hint/transform semantics and equality,
@@ -223,7 +239,7 @@ public final class TestFontAttributeContracts {
             }
         }));
 
-        BufferedImage image = new BufferedImage(10, 6, BufferedImage.TYPE_INT_ARGB);
+        Image image = new SizedImage(10, 6);
         ImageGraphicAttribute iga = new ImageGraphicAttribute(image, GraphicAttribute.ROMAN_BASELINE, 2, 4);
         check("iga ascent", iga.getAscent() == 4f);
         check("iga descent", iga.getDescent() == 2f);
@@ -236,14 +252,191 @@ public final class TestFontAttributeContracts {
         check("iga origin differs", !iga.equals(new ImageGraphicAttribute(image, 0, 2, 3)));
         check("iga hashCode", iga.hashCode() == image.hashCode());
 
-        BufferedImage canvas = new BufferedImage(12, 8, BufferedImage.TYPE_INT_ARGB);
-        Graphics2D g = canvas.createGraphics();
-        g.setColor(Color.RED);
-        new ShapeGraphicAttribute(new Rectangle(0, -3, 4, 3), 0, ShapeGraphicAttribute.FILL).draw(g, 2.7f, 5.2f);
+        // draw() is checked against a recording Graphics2D: the host patch carries the shadow Raster
+        // but not the shadow BufferedImage (it needs the Android backend), so a real canvas would mix
+        // the two pipelines; what the attributes owe the Graphics2D is the call sequence.
+        Rectangle small = new Rectangle(0, -3, 4, 3);
+        RecordingGraphics g = new RecordingGraphics();
+        new ShapeGraphicAttribute(small, 0, ShapeGraphicAttribute.FILL).draw(g, 2.7f, 5.2f);
+        check("sga fill draw at truncated origin", g.log.toString().equals("translate 2,5;fill@2,5;translate -2,-5;"));
+        check("sga fill draws its own shape", g.lastShape == small);
         check("sga draw restores translation", g.getTransform().isIdentity());
-        g.dispose();
-        check("sga draw at truncated origin", canvas.getRGB(2, 2) == 0xffff0000 && canvas.getRGB(5, 4) == 0xffff0000
-                && canvas.getRGB(6, 4) == 0 && canvas.getRGB(2, 5) == 0 && canvas.getRGB(1, 2) == 0);
+        g = new RecordingGraphics();
+        new ShapeGraphicAttribute(small, 0, ShapeGraphicAttribute.STROKE).draw(g, -1.5f, 0.9f);
+        check("sga stroke draw outlines", g.log.toString().equals("translate -1,0;draw@-1,0;translate 1,0;"));
+        final RecordingGraphics failing = new RecordingGraphics();
+        failing.failPainting = true;
+        boolean thrown = false;
+        try {
+            new ShapeGraphicAttribute(small, 0, ShapeGraphicAttribute.FILL).draw(failing, 3f, 4f);
+        } catch (IllegalStateException expected) {
+            thrown = true;
+        }
+        check("sga draw untranslates when painting throws", thrown && failing.getTransform().isIdentity());
+        g = new RecordingGraphics();
+        iga.draw(g, 5.5f, 7.9f);
+        check("iga draw at truncated top-left", g.log.toString().equals("image 3,3 null;") && g.lastImage == image);
+        check("iga draw leaves transform", g.getTransform().isIdentity());
+    }
+
+    /** An image of fixed size; ImageGraphicAttribute only asks for the size. */
+    private static final class SizedImage extends Image {
+        private final int width;
+        private final int height;
+
+        SizedImage(int width, int height) {
+            this.width = width;
+            this.height = height;
+        }
+
+        public int getWidth(ImageObserver observer) {
+            return width;
+        }
+
+        public int getHeight(ImageObserver observer) {
+            return height;
+        }
+
+        public ImageProducer getSource() {
+            throw new UnsupportedOperationException("getSource");
+        }
+
+        public Graphics getGraphics() {
+            throw new UnsupportedOperationException("getGraphics");
+        }
+
+        public Object getProperty(String name, ImageObserver observer) {
+            return UndefinedProperty;
+        }
+    }
+
+    /**
+     * Records translate/fill/draw/drawImage and tracks the translation; everything else throws.
+     * Implements the abstract members of both the JDK's and the shadow's Graphics2D, so it links
+     * against whichever one the run loads.
+     */
+    private static final class RecordingGraphics extends Graphics2D {
+        final StringBuilder log = new StringBuilder();
+        final AffineTransform transform = new AffineTransform();
+        Shape lastShape;
+        Image lastImage;
+        boolean failPainting;
+
+        private static UnsupportedOperationException no(String member) {
+            return new UnsupportedOperationException(member);
+        }
+
+        private String at() {
+            return (int) transform.getTranslateX() + "," + (int) transform.getTranslateY();
+        }
+
+        private void paint(String op, Shape s) {
+            if (failPainting) throw new IllegalStateException(op);
+            lastShape = s;
+            log.append(op).append('@').append(at()).append(';');
+        }
+
+        public void translate(int x, int y) {
+            log.append("translate ").append(x).append(',').append(y).append(';');
+            transform.translate(x, y);
+        }
+
+        public void translate(double tx, double ty) {
+            log.append("translate ").append(tx).append(',').append(ty).append(';');
+            transform.translate(tx, ty);
+        }
+
+        public AffineTransform getTransform() {
+            return new AffineTransform(transform);
+        }
+
+        public void setTransform(AffineTransform tx) {
+            transform.setTransform(tx);
+        }
+
+        public void transform(AffineTransform tx) {
+            transform.concatenate(tx);
+        }
+
+        public void fill(Shape s) {
+            paint("fill", s);
+        }
+
+        public void draw(Shape s) {
+            paint("draw", s);
+        }
+
+        public boolean drawImage(Image img, int x, int y, ImageObserver observer) {
+            lastImage = img;
+            log.append("image ").append(x).append(',').append(y).append(' ').append(observer).append(';');
+            return true;
+        }
+
+        public Graphics create() { throw no("create"); }
+        public Color getColor() { throw no("getColor"); }
+        public void setColor(Color c) { throw no("setColor"); }
+        public void setPaintMode() { throw no("setPaintMode"); }
+        public void setXORMode(Color c1) { throw no("setXORMode"); }
+        public Font getFont() { throw no("getFont"); }
+        public void setFont(Font font) { throw no("setFont"); }
+        public FontMetrics getFontMetrics(Font f) { throw no("getFontMetrics"); }
+        public Rectangle getClipBounds() { throw no("getClipBounds"); }
+        public void clipRect(int x, int y, int width, int height) { throw no("clipRect"); }
+        public void setClip(int x, int y, int width, int height) { throw no("setClip"); }
+        public Shape getClip() { throw no("getClip"); }
+        public void setClip(Shape clip) { throw no("setClip"); }
+        public void clip(Shape s) { throw no("clip"); }
+        public void copyArea(int x, int y, int width, int height, int dx, int dy) { throw no("copyArea"); }
+        public void drawLine(int x1, int y1, int x2, int y2) { throw no("drawLine"); }
+        public void fillRect(int x, int y, int width, int height) { throw no("fillRect"); }
+        public void clearRect(int x, int y, int width, int height) { throw no("clearRect"); }
+        public void drawRoundRect(int x, int y, int width, int height, int aw, int ah) { throw no("drawRoundRect"); }
+        public void fillRoundRect(int x, int y, int width, int height, int aw, int ah) { throw no("fillRoundRect"); }
+        public void drawOval(int x, int y, int width, int height) { throw no("drawOval"); }
+        public void fillOval(int x, int y, int width, int height) { throw no("fillOval"); }
+        public void drawArc(int x, int y, int width, int height, int start, int arc) { throw no("drawArc"); }
+        public void fillArc(int x, int y, int width, int height, int start, int arc) { throw no("fillArc"); }
+        public void drawPolyline(int[] xPoints, int[] yPoints, int nPoints) { throw no("drawPolyline"); }
+        public void drawPolygon(int[] xPoints, int[] yPoints, int nPoints) { throw no("drawPolygon"); }
+        public void fillPolygon(int[] xPoints, int[] yPoints, int nPoints) { throw no("fillPolygon"); }
+        public void drawString(String str, int x, int y) { throw no("drawString"); }
+        public void drawString(String str, float x, float y) { throw no("drawString"); }
+        public void drawString(AttributedCharacterIterator iterator, int x, int y) { throw no("drawString"); }
+        public void drawString(AttributedCharacterIterator iterator, float x, float y) { throw no("drawString"); }
+        public void drawGlyphVector(GlyphVector gv, float x, float y) { throw no("drawGlyphVector"); }
+        public boolean drawImage(Image img, int x, int y, int w, int h, ImageObserver o) { throw no("drawImage"); }
+        public boolean drawImage(Image img, int x, int y, Color bg, ImageObserver o) { throw no("drawImage"); }
+        public boolean drawImage(Image img, int x, int y, int w, int h, Color bg, ImageObserver o) { throw no("drawImage"); }
+        public boolean drawImage(Image img, int dx1, int dy1, int dx2, int dy2,
+                                 int sx1, int sy1, int sx2, int sy2, ImageObserver o) { throw no("drawImage"); }
+        public boolean drawImage(Image img, int dx1, int dy1, int dx2, int dy2,
+                                 int sx1, int sy1, int sx2, int sy2, Color bg, ImageObserver o) { throw no("drawImage"); }
+        public boolean drawImage(Image img, AffineTransform xform, ImageObserver obs) { throw no("drawImage"); }
+        public void drawImage(BufferedImage img, int x, int y) { throw no("drawImage"); }
+        public void drawImage(BufferedImage img, BufferedImageOp op, int x, int y) { throw no("drawImage"); }
+        public void drawRenderedImage(RenderedImage img, AffineTransform xform) { throw no("drawRenderedImage"); }
+        public void drawRenderableImage(RenderableImage img, AffineTransform xform) { throw no("drawRenderableImage"); }
+        public boolean hit(Rectangle rect, Shape s, boolean onStroke) { throw no("hit"); }
+        public GraphicsConfiguration getDeviceConfiguration() { throw no("getDeviceConfiguration"); }
+        public void dispose() { }
+        public Composite getComposite() { throw no("getComposite"); }
+        public void setComposite(Composite comp) { throw no("setComposite"); }
+        public Paint getPaint() { throw no("getPaint"); }
+        public void setPaint(Paint paint) { throw no("setPaint"); }
+        public Stroke getStroke() { throw no("getStroke"); }
+        public void setStroke(Stroke s) { throw no("setStroke"); }
+        public void rotate(double theta) { throw no("rotate"); }
+        public void rotate(double theta, double x, double y) { throw no("rotate"); }
+        public void scale(double sx, double sy) { throw no("scale"); }
+        public void shear(double shx, double shy) { throw no("shear"); }
+        public void setRenderingHint(RenderingHints.Key key, Object value) { throw no("setRenderingHint"); }
+        public Object getRenderingHint(RenderingHints.Key key) { throw no("getRenderingHint"); }
+        public void setRenderingHints(Map<?, ?> hints) { throw no("setRenderingHints"); }
+        public void addRenderingHints(Map<?, ?> hints) { throw no("addRenderingHints"); }
+        public RenderingHints getRenderingHints() { throw no("getRenderingHints"); }
+        public Color getBackground() { throw no("getBackground"); }
+        public void setBackground(Color color) { throw no("setBackground"); }
+        public FontRenderContext getFontRenderContext() { throw no("getFontRenderContext"); }
     }
 
     private static void openTypeTags() throws IllegalAccessException {
