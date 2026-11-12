@@ -37,7 +37,6 @@ import java.awt.Dimension;
 import java.awt.Insets;
 import java.awt.LayoutManager2;
 import java.io.Serializable;
-import java.lang.reflect.Method;
 
 /**
  * The JDK's BoxLayout over {@link SizeRequirements}. Along the axis children are tiled:
