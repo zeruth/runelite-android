@@ -42,7 +42,7 @@ import net.runelite.awt.impl.BufferedImageGraphics2D;
  * inside a {@link DataBufferInt}, so JNI hot paths can pin the array via
  * {@code GetPrimitiveArrayCritical} for zero-copy access from Rust.
  */
-public class BufferedImage extends Image implements RenderedImage {
+public class BufferedImage extends Image implements WritableRenderedImage {
     public static final int TYPE_CUSTOM        = 0;
     public static final int TYPE_INT_RGB       = 1;
     public static final int TYPE_INT_ARGB      = 2;
@@ -315,6 +315,38 @@ public class BufferedImage extends Image implements RenderedImage {
     public SampleModel getSampleModel(){return raster.getSampleModel();}
     public java.util.Vector<RenderedImage> getSources(){return null;}
     public Raster getTile(int x,int y){if(x!=0||y!=0)throw new ArrayIndexOutOfBoundsException("tile");return raster;}
+
+    // WritableRenderedImage, as in OpenJDK 8u: a BufferedImage is its own single tile, always
+    // checked out, so observers are never notified and the JDK keeps add/remove empty too.
+    public void addTileObserver(TileObserver to) {
+    }
+
+    public void removeTileObserver(TileObserver to) {
+    }
+
+    public boolean isTileWritable(int tileX, int tileY) {
+        if (tileX == 0 && tileY == 0) {
+            return true;
+        }
+        throw new IllegalArgumentException("Only 1 tile in image");
+    }
+
+    public java.awt.Point[] getWritableTileIndices() {
+        java.awt.Point[] p = new java.awt.Point[1];
+        p[0] = new java.awt.Point(0, 0);
+        return p;
+    }
+
+    public boolean hasTileWriters() {
+        return true;
+    }
+
+    public WritableRaster getWritableTile(int tileX, int tileY) {
+        return raster;
+    }
+
+    public void releaseWritableTile(int tileX, int tileY) {
+    }
     public Raster getData(){return copyData(null);}
     public Raster getData(java.awt.Rectangle rect){WritableRaster copy=raster.createCompatibleWritableRaster(rect.width,rect.height);for(int y=0;y<rect.height;y++)for(int x=0;x<rect.width;x++)copy.setDataElements(x,y,raster.getDataElements(rect.x+x,rect.y+y,null));return copy.createWritableTranslatedChild(rect.x,rect.y);}
     public WritableRaster copyData(WritableRaster out){if(out==null)out=raster.createCompatibleWritableRaster();int minX=Math.max(0,out.getMinX()),minY=Math.max(0,out.getMinY()),maxX=Math.min(getWidth(),out.getMinX()+out.getWidth()),maxY=Math.min(getHeight(),out.getMinY()+out.getHeight());for(int y=minY;y<maxY;y++)for(int x=minX;x<maxX;x++)out.setDataElements(x,y,raster.getDataElements(x,y,null));return out;}

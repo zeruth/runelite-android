@@ -1265,6 +1265,138 @@ public final class ImageIO {
     }
 
     /**
+     * Whether the convenience readers decode a PNG with the platform codec rather
+     * than the ported PNGImageReader. RuneLite loads hundreds of PNG resources at
+     * start-up through read(InputStream) with no parameters; BitmapFactory decodes
+     * them in native code (unpremultiplied, see AndroidImageCodec) into the
+     * TYPE_INT_ARGB image the renderer blits fastest. Only PNGs whose decode has
+     * the same getRGB values as the ported reader take this path (see
+     * {@link #startsWithPlatformPng}); images still come back as TYPE_INT_ARGB
+     * instead of the reader's TYPE_4BYTE_ABGR/TYPE_3BYTE_BGR/indexed types. Set
+     * <code>-Dnet.runelite.awt.imageio.platformPng=false</code> (before ImageIO
+     * loads) to route these reads through the ported reader, which is how the two
+     * are benchmarked against each other.
+     */
+    private static final boolean PLATFORM_PNG =
+        !"false".equals(System.getProperty("net.runelite.awt.imageio.platformPng"));
+
+    private static final byte[] PNG_SIGNATURE =
+        {(byte)0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'};
+
+    /** How far the chunk probe may read ahead before giving up on the fast path. */
+    private static final int PNG_PROBE_LIMIT = 64 * 1024;
+
+    private static final int IHDR = 0x49484452;
+    private static final int IDAT = 0x49444154;
+    private static final int GAMA = 0x67414d41;
+    private static final int CHRM = 0x6348524d;
+    private static final int ICCP = 0x69434350;
+    private static final int SRGB = 0x73524742;
+
+    private static boolean readFully(InputStream in, byte[] b, int len) throws IOException {
+        int n = 0;
+        while (n < len) {
+            int r = in.read(b, n, len - n);
+            if (r < 0) {
+                return false;
+            }
+            n += r;
+        }
+        return true;
+    }
+
+    private static int int32(byte[] b, int off) {
+        return ((b[off] & 0xff) << 24) | ((b[off + 1] & 0xff) << 16)
+            | ((b[off + 2] & 0xff) << 8) | (b[off + 3] & 0xff);
+    }
+
+    /**
+     * Peeks, on a stream that supports mark/reset, whether it is a PNG the platform
+     * codec decodes to the same pixels as PNGImageReader. The ported reader keeps
+     * gAMA/cHRM/iCCP as metadata and returns the stored samples, while Skia tags the
+     * bitmap with that colour space and getPixels converts it to sRGB; an sRGB chunk
+     * takes precedence over gAMA/cHRM in Skia, so those stay exact. 16-bit samples
+     * are excluded because Skia truncates them where the reader's colour model
+     * rounds. Anything the probe cannot settle within PNG_PROBE_LIMIT bytes goes to
+     * the ported reader.
+     */
+    private static boolean startsWithPlatformPng(InputStream in) throws IOException {
+        in.mark(PNG_PROBE_LIMIT);
+        try {
+            byte[] b = new byte[PNG_SIGNATURE.length];
+            if (!readFully(in, b, b.length) || !Arrays.equals(b, PNG_SIGNATURE)) {
+                return false;
+            }
+            int read = b.length;
+            boolean srgb = false;
+            boolean tagged = false;
+            byte[] head = new byte[8];
+            byte[] body = new byte[4096];
+            while (true) {
+                if (!readFully(in, head, 8)) {
+                    return false;
+                }
+                read += 8;
+                long length = int32(head, 0) & 0xffffffffL;
+                int type = int32(head, 4);
+                if (type == IDAT) {
+                    return srgb || !tagged;
+                }
+                // Body, CRC and the next chunk header must all stay inside the mark.
+                if (read + length + 4 + 8 > PNG_PROBE_LIMIT) {
+                    return false;
+                }
+                if (type == IHDR) {
+                    if (length < 13 || !readFully(in, body, 13)) {
+                        return false;
+                    }
+                    if ((body[8] & 0xff) > 8) {
+                        return false;
+                    }
+                    length -= 13;
+                    read += 13;
+                } else if (type == SRGB) {
+                    srgb = true;
+                } else if (type == GAMA || type == CHRM || type == ICCP) {
+                    tagged = true;
+                    if (type == ICCP) {
+                        // Skia honours an embedded profile ahead of sRGB.
+                        return false;
+                    }
+                }
+                // Skip the rest of the body and the CRC through reads, so the mark holds.
+                long skip = length + 4;
+                while (skip > 0) {
+                    int r = in.read(body, 0, (int) Math.min(body.length, skip));
+                    if (r < 0) {
+                        return false;
+                    }
+                    skip -= r;
+                }
+                read += (int) (length + 4);
+            }
+        } finally {
+            in.reset();
+        }
+    }
+
+    /**
+     * The platform-codec read of a PNG stream, or null when the stream is not a PNG
+     * (or the fast path is off) and the registered readers should take it. The
+     * stream must support mark/reset.
+     */
+    private static BufferedImage readPlatformPng(InputStream in) throws IOException {
+        if (!PLATFORM_PNG || !startsWithPlatformPng(in)) {
+            return null;
+        }
+        BufferedImage bi = AndroidImageCodec.decode(in);
+        if (bi == null) {
+            throw new IIOException("Error reading PNG image data");
+        }
+        return bi;
+    }
+
+    /**
      * Returns a <code>BufferedImage</code> as the result of decoding
      * a supplied <code>File</code> with an <code>ImageReader</code>
      * chosen automatically from among those currently registered.
@@ -1302,6 +1434,22 @@ public final class ImageIO {
 
         if (!hasReaders()) {
             return AndroidImageCodec.decode(input);
+        }
+        if (PLATFORM_PNG) {
+            boolean png;
+            InputStream head = new java.io.FileInputStream(input);
+            try {
+                png = startsWithPlatformPng(new java.io.BufferedInputStream(head, 4096));
+            } finally {
+                head.close();
+            }
+            if (png) {
+                BufferedImage bi = AndroidImageCodec.decode(input);
+                if (bi != null) {
+                    return bi;
+                }
+                // Undecodable: the ported reader below says what is wrong with it.
+            }
         }
 
         ImageInputStream stream = createImageInputStream(input);
@@ -1355,6 +1503,15 @@ public final class ImageIO {
 
         if (!hasReaders()) {
             return AndroidImageCodec.decode(input);
+        }
+        if (PLATFORM_PNG) {
+            if (!input.markSupported()) {
+                input = new java.io.BufferedInputStream(input);
+            }
+            BufferedImage png = readPlatformPng(input);
+            if (png != null) {
+                return png;
+            }
         }
 
         ImageInputStream stream = createImageInputStream(input);
@@ -1414,6 +1571,22 @@ public final class ImageIO {
                 return AndroidImageCodec.decode(istream);
             } finally {
                 istream.close();
+            }
+        }
+        if (PLATFORM_PNG) {
+            if (!istream.markSupported()) {
+                istream = new java.io.BufferedInputStream(istream);
+            }
+            BufferedImage png;
+            try {
+                png = readPlatformPng(istream);
+            } catch (IOException e) {
+                istream.close();
+                throw e;
+            }
+            if (png != null) {
+                istream.close();
+                return png;
             }
         }
 
