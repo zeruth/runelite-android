@@ -171,7 +171,9 @@
 -keep class com.google.common.** { *; }
 # The JRE flavour also names java.lang.ClassValue (API 34; minSdk is 26). The whole-tree keep
 # leaves guava's class names as guava loads them, so R8 adds no failure of its own there;
-# how guava copes with a missing ClassValue on API 26-33 is unverified on device.
+# how guava copes with a missing ClassValue on API 26-33 is unverified on device. Its only
+# user is Futures.getChecked's exception-type validator, which neither the client nor the
+# app calls; a hub plugin that does is the one exposure on those API levels.
 
 # Hub plugins load after R8 runs and link against the host's protobuf runtime.
 # Preserve its public binary surface, including methods only those plugins use.
