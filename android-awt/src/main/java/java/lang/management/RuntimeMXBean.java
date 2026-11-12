@@ -30,7 +30,10 @@
  */
 package java.lang.management;
 
-public interface RuntimeMXBean {
+public interface RuntimeMXBean extends PlatformManagedObject {
+    // JDK 10
+    default long getPid() { return ArtManagement.pid(); }
+
     String getName();
     String getVmName();
     String getVmVendor();
@@ -47,5 +50,4 @@ public interface RuntimeMXBean {
     long getUptime();
     long getStartTime();
     java.util.Map<String, String> getSystemProperties();
-    default java.util.Map<String, String> getKeyMap() { return getSystemProperties(); }
 }

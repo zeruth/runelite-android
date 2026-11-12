@@ -4,11 +4,11 @@ import java.awt.event.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.management.*;
 import javax.sound.sampled.*;
-import net.runelite.awt.impl.StubMBeanServer;
 
 public final class TestRuntimeCoreContracts {
     static void check(boolean value,String message){if(!value)throw new AssertionError(message);}
-    public static final class Counter {
+    public interface CounterMBean { int getValue(); void setValue(int value); int add(int amount); }
+    public static final class Counter implements CounterMBean {
         private int value;
         public int getValue(){return value;} public void setValue(int value){this.value=value;} public int add(int amount){return value+=amount;}
     }
@@ -17,12 +17,27 @@ public final class TestRuntimeCoreContracts {
         check(heap.getUsed()>0&&heap.getCommitted()>=heap.getUsed(),"actual ART heap usage");
         java.lang.management.GarbageCollectorMXBean gc=java.lang.management.ManagementFactory.getGarbageCollectorMXBeans().get(0);
         check(gc.getCollectionCount()>=-1&&gc.getCollectionTime()>=-1,"ART GC counters or explicit unavailable");
-        check(java.lang.management.ManagementFactory.getMemoryPoolMXBeans().isEmpty(),"do not advertise unsupported managed heap-pool contracts");
+        check(java.lang.management.ManagementFactory.getMemoryPoolMXBeans().size()==2,"ART heap and native heap pools");
+        check(gc.getCollectionCount()>=0,"ART reports art.gc.gc-count");
+        com.sun.management.OperatingSystemMXBean os=(com.sun.management.OperatingSystemMXBean)java.lang.management.ManagementFactory.getOperatingSystemMXBean();
+        check(os.getTotalMemorySize()>0&&os.getFreeMemorySize()<=os.getTotalMemorySize()&&os.getProcessCpuTime()>0,"OS memory and process CPU time on Android");
+        double load=os.getProcessCpuLoad();check(load==-1||(load>=0&&load<=1),"process CPU load in range");
+        // App processes may read /proc/meminfo and /proc/self; SELinux denies /proc/stat (and on some builds /proc/loadavg), hence -1 there.
+        check(os.getTotalSwapSpaceSize()>=0&&os.getFreeSwapSpaceSize()>=0&&os.getFreeSwapSpaceSize()<=os.getTotalSwapSpaceSize(),"swap from /proc/meminfo on Android");
+        check(os.getCommittedVirtualMemorySize()>=(1<<20),"committed virtual memory from /proc/self/status on Android");
+        double system=os.getSystemCpuLoad();check(system==-1||(system>=0&&system<=1),"system CPU load in range or unavailable");
+        double average=os.getSystemLoadAverage();check(average==-1||average>=0,"load average in range or unavailable");
+        java.lang.management.RuntimeMXBean runtime=java.lang.management.ManagementFactory.getRuntimeMXBean();
+        check(runtime.getPid()==android.os.Process.myPid()&&runtime.getName().startsWith(runtime.getPid()+"@"),"pid from the app process");
+        check(runtime.getStartTime()>0&&runtime.getStartTime()<=System.currentTimeMillis()&&runtime.getUptime()>=0,"process start time and uptime");
+        long self=Thread.currentThread().getId();boolean dumped=false;
+        for(java.lang.management.ThreadInfo info:java.lang.management.ManagementFactory.getThreadMXBean().dumpAllThreads(false,false))dumped|=info.getThreadId()==self&&info.getStackTrace().length>0;
+        check(dumped,"dumpAllThreads includes the current thread with a stack");
         ObjectName first=new ObjectName("test:z=2,a=1"),second=new ObjectName("test:a=1,z=2");
         check(first.equals(second)&&first.getKeyProperty("z").equals("2"),"canonical object names");
         check(new ObjectName("test:a=*,*").apply(first),"object name wildcard");
         check(ObjectName.unquote(ObjectName.quote("a\nb*\"\\")).equals("a\nb*\"\\"),"quoted object names");
-        MBeanServer server=StubMBeanServer.INSTANCE;server.registerMBean(new Counter(),first);
+        MBeanServer server=MBeanServerFactory.newMBeanServer();server.registerMBean(new Counter(),first);
         server.setAttribute(second,new Attribute("Value",7));check(server.getAttribute(first,"Value").equals(7),"bean property");
         check(server.invoke(first,"add",new Object[]{3},new String[]{"int"}).equals(10),"bean invoke");
         check(server.queryNames(new ObjectName("test:*"),null).contains(first),"bean query");server.unregisterMBean(first);
