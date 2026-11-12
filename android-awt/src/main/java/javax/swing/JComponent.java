@@ -186,12 +186,66 @@ public class JComponent extends Container {
             throw new IllegalArgumentException("condition must be one of JComponent.WHEN_IN_FOCUSED_WINDOW, JComponent.WHEN_FOCUSED or JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT");
         }
     }
+<<<<<<< HEAD
     // An explicit setInputMap(condition, null) must stick, so "set" is tracked apart from null.
     private boolean focusInputMapSet, ancestorInputMapSet, windowInputMapSet, actionMapSet;
 
     /** Returns the <code>InputMap</code> that is used during <code>condition</code>, creating it. */
     public final InputMap getInputMap(int condition) {
         return getInputMap(condition, true);
+=======
+    public void setInputMap(int condition, InputMap map) { checkCondition(condition); inputMaps[condition] = map; }
+    /** The JDK's package-private accessors: SwingUtilities walks the maps without creating them. */
+    final InputMap getInputMap(int condition, boolean create) { return create ? getInputMap(condition) : (condition < 0 || condition > 2 ? null : inputMaps[condition]); }
+    final ActionMap getActionMap(boolean create) { return create ? getActionMap() : actionMap; }
+    private void checkCondition(int condition) { if (condition < 0 || condition > 2) throw new IllegalArgumentException("condition"); }
+    public void registerKeyboardAction(ActionListener listener, KeyStroke stroke, int condition) { registerKeyboardAction(listener, null, stroke, condition); }
+    public void registerKeyboardAction(ActionListener listener, String command, KeyStroke stroke, int condition) {
+        InputMap inputMap = getInputMap(condition, true);
+        ActionStandin action = new ActionStandin(listener, command);
+        inputMap.put(stroke, action);
+        getActionMap(true).put(action, action);
+    }
+
+    /**
+     * The JDK's wrapper for registerKeyboardAction listeners. SwingUtilities.notifyAction
+     * recognizes it to pass a null action command when none was registered.
+     */
+    static final class ActionStandin implements Action {
+        final ActionListener actionListener;
+        private final String command;
+        private final Action action;
+
+        ActionStandin(ActionListener actionListener, String command) {
+            this.actionListener = actionListener;
+            this.action = actionListener instanceof Action ? (Action) actionListener : null;
+            this.command = command;
+        }
+
+        public Object getValue(String key) {
+            if (key != null) {
+                if (key.equals(Action.ACTION_COMMAND_KEY)) return command;
+                if (action != null) return action.getValue(key);
+                if (key.equals(NAME)) return "ActionStandin";
+            }
+            return null;
+        }
+
+        public boolean isEnabled() {
+            if (actionListener == null) return false;
+            return action == null || action.isEnabled();
+        }
+
+        public void actionPerformed(java.awt.event.ActionEvent ae) {
+            if (actionListener != null) actionListener.actionPerformed(ae);
+        }
+
+        // As in the JDK, the standin is immutable; the wrapped Action keeps its own state.
+        public void putValue(String key, Object value) {}
+        public void setEnabled(boolean b) {}
+        public void addPropertyChangeListener(PropertyChangeListener listener) {}
+        public void removePropertyChangeListener(PropertyChangeListener listener) {}
+>>>>>>> up
     }
 
     /** Returns the <code>InputMap</code> that is used when the component has focus. */
@@ -312,6 +366,7 @@ public class JComponent extends Container {
         }
         return retValue;
     }
+<<<<<<< HEAD
 
     /** Returns the condition that determines whether a registered action occurs in response to the keystroke. */
     public int getConditionForKeyStroke(KeyStroke aKeyStroke) {
@@ -344,6 +399,24 @@ public class JComponent extends Container {
             }
         }
         return null;
+=======
+    public int getConditionForKeyStroke(KeyStroke stroke) { for (int i=0;i<3;i++) if (inputMaps[i] != null && inputMaps[i].get(stroke) != null) return i; return UNDEFINED_CONDITION; }
+    public ActionListener getActionForKeyStroke(KeyStroke stroke) {
+        int condition = getConditionForKeyStroke(stroke);
+        if (condition < 0 || actionMap == null) return null;
+        Action action = actionMap.get(inputMaps[condition].get(stroke));
+        return action instanceof ActionStandin ? ((ActionStandin) action).actionListener : action;
+    }
+    protected boolean processKeyBinding(KeyStroke stroke, java.awt.event.KeyEvent event, int condition, boolean pressed) {
+        InputMap map = getInputMap(condition, false);
+        ActionMap am = getActionMap(false);
+        if (map != null && am != null && isEnabled()) {
+            Object binding = map.get(stroke);
+            Action action = binding == null ? null : am.get(binding);
+            if (action != null) return SwingUtilities.notifyAction(action, stroke, event, this, event.getModifiers());
+        }
+        return false;
+>>>>>>> up
     }
 
     /**
@@ -504,10 +577,40 @@ public class JComponent extends Container {
      */
     public boolean hostProcessKeyBinding(java.awt.event.KeyEvent event) {
         if (event.isConsumed()) return false;
+<<<<<<< HEAD
+=======
+        // JComponent.processKeyEvent consumes an event a binding took.
+>>>>>>> up
         if (processKeyBindings(event, event.getID() == java.awt.event.KeyEvent.KEY_PRESSED)) {
             event.consume();
             return true;
         }
+<<<<<<< HEAD
+=======
+        return false;
+    }
+    /** The JDK's focused -> ancestors -> window walk; the window pass runs on the topmost ancestor. */
+    boolean processKeyBindings(java.awt.event.KeyEvent event, boolean pressed) {
+        KeyStroke stroke = KeyStroke.getKeyStrokeForEvent(event);
+        if (processKeyBinding(stroke, event, WHEN_FOCUSED, pressed)) return true;
+        Container parent = this, root = this;
+        while (parent != null && !(parent instanceof java.awt.Window) && !(parent instanceof java.applet.Applet)) {
+            if (parent instanceof JComponent && ((JComponent) parent).processKeyBinding(stroke, event, WHEN_ANCESTOR_OF_FOCUSED_COMPONENT, pressed)) return true;
+            root = parent;
+            parent = parent.getParent();
+        }
+        // The sidebar host roots panels outside any Window; there the topmost ancestor
+        // stands in for the window the JDK would search.
+        return processKeyBindingsForAllComponents(event, parent != null ? parent : root, pressed);
+    }
+    static boolean processKeyBindingsForAllComponents(java.awt.event.KeyEvent event, Container container, boolean pressed) {
+        return windowBinding(container, KeyStroke.getKeyStrokeForEvent(event), event, pressed);
+    }
+    private static boolean windowBinding(java.awt.Component component, KeyStroke stroke, java.awt.event.KeyEvent event, boolean pressed) {
+        if (!component.isVisible() || !component.isEnabled()) return false;
+        if (component instanceof JComponent && ((JComponent)component).processKeyBinding(stroke, event, WHEN_IN_FOCUSED_WINDOW, pressed)) return true;
+        if (component instanceof Container) for (java.awt.Component child : ((Container)component).getComponents()) if (windowBinding(child, stroke, event, pressed)) return true;
+>>>>>>> up
         return false;
     }
 

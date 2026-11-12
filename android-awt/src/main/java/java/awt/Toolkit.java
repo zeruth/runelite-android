@@ -57,6 +57,65 @@ public abstract class Toolkit {
         return eventQueue;
     }
 
+    protected final java.util.Map<String, Object> desktopProperties = new java.util.HashMap<String, Object>();
+    protected final java.beans.PropertyChangeSupport desktopPropsSupport = new java.beans.PropertyChangeSupport(this);
+
+    /**
+     * Obtains a value for the specified desktop property. There is no native
+     * desktop behind the Android toolkit, so only values a subclass loads or
+     * sets exist; any other name returns null, as an unknown name does on the JDK.
+     */
+    public final synchronized Object getDesktopProperty(String propertyName) {
+        if (desktopProperties.isEmpty()) {
+            initializeDesktopProperties();
+        }
+        Object value = desktopProperties.get(propertyName);
+        if (value == null) {
+            value = lazilyLoadDesktopProperty(propertyName);
+            if (value != null) {
+                setDesktopProperty(propertyName, value);
+            }
+        }
+        if (value instanceof RenderingHints) {
+            value = ((RenderingHints) value).clone();
+        }
+        return value;
+    }
+
+    protected final void setDesktopProperty(String name, Object newValue) {
+        Object oldValue;
+        synchronized (this) {
+            oldValue = desktopProperties.get(name);
+            desktopProperties.put(name, newValue);
+        }
+        if (oldValue != null || newValue != null) {
+            desktopPropsSupport.firePropertyChange(name, oldValue, newValue);
+        }
+    }
+
+    protected Object lazilyLoadDesktopProperty(String name) {
+        return null;
+    }
+
+    protected void initializeDesktopProperties() {
+    }
+
+    public void addPropertyChangeListener(String name, java.beans.PropertyChangeListener pcl) {
+        desktopPropsSupport.addPropertyChangeListener(name, pcl);
+    }
+
+    public void removePropertyChangeListener(String name, java.beans.PropertyChangeListener pcl) {
+        desktopPropsSupport.removePropertyChangeListener(name, pcl);
+    }
+
+    public java.beans.PropertyChangeListener[] getPropertyChangeListeners() {
+        return desktopPropsSupport.getPropertyChangeListeners();
+    }
+
+    public java.beans.PropertyChangeListener[] getPropertyChangeListeners(String propertyName) {
+        return desktopPropsSupport.getPropertyChangeListeners(propertyName);
+    }
+
     public Dimension getScreenSize() {
         Rectangle bounds = net.runelite.awt.impl.HeadlessGraphicsConfiguration.INSTANCE.getBounds();
         return new Dimension(bounds.width, bounds.height);
@@ -72,6 +131,17 @@ public abstract class Toolkit {
 
     public String[] getFontList() {
         return new String[]{Font.DIALOG, Font.SANS_SERIF, Font.SERIF, Font.MONOSPACED};
+    }
+
+    /**
+     * The same shared, Paint-backed metrics Component and Graphics hand out, so a width
+     * measured here matches one measured on the Graphics that paints the text.
+     *
+     * @deprecated As of JDK version 1.2, replaced by the Font method getLineMetrics.
+     */
+    @Deprecated
+    public FontMetrics getFontMetrics(Font font) {
+        return net.runelite.awt.impl.BufferedImageFontMetrics.forFont(font);
     }
 
     public Image createImage(int[] pixels, int width, int height) {
@@ -169,12 +239,28 @@ public abstract class Toolkit {
 
     public boolean isFrameStateSupported(int state) { return state == Frame.NORMAL; }
 
+    /**
+     * As SunToolkit: a zero-sized request, or an image that is not producer-backed
+     * (BufferedImage, VolatileImage), is ready; a produced image starts production and
+     * reports ALLBITS, notifying {@code observer} of ERROR|ABORT when it failed.
+     */
     public boolean prepareImage(Image image, int width, int height, ImageObserver observer) {
-        return true;
+        if (width == 0 || height == 0) {
+            return true;
+        }
+        if (!(image instanceof java.awt.image.ProducerImage)) {
+            return true;
+        }
+        return ((java.awt.image.ProducerImage) image).prepare(observer);
     }
 
+    /** As SunToolkit: the ImageObserver flags of a produced image, ALLBITS for any other. */
     public int checkImage(Image image, int width, int height, ImageObserver observer) {
-        return ImageObserver.ALLBITS;
+        if (!(image instanceof java.awt.image.ProducerImage)) {
+            return ImageObserver.ALLBITS;
+        }
+        int flags = ((java.awt.image.ProducerImage) image).check(observer);
+        return (width == 0 || height == 0) ? flags | ImageObserver.ALLBITS : flags;
     }
 
     private static final class HeadlessToolkit extends Toolkit {
