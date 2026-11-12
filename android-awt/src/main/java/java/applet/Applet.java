@@ -35,6 +35,18 @@ import java.awt.Panel;
 public class Applet extends Panel {
     private static final long serialVersionUID = -5836846270535785031L;
 
+    /**
+     * Indicates if this container is a validate root. {@code Applet} objects are the
+     * validate roots, and, therefore, they override this method to return {@code true}.
+     *
+     * @return {@code true}
+     * @since 1.7
+     */
+    @Override
+    public boolean isValidateRoot() {
+        return true;
+    }
+
     public AppletStub stub;
 
     public Applet() {}

@@ -247,6 +247,11 @@ public class Window extends Container {
      */
     public BufferedImage renderToBackbuffer() {
         ensureBackbuffer();
+        // The game canvas changes every frame, so the whole buffer is repainted regardless of
+        // what was marked and the region itself is not needed; taking it is what keeps it
+        // from growing between frames. Repaints raised by the layout and paint below land in
+        // the next frame's region.
+        javax.swing.RepaintManager.currentManager(this).hostTakeDirtyRegion(this);
         try {
             // Skip the sweep when the tree is already dirty — it's about to be relaid anyway.
             if (isValid()) {
@@ -612,6 +617,19 @@ public class Window extends Container {
     @Override public boolean isShowing() { return isVisible() && !disposed; }
     /** As on the JDK: displayable from {@code pack()} or the first show until {@code dispose()}. */
     @Override public boolean isDisplayable() { return hasHostPeer(); }
+
+    /**
+     * Indicates if this container is a validate root. {@code Window} objects are the validate
+     * roots, and, therefore, they override this method to return {@code true}.
+     *
+     * @return {@code true}
+     * @since 1.7
+     */
+    @Override
+    public boolean isValidateRoot() {
+        return true;
+    }
+
     public boolean isActive() { return KeyboardFocusManager.getCurrentKeyboardFocusManager().getActiveWindow() == this; }
     public boolean isFocused() { return KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusedWindow() == this; }
 

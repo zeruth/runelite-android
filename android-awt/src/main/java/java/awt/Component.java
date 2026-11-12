@@ -364,15 +364,14 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
     public void repaint() { repaint(0, 0, 0, width, height); }
     public void repaint(long tm) { repaint(tm, 0, 0, width, height); }
     public void repaint(int x, int y, int width, int height) { repaint(0, x, y, width, height); }
+    /**
+     * A lightweight's repaint reaches its root's host through the RepaintManager, as a
+     * JComponent's does: there is no heavyweight peer to post a paint event to, and the hosts
+     * (the game Window walker, the sidebar panel host) read their dirty regions from there.
+     */
     public void repaint(long tm, int x, int y, int width, int height) {
-        long generation = repaintSequence.incrementAndGet();
-        for (Component c = this; c != null; c = c.parent) c.subtreePaintGeneration = generation;
+        javax.swing.RepaintManager.currentManager(this).hostAddDirtyRegion(this, x, y, width, height);
     }
-
-    private static final java.util.concurrent.atomic.AtomicLong repaintSequence = new java.util.concurrent.atomic.AtomicLong();
-    private volatile long subtreePaintGeneration;
-    /** Repaint requests within this tree, consumed by detached Android panel hosts. */
-    public final long subtreePaintGeneration() { return subtreePaintGeneration; }
 
     public void paint(Graphics g) {
         // Default: fill with background if we have one. Subclasses extend.

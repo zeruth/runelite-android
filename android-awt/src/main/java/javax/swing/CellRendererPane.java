@@ -50,6 +50,11 @@ import javax.accessibility.AccessibleContext;
  * A renderer component must override isShowing() and unconditionally return
  * true to work correctly because the Swing paint does nothing for components
  * with isShowing false.
+ * <p>
+ * The pane is invisible, so {@link RepaintManager} drops repaints raised by a
+ * renderer while it is being configured, and it is never a validate root's way
+ * up: a renderer stamp cannot schedule a host frame or a layout pass of the
+ * list that owns it.
  *
  * @author Hans Muller
  */
@@ -78,6 +83,18 @@ public class CellRendererPane extends Container implements Accessible {
      * Shouldn't be called.
      */
     public void update(Graphics g) { }
+
+    /**
+     * If the specified component is already a child of this then we don't
+     * bother doing anything - stacking order doesn't matter for cell
+     * renderer components (CellRendererPane doesn't paint anyway).
+     */
+    protected void addImpl(Component x, Object constraints, int index) {
+        if (x.getParent() == this) {
+            return;
+        }
+        super.addImpl(x, constraints, index);
+    }
 
     /**
      * Paint a cell renderer component c on graphics object g.  Before the component
@@ -113,8 +130,6 @@ public class CellRendererPane extends Container implements Accessible {
             return;
         }
 
-        // The shadow Container has no addImpl hook, so the JDK's "already a child"
-        // short-circuit lives here: re-adding would move c to the end of the list.
         if (c.getParent() != this) {
             this.add(c);
         }

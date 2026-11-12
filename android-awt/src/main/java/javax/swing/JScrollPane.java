@@ -37,6 +37,10 @@ import javax.swing.border.Border;
 public class JScrollPane extends JComponent implements ScrollPaneConstants {
     private static final long serialVersionUID = 1L;
 
+    /** The JDK's: a revalidate inside the viewport relays the scroll pane, not its parents. */
+    @Override
+    public boolean isValidateRoot() { return true; }
+
     protected JViewport viewport;
     protected JScrollBar verticalScrollBar;
     protected JScrollBar horizontalScrollBar;

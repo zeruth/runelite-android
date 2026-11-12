@@ -577,6 +577,17 @@ public class Container extends Component {
     @Deprecated
     public Insets insets() { return new Insets(0, 0, 0, 0); }
 
+    /**
+     * Indicates if this container is a validate root: {@code revalidate()} of a descendant
+     * lays out from the nearest validate root rather than from the top of the tree.
+     *
+     * @return whether this container is a validate root
+     * @since 1.7
+     */
+    public boolean isValidateRoot() {
+        return false;
+    }
+
     @Override
     public void doLayout() {
         if (layout != null) layout.layoutContainer(this);
