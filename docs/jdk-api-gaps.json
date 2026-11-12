@@ -1,6 +1,6 @@
 {
  "_comment": "JDK 9-21 java.*/javax.* references the floor API lacks, from tools-src/hub-compat-scan.py --jdk-gaps. disposition: desugar = D8 backport or desugar_jdk_libs supplies it at minSdk; retarget = an app shim already rewrites it (via names it) or the dexer needs a retargeting entry (via empty); already-on-device-API = the device API has it, older devices do not; unsupported = nothing on ART can stand in for it.",
- "generatedAt": "2026-11-12T05:57:47Z",
+ "generatedAt": "2026-11-12T12:09:31Z",
  "hubVersion": "1.13.6",
  "minApi": 26,
  "deviceApi": 35,
