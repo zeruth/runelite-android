@@ -1024,7 +1024,7 @@ public class BasicTableUI extends TableUI
                 shouldStartTimer =
                     table.isCellSelected(pressedRow, pressedCol) &&
                     !e.isShiftDown() &&
-                    !BasicGraphicsUtils.isMenuShortcutKeyDown(e) &&
+                    !BasicTreeUI.isMenuShortcutKeyDown(e) &&
                     !outsidePrefSize;
             }
 
@@ -1048,7 +1048,7 @@ public class BasicTableUI extends TableUI
 
                 dragPressDidSelection = false;
 
-                if (BasicGraphicsUtils.isMenuShortcutKeyDown(e) && isFileList) {
+                if (BasicTreeUI.isMenuShortcutKeyDown(e) && isFileList) {
                     // do nothing for control - will be handled on release
                     // or when drag starts
                     return;
@@ -1113,7 +1113,7 @@ public class BasicTableUI extends TableUI
             CellEditor editor = table.getCellEditor();
             if (dragEnabled || editor == null || editor.shouldSelectCell(e)) {
                 table.changeSelection(pressedRow, pressedCol,
-                        BasicGraphicsUtils.isMenuShortcutKeyDown(e),
+                        BasicTreeUI.isMenuShortcutKeyDown(e),
                         e.isShiftDown());
             }
         }
@@ -1211,7 +1211,7 @@ public class BasicTableUI extends TableUI
         public void dragStarting(MouseEvent me) {
             dragStarted = true;
 
-            if (BasicGraphicsUtils.isMenuShortcutKeyDown(me) && isFileList) {
+            if (BasicTreeUI.isMenuShortcutKeyDown(me) && isFileList) {
                 table.getSelectionModel().addSelectionInterval(pressedRow,
                                                                pressedRow);
                 table.getColumnModel().getSelectionModel().
@@ -1251,7 +1251,7 @@ public class BasicTableUI extends TableUI
             }
 
             table.changeSelection(row, column,
-                    BasicGraphicsUtils.isMenuShortcutKeyDown(e), true);
+                    BasicTreeUI.isMenuShortcutKeyDown(e), true);
         }
 
 
