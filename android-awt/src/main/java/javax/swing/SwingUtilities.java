@@ -49,7 +49,7 @@ import javax.swing.text.View;
  * A collection of utility methods for Swing.
  *
  * <p>Ported from OpenJDK 8u. Where the shadow AWT core is thinner than the JDK's
- * (no ComponentOrientation, no glyph outlines, no JLayer, an AccessibleContext without
+ * (no ComponentOrientation, no glyph outlines, an AccessibleContext without
  * a child model) the method says what it answers instead.
  *
  * @author unknown
@@ -1170,6 +1170,29 @@ public class SwingUtilities implements SwingConstants {
         c.repaint();
     }
 
+    /**
+     * Updates the UI of a renderer or editor that is not in the component
+     * hierarchy (JTree's cell renderer and editor) on a look and feel change.
+     */
+    static void updateRendererOrEditorUI(Object rendererOrEditor) {
+        if (rendererOrEditor == null) {
+            return;
+        }
+
+        Component component = null;
+
+        if (rendererOrEditor instanceof Component) {
+            component = (Component)rendererOrEditor;
+        }
+        if (rendererOrEditor instanceof DefaultCellEditor) {
+            component = ((DefaultCellEditor)rendererOrEditor).getComponent();
+        }
+
+        if (component != null) {
+            SwingUtilities.updateComponentTreeUI(component);
+        }
+    }
+
     private static void updateComponentTreeUI0(Component c) {
         if (c instanceof JComponent) {
             JComponent jc = (JComponent) c;
@@ -1461,6 +1484,14 @@ public class SwingUtilities implements SwingConstants {
      * processing the key bindings associated with JComponents.
      */
     static boolean isValidKeyEventForKeyBindings(KeyEvent e) {
+        if (e.getID() == KeyEvent.KEY_TYPED) {
+            int mod = e.getModifiers();
+            if (((mod & java.awt.event.ActionEvent.ALT_MASK) != 0)
+                    && ((mod & java.awt.event.ActionEvent.CTRL_MASK) == 0)) {
+                // filter out ALT-KEY_TYPED events
+                return false;
+            }
+        }
         return true;
     }
 
@@ -1639,7 +1670,6 @@ public class SwingUtilities implements SwingConstants {
     /**
      * Returns the first ancestor of the {@code component}
      * which is not an instance of {@code JLayer}.
-     * The shadow tree has no JLayer yet, so that is the parent itself.
      *
      * @param component {@code Component} to get
      * the first ancestor of, which is not a {@code JLayer} instance.
@@ -1653,13 +1683,16 @@ public class SwingUtilities implements SwingConstants {
      * @since 1.7
      */
     public static Container getUnwrappedParent(Component component) {
-        return component.getParent();
+        Container parent = component.getParent();
+        while (parent instanceof JLayer) {
+            parent = parent.getParent();
+        }
+        return parent;
     }
 
     /**
      * Returns the first {@code JViewport}'s descendant
      * which is not an instance of {@code JLayer}.
-     * The shadow tree has no JLayer yet, so that is the view itself.
      *
      * @param viewport {@code JViewport} to get the first descendant of,
      * which in not a {@code JLayer} instance.
@@ -1673,6 +1706,10 @@ public class SwingUtilities implements SwingConstants {
      * @since 1.7
      */
     public static Component getUnwrappedView(JViewport viewport) {
-        return viewport.getView();
+        Component view = viewport.getView();
+        while (view instanceof JLayer) {
+            view = ((JLayer) view).getView();
+        }
+        return view;
     }
 }

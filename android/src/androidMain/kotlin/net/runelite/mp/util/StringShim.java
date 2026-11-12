@@ -10,7 +10,8 @@ package net.runelite.mp.util;
  *
  * <p>The desugar pass prepends a {@link #stripNul(String)} call at method entry of
  * every {@code (String, int) -> void} method whose body has the IAE-on-NUL check, so
- * the input is cleaned before the check fires.
+ * the input is cleaned before the check fires. The rewrite is listed with the other
+ * java.lang shims in android-awt/PORTING.md, section 10.
  */
 public final class StringShim {
     private StringShim() {

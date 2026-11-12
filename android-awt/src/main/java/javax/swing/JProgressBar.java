@@ -32,7 +32,48 @@ package javax.swing;
 
 import javax.swing.event.ChangeListener;
 
-public class JProgressBar extends JComponent implements SwingConstants {
+public class JProgressBar extends JComponent implements SwingConstants, javax.accessibility.Accessible {
+    private static final String uiClassID = "ProgressBarUI";
+    public String getUIClassID() { return uiClassID; }
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJProgressBar();
+        }
+        return accessibleContext;
+    }
+
+    /** Accessibility support for progress bars: role PROGRESS_BAR, valued by the model. */
+    protected class AccessibleJProgressBar extends AccessibleJComponent implements javax.accessibility.AccessibleValue {
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.PROGRESS_BAR;
+        }
+
+        public javax.accessibility.AccessibleValue getAccessibleValue() {
+            return this;
+        }
+
+        public Number getCurrentAccessibleValue() {
+            return Integer.valueOf(getValue());
+        }
+
+        public boolean setCurrentAccessibleValue(Number n) {
+            if (n == null) {
+                return false;
+            }
+            setValue(n.intValue());
+            return true;
+        }
+
+        public Number getMinimumAccessibleValue() {
+            return Integer.valueOf(getMinimum());
+        }
+
+        public Number getMaximumAccessibleValue() {
+            BoundedRangeModel model = getModel();
+            return Integer.valueOf(model.getMaximum() - model.getExtent());
+        }
+    }
     private static final long serialVersionUID = 1L;
     protected BoundedRangeModel model = new DefaultBoundedRangeModel();
     protected int orientation = HORIZONTAL;

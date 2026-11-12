@@ -30,9 +30,23 @@
  */
 package javax.sound.sampled;
 
+/**
+ * A line audio data is read from: on Android an AudioRecord capture line from the one mixer
+ * ({@code net.runelite.awt.impl.AndroidMixer}). Opening one asks for RECORD_AUDIO the first time
+ * and throws {@link LineUnavailableException} when the user denies it.
+ */
 public interface TargetDataLine extends DataLine {
     @Override void open() throws LineUnavailableException;
+
+    /** Opens the line with {@code format} and the default buffer (half a second). */
     void open(AudioFormat format) throws LineUnavailableException;
+
+    /** Opens the line with {@code format} and a buffer of {@code bufferSize} bytes, a whole number of frames. */
     void open(AudioFormat format, int bufferSize) throws LineUnavailableException;
+
+    /**
+     * Reads captured data, blocking while the line runs until {@code len} bytes (a whole number of
+     * frames) are read; a stopped, flushed or closed line returns what it has.
+     */
     int read(byte[] b, int off, int len);
 }

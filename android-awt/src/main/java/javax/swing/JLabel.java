@@ -30,7 +30,38 @@
  */
 package javax.swing;
 
-public class JLabel extends JComponent implements SwingConstants {
+public class JLabel extends JComponent implements SwingConstants, javax.accessibility.Accessible {
+    private static final String uiClassID = "LabelUI";
+    public javax.swing.plaf.LabelUI getUI() { return (javax.swing.plaf.LabelUI) ui; }
+    public String getUIClassID() { return uiClassID; }
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJLabel();
+        }
+        return accessibleContext;
+    }
+
+    /** Accessibility support for labels: role LABEL, named by the label text. */
+    protected class AccessibleJLabel extends AccessibleJComponent {
+        public String getAccessibleName() {
+            String name = accessibleName;
+            if (name == null) {
+                name = (String) getClientProperty(javax.accessibility.AccessibleContext.ACCESSIBLE_NAME_PROPERTY);
+            }
+            if (name == null) {
+                name = JLabel.this.getText();
+            }
+            if (name == null) {
+                name = super.getAccessibleName();
+            }
+            return name;
+        }
+
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.LABEL;
+        }
+    }
     private static final long serialVersionUID = 5496508283662221534L;
 
     private String text = "";

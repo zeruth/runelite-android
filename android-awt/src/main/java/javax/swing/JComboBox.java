@@ -42,7 +42,35 @@ import javax.swing.event.PopupMenuListener;
  * "comboBoxChanged" ActionEvents. Keeping a private copy of the selection here meant
  * array-built combos started blank and removeAllItems() never cleared anything.
  */
-public class JComboBox<E> extends JComponent implements ListDataListener {
+public class JComboBox<E> extends JComponent implements ListDataListener, javax.accessibility.Accessible {
+    private static final String uiClassID = "ComboBoxUI";
+    public String getUIClassID() { return uiClassID; }
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJComboBox();
+        }
+        return accessibleContext;
+    }
+
+    /**
+     * Accessibility support for combo boxes: role COMBO_BOX, EDITABLE when editable. The
+     * children are the box's own accessible components; the JDK's basic UI reports its
+     * popup list instead, which this port draws without a component.
+     */
+    protected class AccessibleJComboBox extends AccessibleJComponent {
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.COMBO_BOX;
+        }
+
+        public javax.accessibility.AccessibleStateSet getAccessibleStateSet() {
+            javax.accessibility.AccessibleStateSet states = super.getAccessibleStateSet();
+            if (JComboBox.this.isEditable()) {
+                states.add(javax.accessibility.AccessibleState.EDITABLE);
+            }
+            return states;
+        }
+    }
     private static final long serialVersionUID = -2378717525866512215L;
 
     public interface KeySelectionManager {
