@@ -30,9 +30,7 @@
  */
 package javax.swing;
 
-import java.util.ArrayList;
 import java.util.Collection;
-import java.util.List;
 import java.util.Vector;
 
 /**
@@ -43,17 +41,19 @@ import java.util.Vector;
  */
 public class DefaultComboBoxModel<E> extends AbstractListModel<E> implements MutableComboBoxModel<E> {
     private static final long serialVersionUID = 1L;
-    private final List<E> objects;
+    // A Vector, and the caller's own Vector for the Vector constructor: the JDK model wraps
+    // it without copying, so a caller that keeps mutating the vector sees it in the model.
+    private final Vector<E> objects;
     private Object selectedObject;
 
-    public DefaultComboBoxModel() { objects = new ArrayList<>(); }
+    public DefaultComboBoxModel() { objects = new Vector<E>(); }
     public DefaultComboBoxModel(E[] items) {
-        objects = new ArrayList<>(items.length);
-        for (E e : items) objects.add(e);
+        objects = new Vector<E>(items.length);
+        for (E e : items) objects.addElement(e);
         if (getSize() > 0) selectedObject = getElementAt(0);
     }
     public DefaultComboBoxModel(Vector<E> v) {
-        objects = new ArrayList<>(v);
+        objects = v;
         if (getSize() > 0) selectedObject = getElementAt(0);
     }
 
@@ -101,7 +101,9 @@ public class DefaultComboBoxModel<E> extends AbstractListModel<E> implements Mut
             selectedObject = null;
         }
     }
+    // JDK 9+ (11): jdk17u src/java.desktop/share/classes/javax/swing/DefaultComboBoxModel.java
     public void addAll(Collection<? extends E> c) { addAll(objects.size(), c); }
+    // JDK 9+ (11): jdk17u src/java.desktop/share/classes/javax/swing/DefaultComboBoxModel.java
     public void addAll(int index, Collection<? extends E> c) {
         if (index < 0 || index > getSize()) throw new ArrayIndexOutOfBoundsException("index out of range: " + index);
         if (c.isEmpty()) return;

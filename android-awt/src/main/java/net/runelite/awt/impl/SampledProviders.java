@@ -61,11 +61,14 @@ import java.util.List;
  * dexed APK has no such registration for the shadow classes, so the lists are spelled out here, in
  * the JDK's declaration order (the order decides which reader claims a stream first), including
  * Gervill's MIDI reader, which renders a standard MIDI file to PCM through the software synthesizer.
+ * The compressed-audio reader and decoder come last, where a desktop classpath's mp3spi/vorbisspi
+ * providers land.
  */
 public final class SampledProviders {
     private static final List<AudioFileReader> READERS = Collections.unmodifiableList(Arrays.<AudioFileReader>asList(
         new AiffFileReader(), new AuFileReader(), new SoftMidiAudioFileReader(),
-        new WaveFileReader(), new WaveFloatFileReader(), new WaveExtensibleFileReader()));
+        new WaveFileReader(), new WaveFloatFileReader(), new WaveExtensibleFileReader(),
+        new CompressedAudioFileReader()));
 
     /** The WAVE readers alone, for {@link WavDecoder}'s fast path; disjoint by WAVE format tag. */
     private static final List<AudioFileReader> WAVE_READERS = Collections.unmodifiableList(Arrays.<AudioFileReader>asList(
@@ -76,7 +79,8 @@ public final class SampledProviders {
 
     private static final List<FormatConversionProvider> CONVERTERS = Collections.unmodifiableList(
         Arrays.<FormatConversionProvider>asList(
-            new AlawCodec(), new AudioFloatFormatConverter(), new PCMtoPCMCodec(), new UlawCodec()));
+            new AlawCodec(), new AudioFloatFormatConverter(), new PCMtoPCMCodec(), new UlawCodec(),
+            new CompressedAudioCodec()));
 
     private static final List<MixerProvider> MIXERS = Collections.<MixerProvider>singletonList(new AndroidMixerProvider());
 

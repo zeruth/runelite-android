@@ -635,25 +635,20 @@ abstract class AbstractMidiDevice implements MidiDevice, ReferenceCountingDevice
                 sendMessage(((FastShortMessage) message).getPackedMsg(), timeStamp);
                 return;
             }
+            // No native MidiOutDevice receiver to short-circuit to (see receiverChanged).
             synchronized(transmitters) {
                 int size = transmitters.size();
-                if (optimizedReceiverCount == size) {
-                    if (midiOutReceiver != null) {
-                        midiOutReceiver.send(message, timeStamp);
-                    }
-                } else {
-                    for (int i = 0; i < size; i++) {
-                        Receiver receiver = transmitters.get(i).getReceiver();
-                        if (receiver != null) {
-                            //$$fb 2002-04-02: ShortMessages are mutable, so
-                            // an application could change the contents of this object,
-                            // or try to use the object later.
-                            // We violate this spec here, to avoid costly (and gc-intensive)
-                            // object creation for potentially hundred of messages per second.
-                            // The spec should be changed to allow Immutable MidiMessages
-                            // (i.e. throws InvalidStateException or so in setMessage)
-                            receiver.send(message, timeStamp);
-                        }
+                for (int i = 0; i < size; i++) {
+                    Receiver receiver = transmitters.get(i).getReceiver();
+                    if (receiver != null) {
+                        //$$fb 2002-04-02: ShortMessages are mutable, so
+                        // an application could change the contents of this object,
+                        // or try to use the object later.
+                        // We violate this spec here, to avoid costly (and gc-intensive)
+                        // object creation for potentially hundred of messages per second.
+                        // The spec should be changed to allow Immutable MidiMessages
+                        // (i.e. throws InvalidStateException or so in setMessage)
+                        receiver.send(message, timeStamp);
                     }
                 }
             }

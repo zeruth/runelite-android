@@ -32,11 +32,6 @@ package javax.swing;
  * <code>ComponentInputMap</code>s are used for
  * <code>WHEN_IN_FOCUSED_WINDOW</code> bindings.
  *
- * <p>The shadow <code>JComponent</code> resolves
- * <code>WHEN_IN_FOCUSED_WINDOW</code> bindings by walking its input maps at
- * dispatch time rather than through a registration table, so the
- * notification the JDK sends on every change has no receiver here.
- *
  * @author Scott Violet
  * @since 1.3
  */
@@ -66,7 +61,7 @@ public class ComponentInputMap extends InputMap {
      *
      * @param map  a <code>ComponentInputMap</code>
      *
-     * @throws IllegalArgumentException if <code>map</code>
+     * @throws IllegalArgumentException  if <code>map</code>
      *         is not a <code>ComponentInputMap</code>
      *         or is not associated with the same component
      */
@@ -79,6 +74,7 @@ public class ComponentInputMap extends InputMap {
             throw new IllegalArgumentException("ComponentInputMaps must have a parent ComponentInputMap associated with the same component");
         }
         super.setParent(map);
+        getComponent().componentInputMapChanged(this);
     }
 
     /**
@@ -86,5 +82,38 @@ public class ComponentInputMap extends InputMap {
      */
     public JComponent getComponent() {
         return component;
+    }
+
+    /**
+     * Adds a binding for <code>keyStroke</code> to <code>actionMapKey</code>.
+     * If <code>actionMapKey</code> is null, this removes the current binding
+     * for <code>keyStroke</code>.
+     */
+    public void put(KeyStroke keyStroke, Object actionMapKey) {
+        super.put(keyStroke, actionMapKey);
+        if (getComponent() != null) {
+            getComponent().componentInputMapChanged(this);
+        }
+    }
+
+    /**
+     * Removes the binding for <code>key</code> from this object.
+     */
+    public void remove(KeyStroke key) {
+        super.remove(key);
+        if (getComponent() != null) {
+            getComponent().componentInputMapChanged(this);
+        }
+    }
+
+    /**
+     * Removes all the mappings from this object.
+     */
+    public void clear() {
+        int oldSize = size();
+        super.clear();
+        if (oldSize > 0 && getComponent() != null) {
+            getComponent().componentInputMapChanged(this);
+        }
     }
 }

@@ -30,7 +30,21 @@
  */
 package javax.swing;
 import java.awt.*;
-public class JColorChooser extends JComponent {
+public class JColorChooser extends JComponent implements javax.accessibility.Accessible {
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJColorChooser();
+        }
+        return accessibleContext;
+    }
+
+    /** Accessibility support for colour choosers: role COLOR_CHOOSER. */
+    protected class AccessibleJColorChooser extends AccessibleJComponent {
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.COLOR_CHOOSER;
+        }
+    }
     public static final String SELECTION_MODEL_PROPERTY = "selectionModel";
     public static final String PREVIEW_PANEL_PROPERTY = "previewPanel";
     private javax.swing.colorchooser.ColorSelectionModel selectionModel;

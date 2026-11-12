@@ -33,7 +33,36 @@ package javax.swing.text;
 import javax.swing.JComponent;
 import javax.swing.event.CaretListener;
 
-public abstract class JTextComponent extends JComponent {
+public abstract class JTextComponent extends JComponent implements javax.accessibility.Accessible {
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJTextComponent();
+        }
+        return accessibleContext;
+    }
+
+    /**
+     * Accessibility support for text components: role TEXT, EDITABLE while editable. The
+     * {@code AccessibleText} view of the document is not offered yet, so {@code
+     * getAccessibleText()} stays null and readers fall back to the name.
+     */
+    public class AccessibleJTextComponent extends AccessibleJComponent {
+        public AccessibleJTextComponent() {
+        }
+
+        public javax.accessibility.AccessibleStateSet getAccessibleStateSet() {
+            javax.accessibility.AccessibleStateSet states = super.getAccessibleStateSet();
+            if (JTextComponent.this.isEditable()) {
+                states.add(javax.accessibility.AccessibleState.EDITABLE);
+            }
+            return states;
+        }
+
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.TEXT;
+        }
+    }
     private static final long serialVersionUID = -2911697971489974478L;
 
     public static final String DEFAULT_KEYMAP = "default";
@@ -78,6 +107,7 @@ public abstract class JTextComponent extends JComponent {
 
     public JTextComponent() {
         setBorder(new MarginBorder());
+        setTransferHandler(new TextTransferHandler());
         this.doc = new PlainDocument();
         this.doc.addDocumentListener(documentListener);
         setCaret(new DefaultCaret());
@@ -209,6 +239,234 @@ public abstract class JTextComponent extends JComponent {
     private boolean editable = true;
     public boolean isEditable() { return editable; }
     public void setEditable(boolean b) { editable = b; }
+
+    static {
+        net.runelite.awt.impl.SwingDragSupport.setTextDrop(new net.runelite.awt.impl.SwingDragSupport.TextDrop() {
+            public javax.swing.TransferHandler.DropLocation dropLocationForPoint(JTextComponent c, java.awt.Point p) {
+                return c.dropLocationForPoint(p);
+            }
+            public Object setDropLocation(JTextComponent c, javax.swing.TransferHandler.DropLocation location,
+                                          Object state, boolean forDrop) {
+                return c.setDropLocation(location, state, forDrop);
+            }
+        });
+    }
+
+    private boolean dragEnabled;
+    private javax.swing.DropMode dropMode = javax.swing.DropMode.USE_SELECTION;
+    private transient DropLocation dropLocation;
+    private transient java.awt.dnd.DragGestureRecognizer dragRecognizer;
+
+    /**
+     * Represents a drop location for <code>JTextComponent</code>s.
+     *
+     * @see #getDropLocation
+     * @since 1.6
+     */
+    public static final class DropLocation extends javax.swing.TransferHandler.DropLocation {
+        private final int index;
+        private final Position.Bias bias;
+
+        private DropLocation(java.awt.Point p, int index, Position.Bias bias) {
+            super(p);
+            this.index = index;
+            this.bias = bias;
+        }
+
+        /**
+         * Returns the index where dropped data should be inserted into the
+         * associated component. This index represents a position between
+         * characters, as would be interpreted by a caret.
+         *
+         * @return the drop index
+         */
+        public int getIndex() {
+            return index;
+        }
+
+        /**
+         * Returns the bias for the drop index.
+         *
+         * @return the drop bias
+         */
+        public Position.Bias getBias() {
+            return bias;
+        }
+
+        /**
+         * Returns a string representation of this drop location.
+         *
+         * @return a string representation of this drop location
+         */
+        public String toString() {
+            return getClass().getName()
+                   + "[dropPoint=" + getDropPoint() + ","
+                   + "index=" + index + ","
+                   + "bias=" + bias + "]";
+        }
+    }
+
+    /**
+     * Turns on or off automatic drag handling: a press inside the selection
+     * that moves past the drag threshold (after a long press on a touchscreen)
+     * drags the selected text.
+     *
+     * @param b whether or not to enable automatic drag handling
+     * @since 1.4
+     */
+    public void setDragEnabled(boolean b) {
+        dragEnabled = b;
+        dragRecognizer = net.runelite.awt.impl.SwingDragSupport.setDragEnabled(this, dragRecognizer, b);
+    }
+
+    public boolean getDragEnabled() { return dragEnabled; }
+
+    /**
+     * Sets the drop mode for this component; text components support
+     * <code>DropMode.USE_SELECTION</code> (the default) and <code>DropMode.INSERT</code>.
+     *
+     * @param dropMode the drop mode to use
+     * @throws IllegalArgumentException if the drop mode is unsupported
+     *         or <code>null</code>
+     * @since 1.6
+     */
+    public final void setDropMode(javax.swing.DropMode dropMode) {
+        if (dropMode == javax.swing.DropMode.USE_SELECTION || dropMode == javax.swing.DropMode.INSERT) {
+            this.dropMode = dropMode;
+            return;
+        }
+        throw new IllegalArgumentException(dropMode + ": Unsupported drop mode for text");
+    }
+
+    public final javax.swing.DropMode getDropMode() { return dropMode; }
+
+    /**
+     * Returns the location that this component should visually indicate
+     * as the drop location during a DnD operation over the component,
+     * or {@code null} if no location is to currently be shown.
+     *
+     * @return the drop location
+     * @since 1.6
+     */
+    public final DropLocation getDropLocation() { return dropLocation; }
+
+    DropLocation dropLocationForPoint(java.awt.Point p) {
+        int index = viewToModel(p);
+        return new DropLocation(p, index < 0 ? 0 : index, Position.Bias.Forward);
+    }
+
+    Object setDropLocation(javax.swing.TransferHandler.DropLocation location, Object state, boolean forDrop) {
+        Object retVal = null;
+        DropLocation textLocation = (DropLocation) location;
+
+        if (dropMode == javax.swing.DropMode.USE_SELECTION) {
+            if (textLocation == null) {
+                if (state != null && !forDrop) {
+                    // The drag left: the caret and selection it borrowed come back.
+                    int[] saved = (int[]) state;
+                    caret.setDot(saved[0]);
+                    caret.moveDot(saved[1]);
+                }
+            } else {
+                retVal = dropLocation == null ? new int[] { caret.getMark(), caret.getDot() } : state;
+                caret.setDot(textLocation.getIndex());
+            }
+        }
+
+        DropLocation old = dropLocation;
+        dropLocation = textLocation;
+        firePropertyChange("dropLocation", old, dropLocation);
+        repaint();
+        return retVal;
+    }
+
+    /**
+     * BasicTextUI's handler: exports the selection as a string (moving it when
+     * the text is editable) and imports a string at the drop location or over
+     * the selection.
+     */
+    @SuppressWarnings("serial")
+    static class TextTransferHandler extends javax.swing.TransferHandler implements javax.swing.plaf.UIResource {
+        private JTextComponent exportComp;
+        private Position p0, p1;
+        private boolean shouldRemove;
+
+        @Override
+        public int getSourceActions(JComponent c) {
+            if (!(c instanceof JTextComponent)) return NONE;
+            JTextComponent tc = (JTextComponent) c;
+            return tc.isEditable() ? COPY_OR_MOVE : COPY;
+        }
+
+        @Override
+        protected java.awt.datatransfer.Transferable createTransferable(JComponent c) {
+            exportComp = (JTextComponent) c;
+            shouldRemove = true;
+            int start = exportComp.getSelectionStart(), end = exportComp.getSelectionEnd();
+            if (start == end) return null;
+            try {
+                Document d = exportComp.getDocument();
+                p0 = d.createPosition(start);
+                p1 = d.createPosition(end);
+                return new java.awt.datatransfer.StringSelection(d.getText(start, end - start));
+            } catch (BadLocationException e) {
+                return null;
+            }
+        }
+
+        @Override
+        protected void exportDone(JComponent source, java.awt.datatransfer.Transferable data, int action) {
+            if (shouldRemove && action == MOVE && p0 != null && p1 != null && source == exportComp) {
+                try {
+                    Document d = exportComp.getDocument();
+                    int start = p0.getOffset(), end = p1.getOffset();
+                    if (end > start) d.remove(start, end - start);
+                } catch (BadLocationException e) {
+                    // the text changed under the drag; nothing left to remove
+                }
+            }
+            exportComp = null;
+            p0 = p1 = null;
+        }
+
+        @Override
+        public boolean canImport(TransferSupport support) {
+            if (!(support.getComponent() instanceof JTextComponent)) return false;
+            JTextComponent c = (JTextComponent) support.getComponent();
+            return c.isEditable() && c.isEnabled()
+                    && support.isDataFlavorSupported(java.awt.datatransfer.DataFlavor.stringFlavor);
+        }
+
+        @Override
+        public boolean importData(TransferSupport support) {
+            if (!canImport(support)) return false;
+            JTextComponent c = (JTextComponent) support.getComponent();
+            String value;
+            try {
+                value = (String) support.getTransferable().getTransferData(java.awt.datatransfer.DataFlavor.stringFlavor);
+            } catch (java.awt.datatransfer.UnsupportedFlavorException | java.io.IOException e) {
+                return false;
+            }
+            if (support.isDrop()) {
+                // Qualified: inside a TransferHandler subclass, DropLocation is TransferHandler's.
+                int index = ((JTextComponent.DropLocation) support.getDropLocation()).getIndex();
+                // Dropping a moved selection back inside itself is a no-op, as on desktop.
+                if (c == exportComp && p0 != null && index >= p0.getOffset() && index <= p1.getOffset()) {
+                    shouldRemove = false;
+                    return true;
+                }
+                try {
+                    c.getDocument().insertString(index, value, null);
+                    c.select(index, index + value.length());
+                } catch (BadLocationException e) {
+                    return false;
+                }
+                return true;
+            }
+            c.replaceSelection(value);
+            return true;
+        }
+    }
 
     private Caret caret;
     private Highlighter highlighter;

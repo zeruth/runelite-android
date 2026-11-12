@@ -49,7 +49,10 @@ import java.util.Set;
  * {@code com.sun.media.sound} file readers, file writers and format converters that
  * {@link SampledProviders} lists in place of the JDK's {@code ServiceLoader} lookup. The
  * conversion and file methods walk the providers exactly as the JDK does, so the provider that
- * claims a stream, and the stream it returns, are the JDK's.
+ * claims a stream, and the stream it returns, are the JDK's. After the JDK's providers come the
+ * compressed-audio reader and decoder (MP3, Ogg, AAC, FLAC over MediaCodec), in the place a
+ * desktop classpath's mp3spi/vorbisspi would take, so {@code getAudioInputStream(pcmFormat,
+ * getAudioInputStream(url))} decodes them as it does on the desktop.
  */
 public class AudioSystem {
     public static final int NOT_SPECIFIED = -1;
