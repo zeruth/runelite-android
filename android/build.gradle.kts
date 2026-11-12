@@ -234,6 +234,10 @@ if (androidSdkAvailable) {
         // resource-packs plugin needs — without it it dies at injector creation with
         // NoClassDefFoundError: org/tomlj/TomlTable.
         "implementation"("org.tomlj:tomlj:1.1.1")
+        // okhttp3 is already in the APK through runelite-client's http-api; named here because the
+        // app's own OkHttpWebSocketTransport (the wire under android-awt's java.net.http.WebSocket)
+        // compiles against it. Same version, so it resolves to the artifact already verified.
+        "implementation"("com.squareup.okhttp3:okhttp:3.14.9")
         // D8, run in-process by PluginDexer to convert upstream hub jars (JVM bytecode) to
         // dex on the device. Pure Java; kept whole in proguard-rules.pro.
         "implementation"("com.android.tools:r8:9.5.28")
@@ -360,6 +364,29 @@ if (androidSdkAvailable) {
                 archive.getInputStream(archive.getEntry("META-INF/desugar/d8/desugar.json")).use {
                     out.resolve("desugar.json").writeBytes(it.readBytes())
                 }
+            }
+            // android-awt's java.net.http (and com.sun.net.httpserver) is built on
+            // java.util.concurrent.Flow, which android.jar only has from API 30. Below that it
+            // must come from the desugared library or from a shadow class; neither means
+            // NoClassDefFoundError on the first HttpClient call on an API 26-29 device.
+            // desugar.json abbreviates packages through its package_map (2.1.4 maps
+            // "java.util.concurrent" to "h$"), so Flow shows up as "h$Flow" in a rewrite_type entry.
+            val desugarJson = out.resolve("desugar.json").readText()
+            val concurrentPrefix = Regex("\"java\\.util\\.concurrent\"\\s*:\\s*\"([^\"]+)\"")
+                .find(desugarJson)?.groupValues?.get(1)
+            val flowDesugared = desugarJson.contains("\"java.util.concurrent.Flow\"") ||
+                (concurrentPrefix != null && desugarJson.contains("\"" + concurrentPrefix + "Flow\""))
+            val flowShadowed = hostApi.get().resolve("java/util/concurrent/Flow.class").isFile
+            println("java.util.concurrent.Flow below API 30: " + when {
+                flowDesugared -> "desugar_jdk_libs $coreLibraryVersion"
+                flowShadowed -> "android-awt shadow"
+                else -> "missing"
+            })
+            if (!flowDesugared && !flowShadowed) {
+                throw GradleException(
+                    "desugar_jdk_libs $coreLibraryVersion does not provide java.util.concurrent.Flow and " +
+                        "android-awt has no shadow of it; minSdk 26 needs one for java.net.http"
+                )
             }
             // These are compiler API inputs, never loaded as application code. The
             // platform JDK surface and host compatibility hierarchy are enough for D8

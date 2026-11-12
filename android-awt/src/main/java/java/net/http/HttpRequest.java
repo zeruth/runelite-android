@@ -37,6 +37,7 @@ import java.nio.file.*;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.Flow;
+import java.util.function.BiPredicate;
 import java.util.function.Supplier;
 
 public abstract class HttpRequest {
@@ -50,10 +51,26 @@ public abstract class HttpRequest {
     public abstract HttpHeaders headers();
     public static Builder newBuilder() { return new RequestBuilder(); }
     public static Builder newBuilder(URI uri) { return newBuilder().uri(uri); }
+    // JDK 16
+    public static Builder newBuilder(HttpRequest request, BiPredicate<String, String> filter) {
+        Objects.requireNonNull(request); Objects.requireNonNull(filter);
+        Builder builder = newBuilder(request.uri()).expectContinue(request.expectContinue());
+        request.headers().map().forEach((name, values) -> { for (String value : values) if (filter.test(name, value)) builder.header(name, value); });
+        request.version().ifPresent(builder::version);
+        request.timeout().ifPresent(builder::timeout);
+        String method = request.method();
+        Optional<BodyPublisher> body = request.bodyPublisher();
+        if (method.equals("GET") && !body.isPresent()) builder.GET();
+        else if (method.equals("DELETE") && !body.isPresent()) builder.DELETE();
+        else builder.method(method, body.orElse(BodyPublishers.noBody()));
+        return builder;
+    }
     public interface Builder {
         Builder uri(URI uri); Builder expectContinue(boolean enabled); Builder version(HttpClient.Version version);
         Builder header(String name, String value); Builder headers(String... headers); Builder setHeader(String name, String value);
         Builder timeout(Duration duration); Builder GET(); Builder DELETE(); Builder POST(BodyPublisher body); Builder PUT(BodyPublisher body);
+        // JDK 18
+        default Builder HEAD() { return method("HEAD", BodyPublishers.noBody()); }
         Builder method(String method, BodyPublisher body); HttpRequest build(); Builder copy();
     }
     public interface BodyPublisher extends Flow.Publisher<ByteBuffer> { long contentLength(); }
@@ -69,6 +86,66 @@ public abstract class HttpRequest {
             return input(() -> new ByteArrayInputStream(snapshot), length);
         }
         public static BodyPublisher ofInputStream(Supplier<? extends InputStream> source) { return input(source, -1); }
+        public static BodyPublisher ofByteArrays(Iterable<byte[]> iter) {
+            Objects.requireNonNull(iter);
+            return input(() -> {
+                Iterator<byte[]> arrays = iter.iterator();
+                return new SequenceInputStream(new Enumeration<InputStream>() {
+                    public boolean hasMoreElements() { return arrays.hasNext(); }
+                    public InputStream nextElement() { return new ByteArrayInputStream(arrays.next()); }
+                });
+            }, -1);
+        }
+        // JDK 16
+        public static BodyPublisher concat(BodyPublisher... publishers) {
+            List<BodyPublisher> parts = new ArrayList<>();
+            for (BodyPublisher publisher : publishers) parts.add(Objects.requireNonNull(publisher));
+            if (parts.isEmpty()) return noBody();
+            if (parts.size() == 1) return parts.get(0);
+            long length = 0;
+            for (BodyPublisher part : parts) {
+                long size = part.contentLength();
+                length = size < 0 || length < 0 || length > Long.MAX_VALUE - size ? -1 : length + size;
+            }
+            final long total = length;
+            return new BodyPublisher() {
+                public long contentLength() { return total; }
+                public void subscribe(Flow.Subscriber<? super ByteBuffer> subscriber) { new Concatenation(parts.iterator(), Objects.requireNonNull(subscriber)).start(); }
+            };
+        }
+        /** Subscribes to each part in turn, carrying the unmet downstream demand over. */
+        private static final class Concatenation implements Flow.Subscription {
+            final Iterator<BodyPublisher> remaining; final Flow.Subscriber<? super ByteBuffer> downstream;
+            long demand; Flow.Subscription current; boolean cancelled, finished;
+            Concatenation(Iterator<BodyPublisher> remaining, Flow.Subscriber<? super ByteBuffer> downstream) { this.remaining = remaining; this.downstream = downstream; }
+            void start() { downstream.onSubscribe(this); next(); }
+            private void next() {
+                boolean done;
+                synchronized (this) { if (cancelled || finished) return; current = null; done = !remaining.hasNext(); if (done) finished = true; }
+                if (done) { downstream.onComplete(); return; }
+                remaining.next().subscribe(new Flow.Subscriber<ByteBuffer>() {
+                    public void onSubscribe(Flow.Subscription subscription) {
+                        long request; boolean cancel;
+                        synchronized (Concatenation.this) { current = subscription; request = demand; cancel = cancelled; }
+                        if (cancel) subscription.cancel(); else if (request > 0) subscription.request(request);
+                    }
+                    public void onNext(ByteBuffer item) { synchronized (Concatenation.this) { if (demand != Long.MAX_VALUE) demand--; } downstream.onNext(item); }
+                    public void onError(Throwable error) { synchronized (Concatenation.this) { if (finished) return; finished = true; } downstream.onError(error); }
+                    public void onComplete() { next(); }
+                });
+            }
+            public void request(long n) {
+                if (n <= 0) { cancel(); synchronized (this) { if (finished) return; finished = true; } downstream.onError(new IllegalArgumentException("nonpositive demand")); return; }
+                Flow.Subscription target;
+                synchronized (this) { demand = demand > Long.MAX_VALUE - n ? Long.MAX_VALUE : demand + n; target = current; }
+                if (target != null) target.request(n);
+            }
+            public void cancel() {
+                Flow.Subscription target;
+                synchronized (this) { cancelled = true; target = current; }
+                if (target != null) target.cancel();
+            }
+        }
         public static BodyPublisher ofFile(Path path) throws FileNotFoundException {
             if (!Files.isReadable(path)) throw new FileNotFoundException(path.toString());
             long length; try { length = Files.size(path); } catch (IOException e) { throw new FileNotFoundException(path.toString()); }

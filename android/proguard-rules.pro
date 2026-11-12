@@ -284,6 +284,9 @@
 # ----------------------------------------------------------------------------
 -keep class okhttp3.** { *; }
 -keep class okio.** { *; }
+# android-awt's java.net.http.WebSocket loads its okhttp transport by this name
+# (WebSocketTransport.ANDROID_TRANSPORT) and falls back to a plain socket client without it.
+-keep class net.runelite.mp.http.OkHttpWebSocketTransport { <init>(); }
 -dontwarn okhttp3.**
 -dontwarn okio.**
 -dontwarn retrofit2.**
