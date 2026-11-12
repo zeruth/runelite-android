@@ -51,7 +51,6 @@ public abstract class GraphicsConfiguration {
      * @since 1.7
      */
     public boolean isTranslucencyCapable() { return false; }
->>>>>>> up
 
     // VolatileImage factories. The patched OSRS gamepack calls these to allocate the
     // SW-mode double buffer; without them the Client thread dies with

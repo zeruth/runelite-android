@@ -31,13 +31,10 @@
 package java.awt;
 
 import java.awt.datatransfer.Clipboard;
-<<<<<<< HEAD
-import java.awt.event.InputEvent;
-import java.awt.event.KeyEvent;
-=======
 import java.awt.event.AWTEventListener;
 import java.awt.event.AWTEventListenerProxy;
->>>>>>> up
+import java.awt.event.InputEvent;
+import java.awt.event.KeyEvent;
 import java.awt.image.ColorModel;
 import java.awt.image.ImageObserver;
 import java.awt.image.ImageProducer;
@@ -59,7 +56,8 @@ import java.util.Properties;
  * {@link #getMaximumCursorColors} is 0 (no pointer cursor images), {@link #getSystemSelection} is
  * {@code null} (no primary selection), {@link #getPrintJob} returns {@code null} as if the user
  * cancelled the dialog, {@link #sync} is a no-op (frames are presented by the host view),
- * {@link #isFrameStateSupported} accepts only {@link Frame#NORMAL}, {@link #isAlwaysOnTopSupported}
+ * {@link #isFrameStateSupported} accepts the Windows toolkit's states (NORMAL, ICONIFIED,
+ * MAXIMIZED_BOTH), {@link #isAlwaysOnTopSupported}
  * is {@code false} (the activity has no z-order over other apps), and
  * {@link #getMenuShortcutKeyMask} is CTRL as on Windows and Linux.
  */
@@ -243,11 +241,6 @@ public abstract class Toolkit {
         }
     }
 
-<<<<<<< HEAD
-=======
-    public void sync() {}
-    public void beep() {}
-
     /** The states the Windows toolkit supports; a lone horizontal or vertical maximize is not one. */
     public boolean isFrameStateSupported(int state) {
         return state == Frame.NORMAL || state == Frame.ICONIFIED || state == Frame.MAXIMIZED_BOTH;
@@ -405,7 +398,6 @@ public abstract class Toolkit {
         return 0;
     }
 
->>>>>>> up
     /**
      * As SunToolkit: a zero-sized request, or an image that is not producer-backed
      * (BufferedImage, VolatileImage), is ready; a produced image starts production and
@@ -476,14 +468,6 @@ public abstract class Toolkit {
     public PrintJob getPrintJob(Frame frame, String jobtitle, Properties props) {
         if (frame == null) throw new NullPointerException("frame must not be null");
         return null;
-    }
-
-    public boolean isFrameStateSupported(int state) {
-        return state == Frame.NORMAL;
-    }
-
-    public boolean isAlwaysOnTopSupported() {
-        return false;
     }
 
     public void setDynamicLayout(boolean dynamic) {
