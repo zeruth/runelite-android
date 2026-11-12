@@ -169,9 +169,9 @@
 # JRE flavour, whose java.util.function default methods hub plugins call though the
 # host never does; verifyReleasePluginApi checks they survive.
 -keep class com.google.common.** { *; }
-# The JRE flavour's FuturesGetChecked picks its java.lang.ClassValue validator by class name
-# (ClassValue is API 34); the whole-tree keep holds that name, so where the lookup fails it
-# takes guava's own fallback rather than a renamed-class error.
+# The JRE flavour also names java.lang.ClassValue (API 34; minSdk is 26). The whole-tree keep
+# leaves guava's class names as guava loads them, so R8 adds no failure of its own there;
+# how guava copes with a missing ClassValue on API 26-33 is unverified on device.
 
 # Hub plugins load after R8 runs and link against the host's protobuf runtime.
 # Preserve its public binary surface, including methods only those plugins use.
