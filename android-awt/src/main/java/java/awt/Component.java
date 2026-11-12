@@ -33,6 +33,8 @@ package java.awt;
 import java.awt.event.ComponentListener;
 import java.awt.event.FocusListener;
 import java.awt.event.HierarchyListener;
+import java.awt.event.InputMethodEvent;
+import java.awt.event.InputMethodListener;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 import java.awt.event.MouseEvent;
@@ -128,6 +130,11 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
     private final List<MouseListener> mouseListeners = new CopyOnWriteArrayList<>();
     private final List<MouseMotionListener> mouseMotionListeners = new CopyOnWriteArrayList<>();
     private final List<MouseWheelListener> mouseWheelListeners = new CopyOnWriteArrayList<>();
+    private final List<InputMethodListener> inputMethodListeners = new CopyOnWriteArrayList<>();
+    private boolean inputMethodsEnabled = true;
+    // The JDK gives every Window one input context shared by its tree. Android panel trees are
+    // mounted without a Window (setHostShowing), so their root holds the shared context instead.
+    private transient java.awt.im.InputContext rootInputContext;
 
     protected Component() {
     }
@@ -494,6 +501,65 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
     public void removeMouseMotionListener(MouseMotionListener l) { mouseMotionListeners.remove(l); }
     public void addMouseWheelListener(MouseWheelListener l)     { if (l != null) mouseWheelListeners.add(l); }
     public void removeMouseWheelListener(MouseWheelListener l)  { mouseWheelListeners.remove(l); }
+    public void addInputMethodListener(InputMethodListener l)   { if (l != null) inputMethodListeners.add(l); }
+    public void removeInputMethodListener(InputMethodListener l) { inputMethodListeners.remove(l); }
+    public InputMethodListener[] getInputMethodListeners() { return inputMethodListeners.toArray(new InputMethodListener[0]); }
+
+    /**
+     * Gets the input method request handler which supports requests from input methods
+     * for this component. A component that supports on-the-spot text input must override
+     * this method to return an {@code InputMethodRequests} instance. By default this
+     * method returns {@code null}.
+     *
+     * @since 1.2
+     */
+    public java.awt.im.InputMethodRequests getInputMethodRequests() { return null; }
+
+    /**
+     * Gets the input context used by this component for handling the communication with
+     * input methods when text is entered in this component. By default, the input context
+     * used for the parent component is returned; the root of the tree (a Window, or the root
+     * of a host-mounted Android panel) owns one context shared by the tree.
+     *
+     * @since 1.2
+     */
+    public java.awt.im.InputContext getInputContext() {
+        Container p = parent;
+        if (p != null) return p.getInputContext();
+        if (!(this instanceof Window) && !hostShowing) return null;
+        synchronized (getTreeLock()) {
+            if (rootInputContext == null) rootInputContext = java.awt.im.InputContext.getInstance();
+            return rootInputContext;
+        }
+    }
+
+    /**
+     * Enables or disables input method support for this component. If input method support
+     * is enabled and the component also processes key events, incoming events are offered
+     * to the current input method. Disabling it ends any composition in progress.
+     *
+     * @since 1.2
+     */
+    public void enableInputMethods(boolean enable) {
+        if (!enable && inputMethodsEnabled) {
+            java.awt.im.InputContext context = getInputContext();
+            if (context != null) {
+                context.endComposition();
+                context.removeNotify(this);
+            }
+        }
+        inputMethodsEnabled = enable;
+    }
+
+    /**
+     * Not in the JDK: whether this component is an active input method client, which the
+     * desktop input context decides from {@link #enableInputMethods} and
+     * {@link #getInputMethodRequests}. The Android keyboard bridge sends its composition to
+     * such a component as {@link InputMethodEvent}s and types into any other one with keys.
+     */
+    public boolean isInputMethodClient() {
+        return inputMethodsEnabled && getInputMethodRequests() != null;
+    }
 
     private String name = "";
     public String getName() { return name; }
@@ -576,6 +642,8 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
             dispatchMouseEvent((MouseEvent) event);
         } else if (event instanceof java.awt.event.FocusEvent) {
             processFocusEvent((java.awt.event.FocusEvent) event);
+        } else if (event instanceof InputMethodEvent) {
+            processInputMethodEvent((InputMethodEvent) event);
         } else if (event instanceof java.awt.event.HierarchyEvent) {
             processHierarchyEvent((java.awt.event.HierarchyEvent) event);
         } else if (event instanceof java.awt.event.ComponentEvent) {
@@ -587,6 +655,18 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
         for (FocusListener listener : focusListeners) {
             if (event.getID() == java.awt.event.FocusEvent.FOCUS_GAINED) listener.focusGained(event);
             else if (event.getID() == java.awt.event.FocusEvent.FOCUS_LOST) listener.focusLost(event);
+        }
+    }
+    /**
+     * Processes input method events occurring on this component by dispatching them to
+     * any registered {@code InputMethodListener} objects.
+     *
+     * @since 1.2
+     */
+    protected void processInputMethodEvent(InputMethodEvent event) {
+        for (InputMethodListener listener : inputMethodListeners) {
+            if (event.getID() == InputMethodEvent.INPUT_METHOD_TEXT_CHANGED) listener.inputMethodTextChanged(event);
+            else if (event.getID() == InputMethodEvent.CARET_POSITION_CHANGED) listener.caretPositionChanged(event);
         }
     }
     protected void processHierarchyEvent(java.awt.event.HierarchyEvent event) {
