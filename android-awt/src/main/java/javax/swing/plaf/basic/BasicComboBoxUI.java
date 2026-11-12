@@ -45,6 +45,16 @@ public class BasicComboBoxUI extends ComboBoxUI {
     @SuppressWarnings("unchecked")
     @Override public void installUI(JComponent c) {
         comboBox = (JComboBox<Object>) c;
+        // As the JDK: only a renderer or editor the look and feel put there is replaced, so a
+        // subclass's createEditor (FlatLaf's) wins over the plain one.
+        ListCellRenderer<?> renderer = comboBox.getRenderer();
+        if (renderer == null || renderer instanceof UIResource) {
+            comboBox.setRenderer(createRenderer());
+        }
+        ComboBoxEditor editor = comboBox.getEditor();
+        if (editor == null || editor instanceof UIResource) {
+            comboBox.setEditor(createEditor());
+        }
         popup = createPopup();
         listBox = popup.getList();
         arrowButton = createArrowButton();
@@ -56,6 +66,31 @@ public class BasicComboBoxUI extends ComboBoxUI {
         comboBox = null; arrowButton = null; popup = null; listBox = null;
     }
     protected ComboPopup createPopup() { return new BasicComboPopup(comboBox); }
+
+    /**
+     * Creates the default renderer that will be used in a non-editiable combo
+     * box. A default renderer will used only if a renderer has not been
+     * explicitly set with <code>setRenderer</code>.
+     *
+     * @return a <code>ListCellRender</code> used for the combo box
+     * @see javax.swing.JComboBox#setRenderer
+     */
+    @SuppressWarnings("rawtypes")
+    protected ListCellRenderer createRenderer() {
+        return new BasicComboBoxRenderer.UIResource();
+    }
+
+    /**
+     * Creates the default editor that will be used in editable combo boxes.
+     * A default editor will be used only if an editor has not been
+     * explicitly set with <code>setEditor</code>.
+     *
+     * @return a <code>ComboBoxEditor</code> used for the combo box
+     * @see javax.swing.JComboBox#setEditor
+     */
+    protected ComboBoxEditor createEditor() {
+        return new BasicComboBoxEditor.UIResource();
+    }
     protected void installListeners() {
         if (popup.getMouseListener() != null) comboBox.addMouseListener(popup.getMouseListener());
         if (popup.getMouseMotionListener() != null) comboBox.addMouseMotionListener(popup.getMouseMotionListener());

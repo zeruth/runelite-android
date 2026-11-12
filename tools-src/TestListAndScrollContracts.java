@@ -15,6 +15,7 @@ import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
 import javax.swing.JTextField;
 import javax.swing.JViewport;
+import javax.swing.ListCellRenderer;
 import javax.swing.ListSelectionModel;
 import javax.swing.ScrollPaneConstants;
 import javax.swing.border.EmptyBorder;
@@ -113,6 +114,55 @@ public class TestListAndScrollContracts {
         eq(Arrays.asList(true, false), adjusting, "adjusting events");
         list.clearSelection();
         check(list.isSelectionEmpty() && list.getSelectedIndex() == -1, "cleared");
+
+        // The JDK's DefaultListSelectionModel ignores -1, so neither call clears the selection.
+        list.setSelectedIndex(2);
+        list.setSelectedIndex(-1);
+        eq(2, list.getSelectedIndex(), "setSelectedIndex(-1) keeps the selection");
+        list.setSelectedIndex(ITEMS);
+        eq(2, list.getSelectedIndex(), "an index past the model is ignored");
+        list.setSelectedValue(null, false);
+        eq(2, list.getSelectedIndex(), "setSelectedValue(null) keeps the selection");
+        list.setSelectedValue("absent", false);
+        eq(2, list.getSelectedIndex(), "setSelectedValue(absent) keeps the selection");
+        list.setSelectedValue("item 4", false);
+        eq(4, list.getSelectedIndex(), "setSelectedValue selects the match");
+    }
+
+    /** A renderer whose cells all have one preferred size, so no font metrics enter the geometry. */
+    static ListCellRenderer<Object> sized(int width, int height) {
+        JLabel cell = new JLabel();
+        cell.setPreferredSize(new Dimension(width, height));
+        return (list, value, index, selected, focused) -> cell;
+    }
+
+    /** Geometry follows a model, renderer, data and orientation change made after the first measure. */
+    static void remeasure() {
+        JList<String> list = new JList<>(new String[]{"a", "b"});
+        list.setBorder(null);
+        list.setSize(100, 100);
+        list.setCellRenderer(sized(20, 12));
+        eq(new Rectangle(0, 12, 100, 12), list.getCellBounds(1, 1), "first measure");
+        eq(new Dimension(20, 24), list.getPreferredSize(), "first preferred");
+
+        DefaultListModel<String> model = new DefaultListModel<>();
+        for (String s : new String[]{"c", "d", "e"}) model.addElement(s);
+        list.setModel(model);
+        eq(new Rectangle(0, 24, 100, 12), list.getCellBounds(2, 2), "after the model change");
+        eq(new Dimension(20, 36), list.getPreferredSize(), "preferred after the model change");
+
+        list.setCellRenderer(sized(25, 15));
+        eq(new Rectangle(0, 30, 100, 15), list.getCellBounds(2, 2), "after the renderer change");
+        eq(new Dimension(25, 45), list.getPreferredSize(), "preferred after the renderer change");
+
+        model.addElement("f");
+        eq(new Rectangle(0, 45, 100, 15), list.getCellBounds(3, 3), "after an element is added");
+        model.remove(0);
+        check(list.getCellBounds(3, 3) == null, "after an element is removed");
+
+        list.setVisibleRowCount(2);
+        list.setLayoutOrientation(JList.VERTICAL_WRAP);
+        eq(new Rectangle(25, 0, 25, 15), list.getCellBounds(2, 2), "after the orientation change");
     }
 
     static void viewport() {
@@ -222,6 +272,7 @@ public class TestListAndScrollContracts {
         horizontalWrap(3, 100);
         horizontalWrap(0, 100);
         selection();
+        remeasure();
         viewport();
         combo();
         scrollPane();

@@ -111,9 +111,8 @@ public class JComboBox<E> extends JComponent implements ListDataListener, javax.
         revalidate(); repaint();
     }
     @Override public void updateUI() {
+        // BasicComboBoxUI.installUI installs the editor (createEditor) as the JDK's does.
         setUI(new javax.swing.plaf.basic.BasicComboBoxUI());
-        if (editor == null || editor instanceof javax.swing.plaf.UIResource)
-            setEditor(new javax.swing.plaf.basic.BasicComboBoxEditor.UIResource());
     }
     public ComboBoxEditor getEditor() { return editor; }
     public void setEditor(ComboBoxEditor value) {
