@@ -74,6 +74,17 @@ public abstract class Toolkit {
         return new String[]{Font.DIALOG, Font.SANS_SERIF, Font.SERIF, Font.MONOSPACED};
     }
 
+    /**
+     * The same shared, Paint-backed metrics Component and Graphics hand out, so a width
+     * measured here matches one measured on the Graphics that paints the text.
+     *
+     * @deprecated As of JDK version 1.2, replaced by the Font method getLineMetrics.
+     */
+    @Deprecated
+    public FontMetrics getFontMetrics(Font font) {
+        return net.runelite.awt.impl.BufferedImageFontMetrics.forFont(font);
+    }
+
     public Image createImage(int[] pixels, int width, int height) {
         java.awt.image.BufferedImage bi = new java.awt.image.BufferedImage(
             width, height, java.awt.image.BufferedImage.TYPE_INT_ARGB);
