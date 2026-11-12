@@ -1117,11 +1117,11 @@ private class LambdaRewriter(
     // off-heap memory in a userland Map<Integer, ByteBuffer> so we never depend on the
     // (Android-restricted) hidden allocateMemory / copyMemoryFromPrimitiveArray APIs.
     //
-    // Also reroute ProcessHandle.Info.command() through ProcessHandleShim, which strips
-    // the trailing NUL-separated argv tail Android's /proc/PID/cmdline returns. The
-    // patched client serializes that string into its login machine-info packet (xi.cq),
-    // which rejects any string containing NUL — without this redirect, login crashes
-    // with "error_game_crash".
+    // Also reroute ProcessHandle.Info.command() through ProcessHandleShim, which cuts the
+    // string at a NUL. The patched client serializes it into its login machine-info packet
+    // (xi.cq), which rejects any string containing NUL ("error_game_crash"). The shadow
+    // ProcessHandle now answers the NUL-free /proc/self/exe path; the redirect stays as the
+    // guard. Every java.lang shim rewrite is tabled in android-awt/PORTING.md, section 10.
     override fun visitMethodInsn(opcode: Int, owner: String, name: String, descriptor: String, isInterface: Boolean) {
         if (opcode == Opcodes.INVOKEVIRTUAL && owner == "sun/misc/Unsafe"
             && UNSAFE_REDIRECT.contains(name + descriptor)) {
@@ -1147,9 +1147,8 @@ private class LambdaRewriter(
             && owner == "java/lang/ProcessHandle\$Info"
             && name == "command"
             && descriptor == "()Ljava/util/Optional;") {
-            // Stack: [ProcessHandle$Info receiver]. The shim's parameter type is Object
-            // (Android's android.jar hides ProcessHandle from javac), so we just upcast
-            // the receiver to Object on the stack — same single-arg static call.
+            // Stack: [ProcessHandle$Info receiver]. The shim's parameter type is Object, so
+            // the receiver is passed as is: same single-arg static call, no cast.
             super.visitMethodInsn(
                 Opcodes.INVOKESTATIC,
                 "net/runelite/mp/util/ProcessHandleShim",

@@ -131,6 +131,17 @@ public abstract class Toolkit {
         return new String[]{Font.DIALOG, Font.SANS_SERIF, Font.SERIF, Font.MONOSPACED};
     }
 
+    /**
+     * The same shared, Paint-backed metrics Component and Graphics hand out, so a width
+     * measured here matches one measured on the Graphics that paints the text.
+     *
+     * @deprecated As of JDK version 1.2, replaced by the Font method getLineMetrics.
+     */
+    @Deprecated
+    public FontMetrics getFontMetrics(Font font) {
+        return net.runelite.awt.impl.BufferedImageFontMetrics.forFont(font);
+    }
+
     public Image createImage(int[] pixels, int width, int height) {
         java.awt.image.BufferedImage bi = new java.awt.image.BufferedImage(
             width, height, java.awt.image.BufferedImage.TYPE_INT_ARGB);
@@ -203,18 +214,52 @@ public abstract class Toolkit {
         return decode(() -> javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(data, off, len)));
     }
 
-    /** Images are decoded synchronously, so preparing one only reports whether it has pixels. */
-    public boolean prepareImage(Image image, int width, int height, ImageObserver observer) {
-        return (checkImage(image, width, height, observer) & ImageObserver.ALLBITS) != 0;
+    /**
+     * Fills {@code systemColors} with the platform's colors, indexed as the
+     * {@link SystemColor} constants. Android has no native widget palette to read, so
+     * this is a deliberate no-op that leaves the OpenJDK defaults in place.
+     */
+    protected void loadSystemColors(int[] systemColors) {
     }
 
-    public int checkImage(Image image, int width, int height, ImageObserver observer) {
-        if (image instanceof java.awt.image.ProducerImage) {
-            return ((java.awt.image.ProducerImage) image).getBufferedImage() == null ? 0
-                : ImageObserver.WIDTH | ImageObserver.HEIGHT | ImageObserver.ALLBITS;
+    /**
+     * Gets a {@code PrintJob} with the given job and page attributes; delegates to the
+     * {@code Properties} form, as 8u's default does.
+     */
+    public PrintJob getPrintJob(Frame frame, String jobtitle,
+                                JobAttributes jobAttributes,
+                                PageAttributes pageAttributes) {
+        if (this != Toolkit.getDefaultToolkit()) {
+            return Toolkit.getDefaultToolkit().getPrintJob(frame, jobtitle,
+                                                           jobAttributes,
+                                                           pageAttributes);
+        } else {
+            return getPrintJob(frame, jobtitle, null);
         }
-        // SunToolkit reports ALLBITS for every image that is not a toolkit image.
-        return ImageObserver.ALLBITS;
+    }
+
+    /**
+     * As SunToolkit: a zero-sized request, or an image that is not producer-backed
+     * (BufferedImage, VolatileImage), is ready; a produced image starts production and
+     * reports ALLBITS, notifying {@code observer} of ERROR|ABORT when it failed.
+     */
+    public boolean prepareImage(Image image, int width, int height, ImageObserver observer) {
+        if (width == 0 || height == 0) {
+            return true;
+        }
+        if (!(image instanceof java.awt.image.ProducerImage)) {
+            return true;
+        }
+        return ((java.awt.image.ProducerImage) image).prepare(observer);
+    }
+
+    /** As SunToolkit: the ImageObserver flags of a produced image, ALLBITS for any other. */
+    public int checkImage(Image image, int width, int height, ImageObserver observer) {
+        if (!(image instanceof java.awt.image.ProducerImage)) {
+            return ImageObserver.ALLBITS;
+        }
+        int flags = ((java.awt.image.ProducerImage) image).check(observer);
+        return (width == 0 || height == 0) ? flags | ImageObserver.ALLBITS : flags;
     }
 
     /**

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Thin wrapper over run-awt-contracts.py for the HTTP server/client, TLS and management contracts.
+"""Thin wrapper over run-awt-contracts.py for the HTTP server/client, TLS, management and ProcessHandle contracts.
 
 Those contracts carry a ``// host-contract`` header and are discovered by the runner; this wrapper only
 keeps the optional H2 probe, which needs a pinned H2 jar and a source outside android-awt.  Android-only
@@ -14,7 +14,8 @@ import subprocess
 import sys
 import tempfile
 
-CONTRACTS = ("TestHttpServerContracts", "TestJavaHttpContracts", "TestJavaHttpTlsContracts", "TestManagementContracts")
+CONTRACTS = ("TestHttpServerContracts", "TestJavaHttpContracts", "TestJavaHttpTlsContracts", "TestManagementContracts",
+             "TestProcessHandleContracts")
 
 
 def main():
