@@ -29,7 +29,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 package javax.management;
-public class InstanceAlreadyExistsException extends Exception {
+public class InstanceAlreadyExistsException extends OperationsException {
     public InstanceAlreadyExistsException() {}
     public InstanceAlreadyExistsException(String message) { super(message); }
 }

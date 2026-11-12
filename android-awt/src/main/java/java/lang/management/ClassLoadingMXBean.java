@@ -30,7 +30,7 @@
  */
 package java.lang.management;
 
-public interface ClassLoadingMXBean {
+public interface ClassLoadingMXBean extends PlatformManagedObject {
     long getTotalLoadedClassCount();
     int getLoadedClassCount();
     long getUnloadedClassCount();
