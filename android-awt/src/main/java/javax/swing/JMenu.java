@@ -52,9 +52,53 @@ import javax.swing.plaf.ComponentInputMapUIResource;
  * {@link MenuSelectionManager} path as in 8u: a menu on the path is selected, and its popup
  * is shown while the popup is on the path. The mnemonic binding and the bar's selection
  * index, which 8u leaves to BasicMenuUI and BasicMenuBarUI, are kept by the menu itself:
- * the shadow has no Basic menu delegates, and a plugin's alt+mnemonic still has to open it.
+ * the menu is host-painted without a delegate by default, and a plugin's alt+mnemonic still
+ * has to open it (BasicMenuUI leaves these maps alone when a look and feel installs it).
  */
-public class JMenu extends JMenuItem {
+public class JMenu extends JMenuItem implements javax.accessibility.Accessible {
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJMenu();
+        }
+        return accessibleContext;
+    }
+
+    /**
+     * Accessibility support for menus: role MENU; the children are the accessible items of
+     * the menu's popup, not of the menu component itself.
+     */
+    protected class AccessibleJMenu extends AccessibleJMenuItem {
+        public int getAccessibleChildrenCount() {
+            int count = 0;
+            for (java.awt.Component child : getPopupMenu().getComponents()) {
+                if (child instanceof javax.accessibility.Accessible) count++;
+            }
+            return count;
+        }
+
+        public javax.accessibility.Accessible getAccessibleChild(int i) {
+            int count = 0;
+            for (java.awt.Component child : getPopupMenu().getComponents()) {
+                if (child instanceof javax.accessibility.Accessible) {
+                    if (count == i) {
+                        if (child instanceof JComponent) {
+                            // The popup is not the items' accessible parent; the menu is.
+                            ((javax.accessibility.Accessible) child).getAccessibleContext().setAccessibleParent(JMenu.this);
+                        }
+                        return (javax.accessibility.Accessible) child;
+                    }
+                    count++;
+                }
+            }
+            return null;
+        }
+
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.MENU;
+        }
+    }
+
     private static final long serialVersionUID = 1L;
     private static final String SELECT_MENU = "selectMenu";
 

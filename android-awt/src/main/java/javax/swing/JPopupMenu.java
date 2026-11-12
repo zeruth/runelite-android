@@ -39,7 +39,21 @@ import java.awt.Rectangle;
 import java.awt.Toolkit;
 import javax.swing.event.PopupMenuListener;
 
-public class JPopupMenu extends JComponent implements MenuElement {
+public class JPopupMenu extends JComponent implements javax.accessibility.Accessible, MenuElement {
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJPopupMenu();
+        }
+        return accessibleContext;
+    }
+
+    /** Accessibility support for popup menus: role POPUP_MENU. */
+    protected class AccessibleJPopupMenu extends AccessibleJComponent {
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.POPUP_MENU;
+        }
+    }
     private static final long serialVersionUID = 1L;
 
     public static class Separator extends JSeparator {

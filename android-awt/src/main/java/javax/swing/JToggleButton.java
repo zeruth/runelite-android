@@ -30,7 +30,21 @@
  */
 package javax.swing;
 
-public class JToggleButton extends AbstractButton {
+public class JToggleButton extends AbstractButton implements javax.accessibility.Accessible {
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJToggleButton();
+        }
+        return accessibleContext;
+    }
+
+    /** Accessibility support for toggle buttons: role TOGGLE_BUTTON. */
+    protected class AccessibleJToggleButton extends AccessibleAbstractButton {
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.TOGGLE_BUTTON;
+        }
+    }
     private static final long serialVersionUID = -3128140058214808885L;
 
     public static class ToggleButtonModel extends DefaultButtonModel {

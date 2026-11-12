@@ -33,7 +33,21 @@ package javax.swing.table;
 import java.awt.*;
 import javax.swing.*;
 
-public class JTableHeader extends JComponent {
+public class JTableHeader extends JComponent implements javax.accessibility.Accessible {
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJTableHeader();
+        }
+        return accessibleContext;
+    }
+
+    /** Accessibility support for table headers: role PANEL, as on the JDK. */
+    protected class AccessibleJTableHeader extends AccessibleJComponent {
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.PANEL;
+        }
+    }
     private TableColumnModel columnModel;
     private JTable table;
     private TableCellRenderer defaultRenderer = (t, value, selected, focus, row, col) -> {
