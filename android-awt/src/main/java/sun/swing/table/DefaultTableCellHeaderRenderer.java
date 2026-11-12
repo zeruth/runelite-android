@@ -223,7 +223,7 @@ public class DefaultTableCellHeaderRenderer extends DefaultTableCellRenderer
     }
 
     /** sun.swing.icon.SortArrowIcon's shape: a filled triangle in Table.sortIconColor. */
-    private static final class SortArrowIcon implements Icon, UIResource, Serializable {
+    private static final class SortArrowIcon implements Icon, javax.swing.plaf.UIResource, Serializable {
         private static final int ARROW_HEIGHT = 5;
         private static final int X_PADDING = 7;
         private final boolean ascending;
