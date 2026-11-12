@@ -279,7 +279,9 @@ public class Canvas extends Component {
             try {
                 // SRC: the copy replaces the front buffer, as a blit does on desktop.
                 g.setComposite(AlphaComposite.Src);
-                g.drawImage(image, 0, 0, null);
+                // The live raster: drawing the VolatileImage itself could fall back to a
+                // snapshot copy per frame on a pipeline that does not special-case it.
+                g.drawImage(((net.runelite.awt.impl.BufferedBackedVolatileImage) image).backing(), 0, 0, null);
             } finally {
                 g.dispose();
             }

@@ -34,7 +34,7 @@ import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
 
-public class JMenuBar extends JComponent {
+public class JMenuBar extends JComponent implements MenuElement {
     private static final long serialVersionUID = 1L;
     private static final int DEFAULT_HEIGHT = 28;
     private SingleSelectionModel selectionModel = new DefaultSingleSelectionModel();
@@ -86,4 +86,22 @@ public class JMenuBar extends JComponent {
     public java.awt.Insets getMargin() { return (java.awt.Insets) margin.clone(); }
     public void setMargin(java.awt.Insets m) { java.awt.Insets old=margin; margin=m==null?new java.awt.Insets(0,0,0,0):(java.awt.Insets)m.clone(); firePropertyChange("margin",old,margin); revalidate(); repaint(); }
     public boolean isFloatable() { return false; }
+
+    // MenuElement, as JMenuBar in 8u: the bar itself takes no mouse/key action, the
+    // manager routes events to the menus it lists.
+    public void processMouseEvent(java.awt.event.MouseEvent event, MenuElement path[], MenuSelectionManager manager) {}
+    public void processKeyEvent(java.awt.event.KeyEvent e, MenuElement path[], MenuSelectionManager manager) {}
+    public void menuSelectionChanged(boolean isIncluded) {}
+
+    public MenuElement[] getSubElements() {
+        java.util.List<MenuElement> tmp = new java.util.ArrayList<MenuElement>();
+        int c = getComponentCount();
+        for (int i = 0; i < c; i++) {
+            Component m = getComponent(i);
+            if (m instanceof MenuElement) tmp.add((MenuElement) m);
+        }
+        return tmp.toArray(new MenuElement[0]);
+    }
+
+    public Component getComponent() { return this; }
 }

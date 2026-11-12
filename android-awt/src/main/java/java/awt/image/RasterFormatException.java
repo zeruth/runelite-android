@@ -31,6 +31,8 @@ package java.awt.image;
  * invalid layout information in the {@link Raster}.
  */
 public class RasterFormatException extends java.lang.RuntimeException {
+    // Pinned so the serialized form matches desktop's default UID for this class.
+    private static final long serialVersionUID = 96598996116164315L;
 
     /**
      * Constructs a new <code>RasterFormatException</code> with the
