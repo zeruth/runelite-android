@@ -1,45 +1,158 @@
 /*
- * Copyright (c) 2026, Tyler Bochard
- * All rights reserved.
+ * Copyright (c) 1998, 2013, Oracle and/or its affiliates. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
- * Part of android-awt, the Android shadow of the desktop JDK surface used by
- * runelite-android. Original work of this project, not derived from OpenJDK;
- * licensed under the BSD 2-Clause License (see the LICENSE file at the
- * repository root). Files ported from OpenJDK carry the OpenJDK header instead;
- * see android-awt/LICENSE.
+ * This code is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 only, as
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
+ * This code is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ * version 2 for more details (a copy is included in the LICENSE file that
+ * accompanied this code).
  *
- * 1. Redistributions of source code must retain the above copyright notice, this
- *    list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright notice,
- *    this list of conditions and the following disclaimer in the documentation
- *    and/or other materials provided with the distribution.
+ * You should have received a copy of the GNU General Public License version
+ * 2 along with this work; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
- * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
+ * or visit www.oracle.com if you need additional information or have any
+ * questions.
  */
+
+/*
+ * (C) Copyright Taligent, Inc. 1996 - 1997, All Rights Reserved
+ * (C) Copyright IBM Corp. 1996 - 1998, All Rights Reserved
+ *
+ * The original version of this source code and documentation is
+ * copyrighted and owned by Taligent, Inc., a wholly-owned subsidiary
+ * of IBM. These materials are provided under terms of a License
+ * Agreement between Taligent and Sun. This technology is protected
+ * by multiple US and International patents.
+ *
+ * This notice and attribution to Taligent may not be removed.
+ * Taligent is a registered trademark of Taligent, Inc.
+ *
+ */
+
 package java.awt.font;
 
 import java.awt.geom.AffineTransform;
 import java.io.Serializable;
+import java.io.ObjectStreamException;
 
+/**
+ * The <code>TransformAttribute</code> class provides an immutable
+ * wrapper for a transform so that it is safe to use as an attribute.
+ */
 public final class TransformAttribute implements Serializable {
-    private static final long serialVersionUID = 3356247357827709530L;
-    public static final TransformAttribute IDENTITY = new TransformAttribute(null);
-    private final AffineTransform transform;
-    public TransformAttribute(AffineTransform transform) { this.transform = transform == null ? new AffineTransform() : new AffineTransform(transform); }
-    public AffineTransform getTransform() { return new AffineTransform(transform); }
-    public boolean isIdentity() { return transform.isIdentity(); }
-    public boolean equals(Object other) { return other instanceof TransformAttribute && transform.equals(((TransformAttribute)other).transform); }
-    public int hashCode() { return transform.hashCode(); }
+
+    /**
+     * The <code>AffineTransform</code> for this
+     * <code>TransformAttribute</code>, or <code>null</code>
+     * if <code>AffineTransform</code> is the identity transform.
+     */
+    private AffineTransform transform;
+
+    /**
+     * Wraps the specified transform.  The transform is cloned and a
+     * reference to the clone is kept.  The original transform is unchanged.
+     * If null is passed as the argument, this constructor behaves as though
+     * it were the identity transform.  (Note that it is preferable to use
+     * {@link #IDENTITY} in this case.)
+     * @param transform the specified {@link AffineTransform} to be wrapped,
+     * or null.
+     */
+    public TransformAttribute(AffineTransform transform) {
+        if (transform != null && !transform.isIdentity()) {
+            this.transform = new AffineTransform(transform);
+        }
+    }
+
+    /**
+     * Returns a copy of the wrapped transform.
+     * @return a <code>AffineTransform</code> that is a copy of the wrapped
+     * transform of this <code>TransformAttribute</code>.
+     */
+    public AffineTransform getTransform() {
+        AffineTransform at = transform;
+        return (at == null) ? new AffineTransform() : new AffineTransform(at);
+    }
+
+    /**
+     * Returns <code>true</code> if the wrapped transform is
+     * an identity transform.
+     * @return <code>true</code> if the wrapped transform is
+     * an identity transform; <code>false</code> otherwise.
+     * @since 1.4
+     */
+    public boolean isIdentity() {
+        return transform == null;
+    }
+
+    /**
+     * A <code>TransformAttribute</code> representing the identity transform.
+     * @since 1.6
+     */
+    public static final TransformAttribute IDENTITY =
+        new TransformAttribute(null);
+
+    private void writeObject(java.io.ObjectOutputStream s)
+      throws java.lang.ClassNotFoundException,
+             java.io.IOException
+    {
+        // sigh -- 1.3 expects transform is never null, so we need to always write one out
+        if (this.transform == null) {
+            this.transform = new AffineTransform();
+        }
+        s.defaultWriteObject();
+    }
+
+    /*
+     * @since 1.6
+     */
+    private Object readResolve() throws ObjectStreamException {
+        if (transform == null || transform.isIdentity()) {
+            return IDENTITY;
+        }
+        return this;
+    }
+
+    // Added for serial backwards compatibility (4348425)
+    static final long serialVersionUID = 3356247357827709530L;
+
+    /**
+     * @since 1.6
+     */
+    public int hashCode() {
+        return transform == null ? 0 : transform.hashCode();
+    }
+
+    /**
+     * Returns <code>true</code> if rhs is a <code>TransformAttribute</code>
+     * whose transform is equal to this <code>TransformAttribute</code>'s
+     * transform.
+     * @param rhs the object to compare to
+     * @return <code>true</code> if the argument is a <code>TransformAttribute</code>
+     * whose transform is equal to this <code>TransformAttribute</code>'s
+     * transform.
+     * @since 1.6
+     */
+    public boolean equals(Object rhs) {
+        if (rhs != null) {
+            try {
+                TransformAttribute that = (TransformAttribute)rhs;
+                if (transform == null) {
+                    return that.transform == null;
+                }
+                return transform.equals(that.transform);
+            }
+            catch (ClassCastException e) {
+            }
+        }
+        return false;
+    }
 }
