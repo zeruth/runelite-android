@@ -612,8 +612,8 @@ public class Window extends Container {
     /** Always null: a Window has no focus cycle root ancestor. */
     @Override public final Container getFocusCycleRootAncestor() { return null; }
     @Override public boolean isShowing() { return isVisible() && !disposed; }
-<<<<<<< HEAD
-    @Override public boolean isDisplayable() { return !disposed; }
+    /** As on the JDK: displayable from {@code pack()} or the first show until {@code dispose()}. */
+    @Override public boolean isDisplayable() { return hasHostPeer(); }
 
     /**
      * Indicates if this container is a validate root. {@code Window} objects are the validate
@@ -636,10 +636,6 @@ public class Window extends Container {
     public Rectangle hostLastDirtyRegion() {
         return lastDirtyRegion == null ? null : new Rectangle(lastDirtyRegion);
     }
-=======
-    /** As on the JDK: displayable from {@code pack()} or the first show until {@code dispose()}. */
-    @Override public boolean isDisplayable() { return hasHostPeer(); }
->>>>>>> up
     public boolean isActive() { return KeyboardFocusManager.getCurrentKeyboardFocusManager().getActiveWindow() == this; }
     public boolean isFocused() { return KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusedWindow() == this; }
 
