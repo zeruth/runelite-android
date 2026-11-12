@@ -48,6 +48,8 @@ public class JComponent extends Container {
     public static final String TOOL_TIP_TEXT_KEY = "ToolTipText";
 
     protected javax.swing.plaf.ComponentUI ui;
+    /** A list of event listeners for this component. */
+    protected javax.swing.event.EventListenerList listenerList = new javax.swing.event.EventListenerList();
 
     private transient javax.accessibility.AccessibleContext accessibleContext;
     public javax.accessibility.AccessibleContext getAccessibleContext() {
@@ -130,6 +132,29 @@ public class JComponent extends Container {
     public void setAlignmentX(float f) { this.alignmentX = f; }
     public float getAlignmentY() { return alignmentY; }
     public void setAlignmentY(float f) { this.alignmentY = f; }
+
+    private java.beans.VetoableChangeSupport vetoableChangeSupport;
+
+    public synchronized void addVetoableChangeListener(java.beans.VetoableChangeListener listener) {
+        if (vetoableChangeSupport == null) vetoableChangeSupport = new java.beans.VetoableChangeSupport(this);
+        vetoableChangeSupport.addVetoableChangeListener(listener);
+    }
+
+    public synchronized void removeVetoableChangeListener(java.beans.VetoableChangeListener listener) {
+        if (vetoableChangeSupport == null) return;
+        vetoableChangeSupport.removeVetoableChangeListener(listener);
+    }
+
+    public synchronized java.beans.VetoableChangeListener[] getVetoableChangeListeners() {
+        if (vetoableChangeSupport == null) return new java.beans.VetoableChangeListener[0];
+        return vetoableChangeSupport.getVetoableChangeListeners();
+    }
+
+    protected void fireVetoableChange(String propertyName, Object oldValue, Object newValue)
+            throws java.beans.PropertyVetoException {
+        if (vetoableChangeSupport == null) return;
+        vetoableChangeSupport.fireVetoableChange(propertyName, oldValue, newValue);
+    }
 
     public void addAncestorListener(AncestorListener l) { ancestorListeners.add(AncestorListener.class, l); }
     public void removeAncestorListener(AncestorListener l) { ancestorListeners.remove(AncestorListener.class, l); }
