@@ -97,7 +97,7 @@ public class TestOptionPaneContracts {
 
     private static void buttons() {
         JOptionPane yesNo = new JOptionPane("Delete?", JOptionPane.QUESTION_MESSAGE, JOptionPane.YES_NO_OPTION);
-        List<JButton> buttons = find(yesNo, JButton.class);
+        List<JButton> buttons = buttons(yesNo);
         check(buttons.size() == 2, "yes/no buttons");
         List<Object> values = new ArrayList<>();
         yesNo.addPropertyChangeListener(JOptionPane.VALUE_PROPERTY, event -> values.add(event.getNewValue()));
@@ -105,22 +105,22 @@ public class TestOptionPaneContracts {
         check(Integer.valueOf(JOptionPane.NO_OPTION).equals(yesNo.getValue()) && values.size() == 1, "no pressed");
 
         JOptionPane okCancel = new JOptionPane("Save?", JOptionPane.PLAIN_MESSAGE, JOptionPane.OK_CANCEL_OPTION);
-        buttons = find(okCancel, JButton.class);
+        buttons = buttons(okCancel);
         check(buttons.size() == 2, "ok/cancel buttons");
         buttons.get(1).doClick();
         check(Integer.valueOf(JOptionPane.CANCEL_OPTION).equals(okCancel.getValue()), "cancel maps to CANCEL_OPTION");
         buttons.get(0).doClick();
         check(Integer.valueOf(JOptionPane.OK_OPTION).equals(okCancel.getValue()), "ok pressed");
 
-        check(find(new JOptionPane("m", JOptionPane.ERROR_MESSAGE, JOptionPane.YES_NO_CANCEL_OPTION), JButton.class).size() == 3,
+        check(buttons(new JOptionPane("m", JOptionPane.ERROR_MESSAGE, JOptionPane.YES_NO_CANCEL_OPTION)).size() == 3,
             "yes/no/cancel buttons");
-        check(find(new JOptionPane("m"), JButton.class).size() == 1, "default option has one button");
+        check(buttons(new JOptionPane("m")).size() == 1, "default option has one button");
 
         Object third = new Object() { public String toString() { return "Third"; } };
         Object[] options = {"First", "Second", third};
         JOptionPane custom = new JOptionPane("Pick", JOptionPane.INFORMATION_MESSAGE, JOptionPane.DEFAULT_OPTION,
             null, options, "Second");
-        buttons = find(custom, JButton.class);
+        buttons = buttons(custom);
         check(buttons.size() == 3 && "Third".equals(buttons.get(2).getText()), "one button per option");
         buttons.get(2).doClick();
         check(custom.getValue() == third, "custom option value is the option");
@@ -134,7 +134,7 @@ public class TestOptionPaneContracts {
         List<JTextField> fields = find(text, JTextField.class);
         check(fields.size() == 1 && "start".equals(fields.get(0).getText()), "initial selection in text field");
         fields.get(0).setText("typed");
-        List<JButton> buttons = find(text, JButton.class);
+        List<JButton> buttons = buttons(text);
         buttons.get(1).doClick();
         check(text.getInputValue() == JOptionPane.UNINITIALIZED_VALUE, "cancel keeps input value");
         buttons.get(0).doClick();
@@ -148,7 +148,7 @@ public class TestOptionPaneContracts {
         List<JComboBox> boxes = find(choice, JComboBox.class);
         check(boxes.size() == 1 && "y".equals(boxes.get(0).getSelectedItem()), "combo box for few choices");
         boxes.get(0).setSelectedItem("z");
-        find(choice, JButton.class).get(0).doClick();
+        buttons(choice).get(0).doClick();
         check(choice.getInputValue() == values[2], "ok commits chosen value");
     }
 
@@ -171,7 +171,8 @@ public class TestOptionPaneContracts {
         check(SwingUtilities.isDescendingFrom(form, nested) && labels(nested).contains("Header"), "nested message components");
         check(nested.getUI().containsCustomComponents(nested), "custom component reported");
         nested.setMessage("Plain");
-        check(form.getParent() == null && labels(nested).contains("Plain"), "message change rebuilds");
+        // uninstallComponents removes the pane's children but leaves the form inside its old body panel.
+        check(!SwingUtilities.isDescendingFrom(form, nested) && labels(nested).contains("Plain"), "message change rebuilds");
         check(!nested.getUI().containsCustomComponents(nested), "custom flag reset");
     }
 
@@ -183,7 +184,7 @@ public class TestOptionPaneContracts {
             "dialog contains the pane");
         check(dialog.getOwner() == JOptionPane.getRootFrame(), "parentless dialog owned by the root frame");
         check(!dialog.isResizable(), "dialog not resizable");
-        find(pane, JButton.class).get(0).doClick();
+        buttons(pane).get(0).doClick();
         check(Integer.valueOf(JOptionPane.YES_OPTION).equals(pane.getValue()), "value readable after createDialog");
         dialog.dispose();
 
