@@ -10,6 +10,7 @@ import com.android.tools.r8.DiagnosticsHandler
 import com.android.tools.r8.OutputMode
 import net.runelite.client.externalplugins.PluginHubHooks
 import net.runelite.mp.client.RuntimeDexConfiguration
+import net.runelite.mp.compat.JdkRetargeter
 import java.io.File
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
@@ -67,9 +68,10 @@ internal class PluginDexer(private val context: Context) : PluginHubHooks.Dexer
                         val bytes = input.getInputStream(entry).use { it.readBytes() }
                         output.putNextEntry(ZipEntry(entry.name))
                         try {
-                            output.write(DesktopRegexTransformer.rewrite(entry.name, bytes, jarClasses))
+                            // Hub jars get the regex relocation on top of the JDK member table.
+                            output.write(JdkRetargeter.rewrite(entry.name, bytes, jarClasses, true))
                         } catch (e: IllegalArgumentException) {
-                            throw PluginHubHooks.DexException("desktop regex compatibility: ${e.message}", e)
+                            throw PluginHubHooks.DexException("JDK API compatibility: ${e.message}", e)
                         }
                         output.closeEntry()
                     }
@@ -173,8 +175,11 @@ internal class PluginDexer(private val context: Context) : PluginHubHooks.Dexer
 
     companion object
     {
-        /** Core-library types must match the APK, including Flow publisher signatures. */
-        private const val FORMAT = "v4-regex21-${RuntimeDexConfiguration.CACHE_VERSION}"
+        /**
+         * Core-library types must match the APK, including Flow publisher signatures. `jdk1` is
+         * the first JdkRetargets table; bump it whenever a row or shim name changes.
+         */
+        private const val FORMAT = "v5-jdk1-${RuntimeDexConfiguration.CACHE_VERSION}"
         private val DEX_NAME = Regex("""classes\d*\.dex""")
         private val DESKTOP_ONLY = listOf(
             "org/lwjgl/" to "LWJGL (desktop OpenGL)",

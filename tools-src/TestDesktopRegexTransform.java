@@ -1,7 +1,7 @@
 import java.nio.file.*;
 import java.util.*;
 import java.util.zip.*;
-import net.runelite.mp.plugins.DesktopRegexTransformer;
+import net.runelite.mp.compat.JdkRetargeter;
 
 /** Transform a real hub JAR and verify unchanged resources and idempotent class rewrites. */
 public class TestDesktopRegexTransform {
