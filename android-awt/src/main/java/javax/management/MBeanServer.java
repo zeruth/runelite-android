@@ -31,17 +31,25 @@
 package javax.management;
 
 /**
- * The in-process subset of {@code javax.management.MBeanServer}. Android has no JMX agent;
- * {@code net.runelite.awt.impl.StubMBeanServer} keeps the registered beans in a map.
+ * The in-process subset of {@code javax.management.MBeanServer}. Android has no JMX agent or
+ * remote connector; {@link MBeanServerFactory} hands out an in-memory registry that introspects
+ * Standard MBean and MXBean interfaces by reflection.
  */
-@net.runelite.awt.ShadowStub("registration, attributes, invoke and queries only: no MBeanInfo, notifications, class-loader repository or deserialization")
+@net.runelite.awt.ShadowStub("registration, attributes, invoke and queries only: no MBeanInfo, notifications, open-type mapping, class-loader repository or deserialization")
 public interface MBeanServer {
     ObjectInstance registerMBean(Object obj, ObjectName name) throws Exception;
     void unregisterMBean(ObjectName name) throws Exception;
+    ObjectInstance getObjectInstance(ObjectName name) throws InstanceNotFoundException;
     boolean isRegistered(ObjectName name);
     Object getAttribute(ObjectName name, String attribute) throws Exception;
+    AttributeList getAttributes(ObjectName name, String[] attributes) throws Exception;
     void setAttribute(ObjectName name, Attribute attribute) throws Exception;
+    AttributeList setAttributes(ObjectName name, AttributeList attributes) throws Exception;
     Object invoke(ObjectName name, String op, Object[] params, String[] signature) throws Exception;
     java.util.Set<ObjectName> queryNames(ObjectName name, QueryExp query);
+    java.util.Set<ObjectInstance> queryMBeans(ObjectName name, QueryExp query);
     Integer getMBeanCount();
+    String getDefaultDomain();
+    String[] getDomains();
+    boolean isInstanceOf(ObjectName name, String className) throws InstanceNotFoundException;
 }

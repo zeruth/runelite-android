@@ -26,8 +26,10 @@
 package java.awt;
 
 /**
- * Base of the type-safe enumerations of {@link JobAttributes} and
- * {@link PageAttributes}.
+ * Base of the type-safe enumerations of {@link JobAttributes},
+ * {@link PageAttributes} and {@link BufferCapabilities.FlipContents}.
+ *
+ * @author      David Mendenhall
  */
 // 8u logs a warning through sun.util.logging.PlatformLogger before the assertion; the logger
 // is not part of the shadow surface, the assertion is kept.

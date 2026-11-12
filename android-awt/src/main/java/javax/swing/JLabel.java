@@ -31,6 +31,9 @@
 package javax.swing;
 
 public class JLabel extends JComponent implements SwingConstants, javax.accessibility.Accessible {
+    private static final String uiClassID = "LabelUI";
+    public javax.swing.plaf.LabelUI getUI() { return (javax.swing.plaf.LabelUI) ui; }
+    public String getUIClassID() { return uiClassID; }
 
     public javax.accessibility.AccessibleContext getAccessibleContext() {
         if (accessibleContext == null) {

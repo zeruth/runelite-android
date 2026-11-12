@@ -31,6 +31,8 @@
 package javax.swing;
 
 public class JButton extends AbstractButton implements javax.accessibility.Accessible {
+    private static final String uiClassID = "ButtonUI";
+    public String getUIClassID() { return uiClassID; }
 
     public javax.accessibility.AccessibleContext getAccessibleContext() {
         if (accessibleContext == null) {

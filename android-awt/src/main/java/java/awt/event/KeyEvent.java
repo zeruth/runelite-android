@@ -62,6 +62,14 @@ public class KeyEvent extends InputEvent {
     public static final int VK_UP = 38;
     public static final int VK_RIGHT = 39;
     public static final int VK_DOWN = 40;
+    /** Constant for the numeric keypad <b>up</b> arrow key. */
+    public static final int VK_KP_UP = 0xE0;
+    /** Constant for the numeric keypad <b>down</b> arrow key. */
+    public static final int VK_KP_DOWN = 0xE1;
+    /** Constant for the numeric keypad <b>left</b> arrow key. */
+    public static final int VK_KP_LEFT = 0xE2;
+    /** Constant for the numeric keypad <b>right</b> arrow key. */
+    public static final int VK_KP_RIGHT = 0xE3;
     public static final int VK_COMMA = 44;
     public static final int VK_MINUS = 45;
     public static final int VK_PERIOD = 46;

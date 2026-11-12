@@ -30,6 +30,8 @@
  */
 package javax.swing;
 public class JRadioButtonMenuItem extends JMenuItem implements javax.accessibility.Accessible {
+    private static final String uiClassID = "RadioButtonMenuItemUI";
+    public String getUIClassID() { return uiClassID; }
 
     public javax.accessibility.AccessibleContext getAccessibleContext() {
         if (accessibleContext == null) {

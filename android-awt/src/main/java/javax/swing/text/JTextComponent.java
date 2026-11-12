@@ -34,6 +34,8 @@ import javax.swing.JComponent;
 import javax.swing.event.CaretListener;
 
 public abstract class JTextComponent extends JComponent implements javax.accessibility.Accessible {
+    public javax.swing.plaf.TextUI getUI() { return (javax.swing.plaf.TextUI) ui; }
+    public void setUI(javax.swing.plaf.TextUI ui) { super.setUI(ui); }
 
     public javax.accessibility.AccessibleContext getAccessibleContext() {
         if (accessibleContext == null) {

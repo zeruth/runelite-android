@@ -31,6 +31,8 @@
 package javax.swing;
 
 public class JMenu extends JMenuItem implements javax.accessibility.Accessible {
+    private static final String uiClassID = "MenuUI";
+    public String getUIClassID() { return uiClassID; }
 
     public javax.accessibility.AccessibleContext getAccessibleContext() {
         if (accessibleContext == null) {
