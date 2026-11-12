@@ -46,14 +46,37 @@ public abstract class GraphicsConfiguration {
     // NoSuchMethodError on first frame and the screen stays black (toggling
     // GpuGlesPlugin doesn't recover because the dead thread won't restart).
     // Backed by a heap-resident BufferedImage via BufferedBackedVolatileImage.
-    // Overloads that take ImageCapabilities are intentionally omitted; they declare
-    // `throws AWTException` and the gamepack only calls the simple forms.
     public java.awt.image.VolatileImage createCompatibleVolatileImage(int width, int height) {
         return new net.runelite.awt.impl.BufferedBackedVolatileImage(width, height, Transparency.OPAQUE);
     }
 
     public java.awt.image.VolatileImage createCompatibleVolatileImage(int width, int height, int transparency) {
         return new net.runelite.awt.impl.BufferedBackedVolatileImage(width, height, transparency);
+    }
+
+    public java.awt.image.VolatileImage createCompatibleVolatileImage(int width, int height,
+            ImageCapabilities caps) throws AWTException {
+        return createCompatibleVolatileImage(width, height, caps, Transparency.OPAQUE);
+    }
+
+    /** As on desktop: only a request for acceleration the image cannot give fails. */
+    public java.awt.image.VolatileImage createCompatibleVolatileImage(int width, int height,
+            ImageCapabilities caps, int transparency) throws AWTException {
+        java.awt.image.VolatileImage vi = createCompatibleVolatileImage(width, height, transparency);
+        if (caps != null && caps.isAccelerated() && !vi.getCapabilities().isAccelerated()) {
+            throw new AWTException("Supplied image capabilities could not be met by this graphics configuration.");
+        }
+        return vi;
+    }
+
+    /** Blitted, unaccelerated buffers: the software raster pipeline has no page flipping. */
+    public BufferCapabilities getBufferCapabilities() {
+        ImageCapabilities caps = getImageCapabilities();
+        return new BufferCapabilities(caps, caps, null);
+    }
+
+    public ImageCapabilities getImageCapabilities() {
+        return new ImageCapabilities(false);
     }
     public java.awt.image.BufferedImage createCompatibleImage(int width,int height){return createCompatibleImage(width,height,Transparency.OPAQUE);}
     public java.awt.image.BufferedImage createCompatibleImage(int width,int height,int transparency){return new java.awt.image.BufferedImage(width,height,transparency==Transparency.OPAQUE?java.awt.image.BufferedImage.TYPE_INT_RGB:java.awt.image.BufferedImage.TYPE_INT_ARGB);}
