@@ -51,6 +51,8 @@ import java.io.InputStream;
 public final class WavDecoder {
     private static final int FORMAT_PCM = 1;
     private static final int FORMAT_FLOAT = 3;
+    private static final int FORMAT_ALAW = 6;
+    private static final int FORMAT_ULAW = 7;
     private static final int FORMAT_EXTENSIBLE = 0xFFFE;
 
     private WavDecoder() {
@@ -58,11 +60,33 @@ public final class WavDecoder {
 
     public static AudioInputStream decode(InputStream in) throws UnsupportedAudioFileException, IOException {
         DataInputStream data = new DataInputStream(in);
+        Header header = readHeader(data);
+        // Streaming encoders write 0 / 0xFFFFFFFF for an unknown length; read to EOF then.
+        if (header.dataLength < 0) return readToEnd(data, header.format);
+        long frames = header.format.getFrameSize() > 0 ? header.dataLength / header.format.getFrameSize() : AudioSystem.NOT_SPECIFIED;
+        return new AudioInputStream(new BoundedStream(in, header.dataLength), header.format, frames);
+    }
+
+    /** What precedes the samples: the format, the RIFF length and the data length (-1 when unknown). */
+    static final class Header {
+        final AudioFormat format;
+        final long riffLength;
+        final long dataLength;
+
+        Header(AudioFormat format, long riffLength, long dataLength) {
+            this.format = format;
+            this.riffLength = riffLength;
+            this.dataLength = dataLength;
+        }
+    }
+
+    /** Reads up to the first byte of the data chunk. */
+    static Header readHeader(DataInputStream data) throws UnsupportedAudioFileException, IOException {
         byte[] id = new byte[4];
         try {
             data.readFully(id);
             if (!tag(id, "RIFF")) throw new UnsupportedAudioFileException("Not a RIFF/WAVE stream");
-            readIntLE(data);
+            long riff = readIntLE(data) & 0xFFFFFFFFL;
             data.readFully(id);
             if (!tag(id, "WAVE")) throw new UnsupportedAudioFileException("Not a RIFF/WAVE stream");
 
@@ -77,10 +101,8 @@ public final class WavDecoder {
                     if ((size & 1) != 0) data.skipBytes(1);
                 } else if (tag(id, "data")) {
                     if (format == null) throw new UnsupportedAudioFileException("WAVE data chunk before fmt chunk");
-                    // Streaming encoders write 0 / 0xFFFFFFFF for an unknown length; read to EOF then.
-                    if (size == 0 || size == 0xFFFFFFFFL) return readToEnd(data, format);
-                    long frames = format.getFrameSize() > 0 ? size / format.getFrameSize() : AudioSystem.NOT_SPECIFIED;
-                    return new AudioInputStream(new BoundedStream(in, size), format, frames);
+                    boolean unknown = size == 0 || size == 0xFFFFFFFFL;
+                    return new Header(format, riff == 0 || riff == 0xFFFFFFFFL ? -1 : riff, unknown ? -1 : size);
                 } else {
                     skipFully(data, size + (size & 1));
                 }
@@ -106,6 +128,8 @@ public final class WavDecoder {
         AudioFormat.Encoding encoding;
         if (tag == FORMAT_PCM) encoding = bits <= 8 ? AudioFormat.Encoding.PCM_UNSIGNED : AudioFormat.Encoding.PCM_SIGNED;
         else if (tag == FORMAT_FLOAT) encoding = AudioFormat.Encoding.PCM_FLOAT;
+        else if (tag == FORMAT_ALAW && bits == 8) encoding = AudioFormat.Encoding.ALAW;
+        else if (tag == FORMAT_ULAW && bits == 8) encoding = AudioFormat.Encoding.ULAW;
         else throw new UnsupportedAudioFileException("Unsupported WAVE encoding 0x" + Integer.toHexString(tag));
         if (channels <= 0 || sampleRate <= 0 || bits <= 0) throw new UnsupportedAudioFileException("Invalid WAVE fmt chunk");
         int frameSize = blockAlign > 0 ? blockAlign : ((bits + 7) / 8) * channels;
@@ -131,7 +155,7 @@ public final class WavDecoder {
     private static int u16(byte[] b, int off) { return (b[off] & 0xFF) | ((b[off + 1] & 0xFF) << 8); }
     private static int s32(byte[] b, int off) { return u16(b, off) | (u16(b, off + 2) << 16); }
 
-    private static void skipFully(InputStream in, long n) throws IOException {
+    static void skipFully(InputStream in, long n) throws IOException {
         while (n > 0) {
             long skipped = in.skip(n);
             if (skipped <= 0) {
@@ -152,7 +176,7 @@ public final class WavDecoder {
     }
 
     /** Stops at the end of the data chunk so trailing chunks (LIST, id3) aren't played. */
-    private static final class BoundedStream extends InputStream {
+    static final class BoundedStream extends InputStream {
         private final InputStream in;
         private long left;
 
