@@ -33,8 +33,14 @@ Header options (space separated after ``// host-contract:``):
                          that reaches a JDK-internal class reflectively)
     fixture=keystore     a throw-away PKCS12 keystore (password ``test-only``, CN=localhost) is generated
                          and its path appended to the arguments
+    patched-classpath=okhttp
+                         the patched run also gets okhttp/okio (the versions the APK ships, from the
+                         Gradle cache or Maven Central, checked against gradle/verification-metadata.xml)
+                         and the app's ``OkHttpWebSocketTransport`` compiled against the shadow, so
+                         ``java.net.http.WebSocket`` runs over the transport the APK uses
 """
 import argparse
+import hashlib
 import os
 from pathlib import Path
 import re
@@ -42,6 +48,7 @@ import shutil
 import subprocess
 import sys
 import time
+import urllib.request
 
 REPO = Path(__file__).resolve().parent.parent
 SHADOW = REPO / "android-awt/src/main/java"
@@ -637,6 +644,57 @@ def make_fixtures(needed, tool, build):
     return fixtures
 
 
+# The okhttp the APK ships (android/build.gradle.kts) and the app sources that run on it.
+OKHTTP = (("com.squareup.okhttp3", "okhttp", "3.14.9"), ("com.squareup.okio", "okio", "1.17.2"))
+OKHTTP_SOURCES = ("android/src/androidMain/java/net/runelite/mp/http/OkHttpWebSocketTransport.java",)
+
+
+def maven_jar(group, name, version, build):
+    """The jar from the Gradle cache, else Maven Central, only if its sha256 is the verified one."""
+    file = f"{name}-{version}.jar"
+    metadata = (REPO / "gradle/verification-metadata.xml").read_text(encoding="utf-8")
+    match = re.search(rf'<component group="{re.escape(group)}" name="{re.escape(name)}" version="{re.escape(version)}">'
+                      rf'(?:(?!</component>).)*?<artifact name="{re.escape(file)}">\s*<sha256 value="([0-9a-f]+)"', metadata, re.S)
+    if not match:
+        raise SystemExit(f"{group}:{name}:{version} has no sha256 in gradle/verification-metadata.xml")
+    expected = match.group(1)
+
+    def digest(path):
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    gradle_home = Path(os.environ.get("GRADLE_USER_HOME") or Path.home() / ".gradle")
+    downloaded = build / "deps" / file
+    candidates = sorted((gradle_home / "caches/modules-2/files-2.1" / group / name / version).glob(f"*/{file}"))
+    for candidate in [*candidates, downloaded]:
+        if candidate.is_file() and digest(candidate) == expected:
+            return candidate
+    url = f"https://repo.maven.apache.org/maven2/{group.replace('.', '/')}/{name}/{version}/{file}"
+    with urllib.request.urlopen(url, timeout=60) as response:
+        data = response.read()
+    if hashlib.sha256(data).hexdigest() != expected:
+        raise SystemExit(f"{url}: sha256 differs from gradle/verification-metadata.xml")
+    downloaded.parent.mkdir(parents=True, exist_ok=True)
+    downloaded.write_bytes(data)
+    return downloaded
+
+
+def make_classpaths(needed, tool, build, compile_flags):
+    classpaths = {}
+    for name in needed:
+        if name != "okhttp":
+            raise SystemExit(f"unknown patched-classpath={name}")
+        jars = [maven_jar(*coordinate, build) for coordinate in OKHTTP]
+        classes = build / "okhttp-transport"
+        shutil.rmtree(classes, ignore_errors=True)
+        classes.mkdir(parents=True)
+        code, output, _ = run(tool, "javac", ["-encoding", "UTF-8", "-nowarn", "-proc:none", *compile_flags,
+                                              "-cp", os.pathsep.join(map(str, jars)), "-d", classes,
+                                              *(REPO / source for source in OKHTTP_SOURCES)])
+        if code:
+            raise SystemExit("the okhttp WebSocket transport does not compile against the shadow:\n" + output)
+        classpaths[name] = [classes, *jars]
+    return classpaths
+
+
 def main():
     parser = argparse.ArgumentParser(description="host contract runner for android-awt")
     parser.add_argument("--java-home", default=os.environ.get("JAVA_HOME"), help="JDK 11+ (default: JAVA_HOME, then PATH)")
@@ -680,6 +738,8 @@ def main():
     # The plain-JDK runs come first: the classes they load tell which JDK classes a patched run can
     # still reach, which decides what may be patched over them.
     fixtures = make_fixtures({c.options.get("fixture") for c in selected}, tool, build)
+    classpaths = make_classpaths({c.options["patched-classpath"] for c in selected if c.options.get("patched-classpath")},
+                                 tool, build, module_flags(compiled, sources))
     results, loaded = [], set()
     logs = build / "class-load"
     shutil.rmtree(logs, ignore_errors=True)
@@ -691,8 +751,11 @@ def main():
             log_option = os.path.relpath(log, REPO).replace("\\", "/")  # a drive letter's colon breaks -Xlog parsing
         except ValueError:
             log_option = str(log)
+        classpath = [tests_dir]
+        if mode == "patched" and contract.options.get("patched-classpath"):
+            classpath += classpaths[contract.options["patched-classpath"]]
         jvm = ["-Djava.awt.headless=true", f"-Xlog:class+load:file={log_option}:none", *contract.jvm_arguments(), *flags,
-               "-cp", tests_dir, contract.name]
+               "-cp", os.pathsep.join(map(str, classpath)), contract.name]
         code, output, elapsed = run(tool, "java", jvm + contract.arguments(mode, fixtures), timeout=180)
         status = "pass" if code == 0 else "error" if code == "timeout" else "fail"
         results.append((contract.name, mode, status, elapsed, output))
