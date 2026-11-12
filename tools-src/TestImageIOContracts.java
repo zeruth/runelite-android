@@ -121,9 +121,19 @@ public final class TestImageIOContracts {
         check(label + " readBytes data", buf.getData()[buf.getOffset()] == 1
             && buf.getData()[buf.getOffset() + 3] == 4);
 
+        // flushBefore may not pass the current position; the JDK throws before flushing.
+        boolean threw = false;
+        try {
+            in.flushBefore(8);
+        } catch (IndexOutOfBoundsException e) {
+            threw = true;
+        }
+        check(label + " flushBefore past position throws", threw
+            && in.getFlushedPosition() == 0);
+        in.seek(8);
         in.flushBefore(8);
         check(label + " flushed position", in.getFlushedPosition() == 8);
-        boolean threw = false;
+        threw = false;
         try {
             in.seek(4);
         } catch (IndexOutOfBoundsException e) {

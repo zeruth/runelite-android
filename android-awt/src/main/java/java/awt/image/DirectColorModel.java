@@ -33,189 +33,205 @@ package java.awt.image;
 import java.awt.Transparency;
 import java.awt.color.ColorSpace;
 
-public class DirectColorModel extends ColorModel {
-    private final int redMask;
-    private final int greenMask;
-    private final int blueMask;
-    private final int alphaMask;
-    private final int redShift;
-    private final int greenShift;
-    private final int blueShift;
-    private final int alphaShift;
+/**
+ * RGB (and optional alpha) packed into one int, short or byte pixel. Components that
+ * are not 8 bits wide are scaled with the JDK's float rounding,
+ * {@code (int) (c * 255f / max + 0.5f)}, so a 565 or 555 round trip lands on the same
+ * values as on the desktop.
+ */
+public class DirectColorModel extends PackedColorModel {
+    private final int red_mask;
+    private final int green_mask;
+    private final int blue_mask;
+    private final int alpha_mask;
 
     public DirectColorModel(int bits, int rmask, int gmask, int bmask) {
         this(bits, rmask, gmask, bmask, 0);
     }
 
     public DirectColorModel(int bits, int rmask, int gmask, int bmask, int amask) {
-        this(ColorSpace.getInstance(ColorSpace.CS_sRGB), bits, rmask, gmask, bmask, amask, false, DataBuffer.TYPE_INT);
+        this(ColorSpace.getInstance(ColorSpace.CS_sRGB), bits, rmask, gmask, bmask, amask, false,
+            getDefaultTransferType(bits));
     }
 
     public DirectColorModel(ColorSpace space, int bits, int rmask, int gmask, int bmask, int amask,
                             boolean isAlphaPremultiplied, int transferType) {
-        super(bits, computeBitSizes(rmask, gmask, bmask, amask),
-            space, amask != 0,
-            isAlphaPremultiplied,
-            amask == 0 ? Transparency.OPAQUE : Transparency.TRANSLUCENT,
-            transferType);
-        this.redMask = rmask;
-        this.greenMask = gmask;
-        this.blueMask = bmask;
-        this.alphaMask = amask;
-        this.redShift = trailingZeros(rmask);
-        this.greenShift = trailingZeros(gmask);
-        this.blueShift = trailingZeros(bmask);
-        this.alphaShift = amask == 0 ? 0 : trailingZeros(amask);
-    }
-
-    public final int getRedMask()   { return redMask; }
-    public final int getGreenMask() { return greenMask; }
-    public final int getBlueMask()  { return blueMask; }
-    public final int getAlphaMask() { return alphaMask; }
-
-    @Override
-    public int getRed(int pixel) {
-        return getColorSpace().isCS_sRGB() ? unpremultiply(component(pixel,redMask), pixel) : getRGB(pixel) >>> 16 & 255;
-    }
-
-    @Override
-    public int getGreen(int pixel) {
-        return getColorSpace().isCS_sRGB() ? unpremultiply(component(pixel,greenMask), pixel) : getRGB(pixel) >>> 8 & 255;
-    }
-
-    @Override
-    public int getBlue(int pixel) {
-        return getColorSpace().isCS_sRGB() ? unpremultiply(component(pixel,blueMask), pixel) : getRGB(pixel) & 255;
-    }
-
-    @Override
-    public int getAlpha(int pixel) {
-        return alphaMask == 0 ? 255 : component(pixel,alphaMask);
-    }
-
-    @Override
-    public int getRGB(int pixel) {
-        int a=getAlpha(pixel),r=unpremultiply(component(pixel,redMask),pixel),g=unpremultiply(component(pixel,greenMask),pixel),b=unpremultiply(component(pixel,blueMask),pixel);
-        if(!getColorSpace().isCS_sRGB()){
-            float[] rgb=getColorSpace().toRGB(new float[]{r/255f,g/255f,b/255f});
-            r=Math.max(0,Math.min(255,Math.round(rgb[0]*255)));g=Math.max(0,Math.min(255,Math.round(rgb[1]*255)));b=Math.max(0,Math.min(255,Math.round(rgb[2]*255)));
+        super(space, bits, rmask, gmask, bmask, amask, isAlphaPremultiplied,
+            amask == 0 ? Transparency.OPAQUE : Transparency.TRANSLUCENT, transferType);
+        if (transferType != DataBuffer.TYPE_BYTE && transferType != DataBuffer.TYPE_USHORT
+                && transferType != DataBuffer.TYPE_INT) {
+            throw new IllegalArgumentException("Bad transfer type: " + transferType);
         }
-        return a<<24|r<<16|g<<8|b;
+        red_mask = rmask;
+        green_mask = gmask;
+        blue_mask = bmask;
+        alpha_mask = amask;
     }
 
-    @Override
-    public SampleModel createCompatibleSampleModel(int w, int h) {
-        int[] masks = alphaMask == 0
-            ? new int[]{redMask, greenMask, blueMask}
-            : new int[]{redMask, greenMask, blueMask, alphaMask};
-        return new SinglePixelPackedSampleModel(transferType, w, h, masks);
+    public final int getRedMask()   { return red_mask; }
+    public final int getGreenMask() { return green_mask; }
+    public final int getBlueMask()  { return blue_mask; }
+    public final int getAlphaMask() { return alpha_mask; }
+
+    private int raw(int pixel, int idx) {
+        return (pixel & maskArray[idx]) >>> maskOffsets[idx];
     }
 
-    private int unpremultiply(int component, int pixel) { int alpha = getAlpha(pixel); return !isAlphaPremultiplied() ? component : alpha == 0 ? 0 : Math.min(255, (component * 255 + alpha / 2) / alpha); }
-    private static int component(int pixel,int mask){if(mask==0)return 0;int shift=Integer.numberOfTrailingZeros(mask);long max=(mask&0xffffffffL)>>>shift;return (int)((((pixel&mask)&0xffffffffL)>>>shift)*255/max);}
-    private static int pack(int value,int mask){if(mask==0)return 0;int shift=Integer.numberOfTrailingZeros(mask);long max=(mask&0xffffffffL)>>>shift;return (int)((value*max+127)/255)<<shift;}
-    @Override public Object getDataElements(int rgb,Object pixel){
-        Object p = pixel != null ? pixel : transferType == DataBuffer.TYPE_BYTE ? new byte[1] : transferType == DataBuffer.TYPE_USHORT ? new short[1] : new int[1];int a=rgb>>>24,r=(rgb>>>16)&255,g=(rgb>>>8)&255,b=rgb&255;
-        if(!getColorSpace().isCS_sRGB()){
-            float[] components=getColorSpace().fromRGB(new float[]{r/255f,g/255f,b/255f});
-            r=Math.round(components[0]*255);g=Math.round(components[1]*255);b=Math.round(components[2]*255);
+    /** The 8-bit, non-premultiplied component of an sRGB pixel. */
+    private int srgbComponent(int pixel, int idx) {
+        int c = raw(pixel, idx);
+        if (isAlphaPremultiplied()) {
+            int a = raw(pixel, 3);
+            return a == 0 ? 0 : (int) (((c * scaleFactors[idx]) * 255.0f / (a * scaleFactors[3])) + 0.5f);
         }
-        if(isAlphaPremultiplied()){r=(r*a+127)/255;g=(g*a+127)/255;b=(b*a+127)/255;}
-        SampleModel.transferSet(p, 0, pack(r,redMask)|pack(g,greenMask)|pack(b,blueMask)|pack(a,alphaMask));return p;
-    }
-    private int[] masks() {
-        return alphaMask == 0 ? new int[]{redMask, greenMask, blueMask}
-            : new int[]{redMask, greenMask, blueMask, alphaMask};
+        return scaleFactors[idx] != 1.0f ? (int) ((c * scaleFactors[idx]) + 0.5f) : c;
     }
 
-    /** Unnormalized fields of the packed pixel, in mask order (OpenJDK 8u). */
-    @Override public int[] getComponents(int pixel, int[] components, int offset) {
-        int[] masks = masks();
-        if (components == null) components = new int[offset + masks.length];
-        for (int i = 0; i < masks.length; i++) {
-            components[offset + i] = (pixel & masks[i]) >>> trailingZeros(masks[i]);
+    /** Non-sRGB spaces go through the color space with normalized components. */
+    private int converted(int pixel, int channel) {
+        float[] comps = new float[3];
+        float alpha = hasAlpha() ? raw(pixel, 3) / (float) ((1L << getComponentSize(3)) - 1) : 1.0f;
+        for (int i = 0; i < 3; i++) {
+            comps[i] = raw(pixel, i) / (float) ((1L << getComponentSize(i)) - 1);
+            if (isAlphaPremultiplied()) comps[i] = alpha == 0.0f ? 0.0f : comps[i] / alpha;
+        }
+        float[] rgb = getColorSpace().toRGB(comps);
+        return Math.max(0, Math.min(255, (int) (rgb[channel] * 255.0f + 0.5f)));
+    }
+
+    public final int getRed(int pixel) {
+        return getColorSpace().isCS_sRGB() ? srgbComponent(pixel, 0) : converted(pixel, 0);
+    }
+
+    public final int getGreen(int pixel) {
+        return getColorSpace().isCS_sRGB() ? srgbComponent(pixel, 1) : converted(pixel, 1);
+    }
+
+    public final int getBlue(int pixel) {
+        return getColorSpace().isCS_sRGB() ? srgbComponent(pixel, 2) : converted(pixel, 2);
+    }
+
+    public final int getAlpha(int pixel) {
+        if (!hasAlpha()) {
+            return 0xff;
+        }
+        int a = raw(pixel, 3);
+        return scaleFactors[3] != 1.0f ? (int) (a * scaleFactors[3] + 0.5f) : a;
+    }
+
+    public final int getRGB(int pixel) {
+        return (getAlpha(pixel) << 24) | (getRed(pixel) << 16) | (getGreen(pixel) << 8) | getBlue(pixel);
+    }
+
+    public int getRed(Object inData)   { return getRed(singlePixel(inData)); }
+    public int getGreen(Object inData) { return getGreen(singlePixel(inData)); }
+    public int getBlue(Object inData)  { return getBlue(singlePixel(inData)); }
+    public int getAlpha(Object inData) { return getAlpha(singlePixel(inData)); }
+    public int getRGB(Object inData)   { return getRGB(singlePixel(inData)); }
+
+    public Object getDataElements(int rgb, Object pixel) {
+        int red = (rgb >> 16) & 0xff;
+        int grn = (rgb >> 8) & 0xff;
+        int blu = rgb & 0xff;
+        int value = 0;
+        float factor = 1.0f / 255.0f;
+        int precision = 8;
+        if (!getColorSpace().isCS_sRGB()) {
+            float[] comps = getColorSpace().fromRGB(new float[]{red * factor, grn * factor, blu * factor});
+            red = Math.round(comps[0] * 255.0f);
+            grn = Math.round(comps[1] * 255.0f);
+            blu = Math.round(comps[2] * 255.0f);
+        }
+        if (hasAlpha()) {
+            int alp = (rgb >> 24) & 0xff;
+            if (isAlphaPremultiplied()) {
+                factor *= alp * (1.0f / 255.0f);
+                precision = -1;
+            }
+            int bits = getComponentSize(3);
+            if (bits != 8) {
+                int max = (1 << bits) - 1;
+                alp = Math.min(max, (int) ((alp * (1.0f / 255.0f) * max) + 0.5f));
+            }
+            value = alp << maskOffsets[3];
+        }
+        value |= scale(red, 0, factor, precision) << maskOffsets[0];
+        value |= scale(grn, 1, factor, precision) << maskOffsets[1];
+        value |= scale(blu, 2, factor, precision) << maskOffsets[2];
+        return storePixel(value, pixel);
+    }
+
+    private int scale(int c, int idx, float factor, int precision) {
+        int bits = getComponentSize(idx);
+        if (bits == precision) {
+            return c;
+        }
+        int max = (int) ((1L << bits) - 1);
+        return Math.min(max, (int) ((c * factor * max) + 0.5f));
+    }
+
+    public final int[] getComponents(int pixel, int[] components, int offset) {
+        if (components == null) {
+            components = new int[offset + getNumComponents()];
+        }
+        for (int i = 0; i < getNumComponents(); i++) {
+            components[offset + i] = raw(pixel, i);
         }
         return components;
     }
 
-    @Override public int[] getComponents(Object pixel, int[] components, int offset) {
-        int intpixel;
-        switch (transferType) {
-            case DataBuffer.TYPE_BYTE: intpixel = ((byte[]) pixel)[0] & 0xff; break;
-            case DataBuffer.TYPE_USHORT: intpixel = ((short[]) pixel)[0] & 0xffff; break;
-            case DataBuffer.TYPE_INT: intpixel = ((int[]) pixel)[0]; break;
-            default: throw new UnsupportedOperationException("This method has not been "
-                + "implemented for transferType " + transferType);
-        }
-        return getComponents(intpixel, components, offset);
+    public final int[] getComponents(Object pixel, int[] components, int offset) {
+        return getComponents(singlePixel(pixel), components, offset);
     }
 
-    @Override public int getDataElement(int[] components, int offset) {
-        int[] masks = masks();
+    public int getDataElement(int[] components, int offset) {
         int pixel = 0;
-        for (int i = 0; i < masks.length; i++) {
-            pixel |= (components[offset + i] << trailingZeros(masks[i])) & masks[i];
+        for (int i = 0; i < getNumComponents(); i++) {
+            pixel |= (components[offset + i] << maskOffsets[i]) & maskArray[i];
         }
         return pixel;
     }
 
-    @Override public Object getDataElements(int[] components, int offset, Object obj) {
-        int pixel = getDataElement(components, offset);
-        switch (transferType) {
-            case DataBuffer.TYPE_BYTE: {
-                byte[] out = obj == null ? new byte[1] : (byte[]) obj;
-                out[0] = (byte) pixel;
-                return out;
-            }
-            case DataBuffer.TYPE_USHORT: {
-                short[] out = obj == null ? new short[1] : (short[]) obj;
-                out[0] = (short) pixel;
-                return out;
-            }
-            case DataBuffer.TYPE_INT: {
-                int[] out = obj == null ? new int[1] : (int[]) obj;
-                out[0] = pixel;
-                return out;
-            }
-            default: throw new UnsupportedOperationException("This method has not been "
-                + "implemented for transferType " + transferType);
+    public Object getDataElements(int[] components, int offset, Object obj) {
+        return storePixel(getDataElement(components, offset), obj);
+    }
+
+    public final WritableRaster createCompatibleWritableRaster(int w, int h) {
+        if (w <= 0 || h <= 0) {
+            throw new IllegalArgumentException("Width (" + w + ") and height (" + h + ") cannot be <= 0");
         }
+        int[] masks = hasAlpha()
+            ? new int[]{red_mask, green_mask, blue_mask, alpha_mask}
+            : new int[]{red_mask, green_mask, blue_mask};
+        int type = pixel_bits > 16 ? DataBuffer.TYPE_INT : pixel_bits > 8 ? DataBuffer.TYPE_USHORT : DataBuffer.TYPE_BYTE;
+        return Raster.createPackedRaster(type, w, h, masks, null);
     }
 
-    @Override public boolean isCompatibleRaster(Raster raster) {
-        if (!(raster.getSampleModel() instanceof SinglePixelPackedSampleModel) || raster.getTransferType() != transferType) return false;
-        int[] masks = ((SinglePixelPackedSampleModel)raster.getSampleModel()).getBitMasks();
-        int[] expected = alphaMask == 0 ? new int[]{redMask, greenMask, blueMask} : new int[]{redMask, greenMask, blueMask, alphaMask};
-        return java.util.Arrays.equals(masks, expected);
+    public boolean isCompatibleRaster(Raster raster) {
+        SampleModel sm = raster.getSampleModel();
+        if (!(sm instanceof SinglePixelPackedSampleModel) || sm.getNumBands() != getNumComponents()) {
+            return false;
+        }
+        int[] bitMasks = ((SinglePixelPackedSampleModel) sm).getBitMasks();
+        for (int i = 0; i < getNumComponents(); i++) {
+            if (bitMasks[i] != maskArray[i]) {
+                return false;
+            }
+        }
+        return raster.getTransferType() == transferType;
     }
 
-    // OpenJDK 8u PackedColorModel.isCompatibleSampleModel: same packing, band count and masks.
-    @Override public boolean isCompatibleSampleModel(SampleModel sm) {
-        if (!(sm instanceof SinglePixelPackedSampleModel)) return false;
-        if (sm.getNumBands() != getNumComponents() || sm.getTransferType() != transferType) return false;
-        int[] masks = ((SinglePixelPackedSampleModel)sm).getBitMasks();
-        int[] expected = alphaMask == 0 ? new int[]{redMask, greenMask, blueMask} : new int[]{redMask, greenMask, blueMask, alphaMask};
-        return java.util.Arrays.equals(masks, expected);
-    }
-    private static int trailingZeros(int mask) {
-        if (mask == 0) return 0;
-        int n = 0;
-        while ((mask & 1) == 0) { mask >>>= 1; n++; }
-        return n;
+    public final ColorModel coerceData(WritableRaster raster, boolean isAlphaPremultiplied) {
+        if (!hasAlpha() || isAlphaPremultiplied() == isAlphaPremultiplied) {
+            return this;
+        }
+        coerceRaster(raster, isAlphaPremultiplied);
+        return new DirectColorModel(getColorSpace(), pixel_bits, red_mask, green_mask, blue_mask, alpha_mask,
+            isAlphaPremultiplied, transferType);
     }
 
-    private static int[] computeBitSizes(int rm, int gm, int bm, int am) {
-        int[] out = am == 0 ? new int[3] : new int[4];
-        out[0] = bitCount(rm);
-        out[1] = bitCount(gm);
-        out[2] = bitCount(bm);
-        if (am != 0) out[3] = bitCount(am);
-        return out;
-    }
-
-    private static int bitCount(int mask) {
-        int n = 0;
-        while (mask != 0) { if ((mask & 1) != 0) n++; mask >>>= 1; }
-        return n;
+    public String toString() {
+        return "DirectColorModel: rmask=" + Integer.toHexString(red_mask) + " gmask=" + Integer.toHexString(green_mask)
+            + " bmask=" + Integer.toHexString(blue_mask) + " amask=" + Integer.toHexString(alpha_mask);
     }
 }

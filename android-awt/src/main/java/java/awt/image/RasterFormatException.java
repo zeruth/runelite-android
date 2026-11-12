@@ -31,6 +31,7 @@ package java.awt.image;
  * invalid layout information in the {@link Raster}.
  */
 public class RasterFormatException extends java.lang.RuntimeException {
+    private static final long serialVersionUID = 96598996116164315L;
 
     /**
      * Constructs a new <code>RasterFormatException</code> with the

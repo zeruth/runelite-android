@@ -3,18 +3,19 @@ package net.runelite.mp.util;
 import java.util.Optional;
 
 /**
- * Replacement for {@code ProcessHandle.Info#command()} on Android. The runtime returns the
- * raw {@code /proc/PID/cmdline} buffer, which is a NUL-separated argv on Linux/Android
- * (e.g. {@code "app_process64\0--application\0...\0"}). The patched RuneScape client feeds
- * that string into its login machine-info packet via {@code xi.cq}, which throws
- * {@link IllegalArgumentException} on any string containing a NUL — manifesting as
- * "error_game_crash" the moment the login button is hit.
+ * Guard on {@code ProcessHandle.Info#command()} for the game client. The client feeds the
+ * command into its login machine-info packet via {@code xi.cq}, which throws
+ * {@link IllegalArgumentException} on any string containing a NUL, manifesting as
+ * "error_game_crash" the moment the login button is hit. An earlier {@code ProcessHandle}
+ * returned the raw NUL-separated {@code /proc/PID/cmdline}; the android-awt shadow now
+ * answers the {@code /proc/self/exe} path ({@code /system/bin/app_process64}), so this only
+ * truncates at a NUL should a future source bring one back.
  *
  * <p>{@code DesugarLambdasTask} rewrites every {@code INVOKEINTERFACE ProcessHandle$Info.command()}
- * site to an {@code INVOKESTATIC} call here with descriptor
- * {@code (Ljava/lang/Object;)Ljava/util/Optional;}. We take {@code Object} because Android's
- * {@code android.jar} hides {@code ProcessHandle} / {@code ProcessHandle$Info} from javac
- * (the classes do exist at runtime since API 26), so we reach the method reflectively.
+ * site of the injected client to an {@code INVOKESTATIC} call here with descriptor
+ * {@code (Ljava/lang/Object;)Ljava/util/Optional;}; the receiver passes through as
+ * {@code Object}, so the rewrite needs no cast and the shim no link to the shadow class
+ * (see android-awt/PORTING.md, section 10).
  */
 public final class ProcessHandleShim {
     private ProcessHandleShim() {

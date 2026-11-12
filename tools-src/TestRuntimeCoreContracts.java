@@ -40,7 +40,7 @@ public final class TestRuntimeCoreContracts {
         String[] nativeText={"native"};Clipboard.Bridge bridge=new Clipboard.Bridge(){public String readText(){return nativeText[0];}public void writeText(String text){nativeText[0]=text;}};
         clipboard.setBridge(bridge);check(clipboard.getData(DataFlavor.stringFlavor).equals("native"),"native clipboard read");
         clipboard.setContents(new StringSelection("export"),null);check(nativeText[0].equals("export"),"native clipboard write");clipboard.clearBridge(bridge);
-        FloatControl control=new FloatControl(FloatControl.Type.VOLUME,0,1,.02f,25,.5f,"units","low","mid","high");
+        FloatControl control=new FloatControl(FloatControl.Type.VOLUME,0,1,.02f,25,.5f,"units","low","mid","high"){};
         check(control.getPrecision()==.02f&&control.getUpdatePeriod()==25&&control.getMinLabel().equals("low"),"float control metadata");
         PopupMenu popup=new PopupMenu("test");popup.add(new MenuItem("one"));check(popup.getItemCount()==1,"AWT menu model");
         javax.swing.JPanel parent=new javax.swing.JPanel();

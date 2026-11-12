@@ -55,6 +55,15 @@ public abstract class DataBuffer {
     protected int offset;
     protected int[] offsets;
 
+    private static final int[] DATA_TYPE_SIZE = {8, 16, 16, 32, 32, 64};
+
+    public static int getDataTypeSize(int type) {
+        if (type < TYPE_BYTE || type > TYPE_DOUBLE) {
+            throw new IllegalArgumentException("Unknown data type " + type);
+        }
+        return DATA_TYPE_SIZE[type];
+    }
+
     protected DataBuffer(int dataType, int size) {
         this(dataType, size, 1, 0);
     }
