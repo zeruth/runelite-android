@@ -507,7 +507,7 @@ def jdk_fixture_plugin():
     w.method_ref('java/lang/String', 'length', '()I')                                       # floor: resolved
     w.method_ref('java/lang/String', 'isEmpty', '()Z')                                      # floor: resolved
     w.field_ref('java/lang/String', 'CASE_INSENSITIVE_ORDER', 'Ljava/util/Comparator;')     # floor: resolved
-    w.method_ref('java/lang/String', 'repeat', '(I)Ljava/lang/String;')                    # D8 backport
+    w.method_ref('java/lang/String', 'repeat', '(I)Ljava/lang/String;')                    # D8 backport, but shimmed
     w.imethod_ref('java/util/List', 'of', '([Ljava/lang/Object;)Ljava/util/List;')         # D8 backport
     w.method_ref('java/util/stream/Collectors', 'toUnmodifiableList', '()Ljava/util/stream/Collector;')  # config
     w.method_ref('java/util/ArrayList', 'toArray', '(Ljava/util/function/IntFunction;)[Ljava/lang/Object;')  # inherited amend
@@ -580,7 +580,9 @@ class JdkGapsTest(unittest.TestCase):
     def test_dispositions_of_fixture_members(self):
         c = self.classifier
         expect = {
-            ('method', 'java/lang/String', 'repeat', '(I)Ljava/lang/String;'): ('desugar', 'D8 backport'),
+            # D8 backports repeat too, but the table row wins: the retargeter runs first.
+            ('method', 'java/lang/String', 'repeat', '(I)Ljava/lang/String;'):
+                ('retarget', 'JdkRetargeter -> net.runelite.mp.compat.jdk.JdkStrings (client + hub jars)'),
             ('method', 'java/util/List', 'of', '([Ljava/lang/Object;)Ljava/util/List;'): ('desugar', 'D8 backport'),
             ('method', 'java/util/stream/Collectors', 'toUnmodifiableList', '()Ljava/util/stream/Collector;'):
                 ('desugar', 'desugar_jdk_libs 2.1.4 static_retarget'),
@@ -630,7 +632,7 @@ class JdkGapsTest(unittest.TestCase):
             c = scan.JdkGapClassifier(floor, scan.ApiLevelSurface(self.api, 35), scan.DesugarConfig(DESUGAR_JSON, 26),
                                       self.api, self.shadow)
             self.assertIsNone(c.classify('method', 'java/lang/StringBuilder', 'setLength', '(I)V'))
-            self.assertEqual(c.classify('method', 'java/lang/String', 'repeat', '(I)Ljava/lang/String;')['disposition'], 'desugar')
+            self.assertEqual(c.classify('method', 'java/lang/String', 'repeat', '(I)Ljava/lang/String;')['disposition'], 'retarget')
         finally:
             floor.close()
 
@@ -680,17 +682,17 @@ class JdkGapsTest(unittest.TestCase):
         self.assertEqual(report['gaps'][0]['disposition'], 'retarget')
         self.assertEqual([p['name'] for p in report['plugins']], ['(injected client)', 'big'])
         big = report['plugins'][1]['dispositions']
-        self.assertEqual(big['desugar'], 5)                 # repeat, List.of, toUnmodifiableList, toArray, Flow
+        self.assertEqual(big['desugar'], 4)                 # List.of, toUnmodifiableList, toArray, Flow
         self.assertEqual(big['already-on-device-API'], 4)   # toList, formatted, HexFormat class + HexFormat.of
         self.assertEqual(big['unsupported'], 2)             # Thread.ofVirtual and its return type
-        self.assertEqual(big['retarget'], 2)                # onSpinWait, asMatchPredicate
+        self.assertEqual(big['retarget'], 3)                # repeat, onSpinWait, asMatchPredicate
         self.assertEqual(report['dispositions']['unsupported']['signatures'], 2)
 
         md = scan.render_jdk_gaps_markdown(report)
         self.assertIn('| retarget |', md)
         self.assertIn('## already-on-device-API', md)
         self.assertIn('`java/util/stream/Stream.toList()Ljava/util/List;` | method | 34 | android API 34 |', md)
-        self.assertIn('| (injected client) | 0 | 1 | 1 | 0 | 0 | 0 | 1 |', md)
+        self.assertIn('| (injected client) | 0 | 1 | 1 | 1 | 0 | 0 | 0 |', md)
 
     def test_main_offline_writes_both_outputs(self):
         cache = os.path.join(self.tmp.name, 'cache')

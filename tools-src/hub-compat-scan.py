@@ -1394,12 +1394,14 @@ class JdkGapClassifier(object):
         def done(disposition, via):
             return {'disposition': disposition, 'via': via, 'androidSince': since}
 
+        # A table row wins over D8: JdkRetargeter rewrites the call before D8 ever sees it,
+        # so the shim is what runs (String.repeat/strip/isBlank pin the JDK semantics).
+        if shim:
+            return done('retarget', shim)
         via = self.desugar.covers(kind, owner, name, desc, self.ancestors(owner)) if self.desugar else None
         via = via or d8_backport(kind, owner, name, desc)
         if via:
             return done('desugar', via)
-        if shim:
-            return done('retarget', shim)
         if self._present(self.device, kind, owner, name, desc):
             return done('already-on-device-API', 'android API %s' % (since if since is not None else '<= %d' % self.device_level()))
         why = _table_lookup(UNSUPPORTED, owner, name)

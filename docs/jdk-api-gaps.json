@@ -1,6 +1,6 @@
 {
  "_comment": "JDK 9-21 java.*/javax.* references the floor API lacks, from tools-src/hub-compat-scan.py --jdk-gaps. disposition: desugar = D8 backport or desugar_jdk_libs supplies it at minSdk; retarget = an app shim already rewrites it (via names it) or the dexer needs a retargeting entry (via empty); already-on-device-API = the device API has it, older devices do not; unsupported = nothing on ART can stand in for it.",
- "generatedAt": "2026-11-12T12:58:14Z",
+ "generatedAt": "2026-11-12T13:18:58Z",
  "hubVersion": "1.13.6",
  "minApi": 26,
  "deviceApi": 35,
@@ -13,9 +13,9 @@
  "sourcesScanned": 201,
  "dispositions": {
   "retarget": {
-   "signatures": 13,
-   "plugins": 7,
-   "references": 26
+   "signatures": 18,
+   "plugins": 19,
+   "references": 110
   },
   "unsupported": {
    "signatures": 0,
@@ -28,12 +28,39 @@
    "references": 27
   },
   "desugar": {
-   "signatures": 59,
-   "plugins": 67,
-   "references": 1193
+   "signatures": 54,
+   "plugins": 64,
+   "references": 1109
   }
  },
  "gaps": [
+  {
+   "signature": "method java/lang/String.isBlank()Z",
+   "kind": "method",
+   "owner": "java/lang/String",
+   "name": "isBlank",
+   "descriptor": "()Z",
+   "disposition": "retarget",
+   "via": "JdkRetargeter -> net.runelite.mp.compat.jdk.JdkStrings (client + hub jars)",
+   "androidSince": 33,
+   "pluginCount": 12,
+   "referenceCount": 74,
+   "installs": 1528243,
+   "plugins": [
+    "quest-helper",
+    "shortest-path",
+    "tictac7x-charges",
+    "osrs-tcg",
+    "demonic-larva-tracker",
+    "dink",
+    "slayer-assistant",
+    "nyloer",
+    "watchdog",
+    "tasks-tracker",
+    "brimhaven-agility",
+    "(runelite-client)"
+   ]
+  },
   {
    "signature": "method java/nio/file/Files.writeString(Ljava/nio/file/Path;Ljava/lang/CharSequence;Ljava/nio/charset/Charset;[Ljava/nio/file/OpenOption;)Ljava/nio/file/Path;",
    "kind": "method",
@@ -50,6 +77,24 @@
     "sailing",
     "osrs-tcg",
     "(runelite-client)"
+   ]
+  },
+  {
+   "signature": "method java/lang/String.strip()Ljava/lang/String;",
+   "kind": "method",
+   "owner": "java/lang/String",
+   "name": "strip",
+   "descriptor": "()Ljava/lang/String;",
+   "disposition": "retarget",
+   "via": "JdkRetargeter -> net.runelite.mp.compat.jdk.JdkStrings (client + hub jars)",
+   "androidSince": 33,
+   "pluginCount": 3,
+   "referenceCount": 4,
+   "installs": 421614,
+   "plugins": [
+    "tombs-of-amascut",
+    "odablock",
+    "spamfilter"
    ]
   },
   {
@@ -71,6 +116,40 @@
    ]
   },
   {
+   "signature": "method java/lang/String.repeat(I)Ljava/lang/String;",
+   "kind": "method",
+   "owner": "java/lang/String",
+   "name": "repeat",
+   "descriptor": "(I)Ljava/lang/String;",
+   "disposition": "retarget",
+   "via": "JdkRetargeter -> net.runelite.mp.compat.jdk.JdkStrings (client + hub jars)",
+   "androidSince": 33,
+   "pluginCount": 2,
+   "referenceCount": 3,
+   "installs": 461084,
+   "plugins": [
+    "117hd",
+    "pvp-performance-tracker"
+   ]
+  },
+  {
+   "signature": "method java/lang/String.stripLeading()Ljava/lang/String;",
+   "kind": "method",
+   "owner": "java/lang/String",
+   "name": "stripLeading",
+   "descriptor": "()Ljava/lang/String;",
+   "disposition": "retarget",
+   "via": "JdkRetargeter -> net.runelite.mp.compat.jdk.JdkStrings (client + hub jars)",
+   "androidSince": 33,
+   "pluginCount": 2,
+   "referenceCount": 2,
+   "installs": 461084,
+   "plugins": [
+    "117hd",
+    "pvp-performance-tracker"
+   ]
+  },
+  {
    "signature": "method java/nio/file/Files.writeString(Ljava/nio/file/Path;Ljava/lang/CharSequence;[Ljava/nio/file/OpenOption;)Ljava/nio/file/Path;",
    "kind": "method",
    "owner": "java/nio/file/Files",
@@ -85,6 +164,22 @@
    "plugins": [
     "tombs-of-amascut",
     "odablock"
+   ]
+  },
+  {
+   "signature": "method java/lang/String.stripTrailing()Ljava/lang/String;",
+   "kind": "method",
+   "owner": "java/lang/String",
+   "name": "stripTrailing",
+   "descriptor": "()Ljava/lang/String;",
+   "disposition": "retarget",
+   "via": "JdkRetargeter -> net.runelite.mp.compat.jdk.JdkStrings (client + hub jars)",
+   "androidSince": 33,
+   "pluginCount": 1,
+   "referenceCount": 1,
+   "installs": 134953,
+   "plugins": [
+    "resource-packs"
    ]
   },
   {
@@ -578,33 +673,6 @@
     "collection-log-popup-enhanced",
     "nylo-death-indicators",
     "turael-skipping"
-   ]
-  },
-  {
-   "signature": "method java/lang/String.isBlank()Z",
-   "kind": "method",
-   "owner": "java/lang/String",
-   "name": "isBlank",
-   "descriptor": "()Z",
-   "disposition": "desugar",
-   "via": "D8 backport",
-   "androidSince": 33,
-   "pluginCount": 12,
-   "referenceCount": 74,
-   "installs": 1528243,
-   "plugins": [
-    "quest-helper",
-    "shortest-path",
-    "tictac7x-charges",
-    "osrs-tcg",
-    "demonic-larva-tracker",
-    "dink",
-    "slayer-assistant",
-    "nyloer",
-    "watchdog",
-    "tasks-tracker",
-    "brimhaven-agility",
-    "(runelite-client)"
    ]
   },
   {
@@ -1242,24 +1310,6 @@
    ]
   },
   {
-   "signature": "method java/lang/String.strip()Ljava/lang/String;",
-   "kind": "method",
-   "owner": "java/lang/String",
-   "name": "strip",
-   "descriptor": "()Ljava/lang/String;",
-   "disposition": "desugar",
-   "via": "D8 backport",
-   "androidSince": 33,
-   "pluginCount": 3,
-   "referenceCount": 4,
-   "installs": 421614,
-   "plugins": [
-    "tombs-of-amascut",
-    "odablock",
-    "spamfilter"
-   ]
-  },
-  {
    "signature": "method java/util/Map.of(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/util/Map;",
    "kind": "method",
    "owner": "java/util/Map",
@@ -1367,40 +1417,6 @@
    ]
   },
   {
-   "signature": "method java/lang/String.repeat(I)Ljava/lang/String;",
-   "kind": "method",
-   "owner": "java/lang/String",
-   "name": "repeat",
-   "descriptor": "(I)Ljava/lang/String;",
-   "disposition": "desugar",
-   "via": "D8 backport",
-   "androidSince": 33,
-   "pluginCount": 2,
-   "referenceCount": 3,
-   "installs": 461084,
-   "plugins": [
-    "117hd",
-    "pvp-performance-tracker"
-   ]
-  },
-  {
-   "signature": "method java/lang/String.stripLeading()Ljava/lang/String;",
-   "kind": "method",
-   "owner": "java/lang/String",
-   "name": "stripLeading",
-   "descriptor": "()Ljava/lang/String;",
-   "disposition": "desugar",
-   "via": "D8 backport",
-   "androidSince": 33,
-   "pluginCount": 2,
-   "referenceCount": 2,
-   "installs": 461084,
-   "plugins": [
-    "117hd",
-    "pvp-performance-tracker"
-   ]
-  },
-  {
    "signature": "method java/util/ArrayList.toArray(Ljava/util/function/IntFunction;)[Ljava/lang/Object;",
    "kind": "method",
    "owner": "java/util/ArrayList",
@@ -1501,22 +1517,6 @@
    ]
   },
   {
-   "signature": "method java/lang/String.stripTrailing()Ljava/lang/String;",
-   "kind": "method",
-   "owner": "java/lang/String",
-   "name": "stripTrailing",
-   "descriptor": "()Ljava/lang/String;",
-   "disposition": "desugar",
-   "via": "D8 backport",
-   "androidSince": 33,
-   "pluginCount": 1,
-   "referenceCount": 1,
-   "installs": 134953,
-   "plugins": [
-    "resource-packs"
-   ]
-  },
-  {
    "signature": "method java/time/Duration.toMinutesPart()I",
    "kind": "method",
    "owner": "java/time/Duration",
@@ -1604,10 +1604,10 @@
    "classes": 1715,
    "gaps": 24,
    "dispositions": {
-    "retarget": 10,
+    "retarget": 11,
     "unsupported": 0,
     "already-on-device-API": 1,
-    "desugar": 13
+    "desugar": 12
    },
    "error": null
   },
@@ -1617,10 +1617,10 @@
    "classes": 835,
    "gaps": 19,
    "dispositions": {
-    "retarget": 0,
+    "retarget": 1,
     "unsupported": 0,
     "already-on-device-API": 1,
-    "desugar": 18
+    "desugar": 17
    },
    "error": null
   },
@@ -1630,10 +1630,10 @@
    "classes": 347,
    "gaps": 20,
    "dispositions": {
-    "retarget": 0,
+    "retarget": 2,
     "unsupported": 0,
     "already-on-device-API": 1,
-    "desugar": 19
+    "desugar": 17
    },
    "error": null
   },
@@ -1682,10 +1682,10 @@
    "classes": 126,
    "gaps": 3,
    "dispositions": {
-    "retarget": 1,
+    "retarget": 2,
     "unsupported": 0,
     "already-on-device-API": 0,
-    "desugar": 2
+    "desugar": 1
    },
    "error": null
   },
@@ -1942,10 +1942,10 @@
    "classes": 223,
    "gaps": 20,
    "dispositions": {
-    "retarget": 0,
+    "retarget": 1,
     "unsupported": 0,
     "already-on-device-API": 1,
-    "desugar": 19
+    "desugar": 18
    },
    "error": null
   },
@@ -2124,10 +2124,10 @@
    "classes": 428,
    "gaps": 15,
    "dispositions": {
-    "retarget": 0,
+    "retarget": 1,
     "unsupported": 0,
     "already-on-device-API": 0,
-    "desugar": 15
+    "desugar": 14
    },
    "error": null
   },
@@ -2176,10 +2176,10 @@
    "classes": 761,
    "gaps": 8,
    "dispositions": {
-    "retarget": 1,
+    "retarget": 2,
     "unsupported": 0,
     "already-on-device-API": 2,
-    "desugar": 5
+    "desugar": 4
    },
    "error": null
   },
@@ -2332,10 +2332,10 @@
    "classes": 226,
    "gaps": 21,
    "dispositions": {
-    "retarget": 2,
+    "retarget": 3,
     "unsupported": 0,
     "already-on-device-API": 3,
-    "desugar": 16
+    "desugar": 15
    },
    "error": null
   },
@@ -2501,10 +2501,10 @@
    "classes": 10,
    "gaps": 2,
    "dispositions": {
-    "retarget": 0,
+    "retarget": 1,
     "unsupported": 0,
     "already-on-device-API": 0,
-    "desugar": 2
+    "desugar": 1
    },
    "error": null
   },
@@ -2865,10 +2865,10 @@
    "classes": 175,
    "gaps": 22,
    "dispositions": {
-    "retarget": 1,
+    "retarget": 2,
     "unsupported": 0,
     "already-on-device-API": 0,
-    "desugar": 21
+    "desugar": 20
    },
    "error": null
   },
@@ -2943,10 +2943,10 @@
    "classes": 27,
    "gaps": 1,
    "dispositions": {
-    "retarget": 0,
+    "retarget": 1,
     "unsupported": 0,
     "already-on-device-API": 0,
-    "desugar": 1
+    "desugar": 0
    },
    "error": null
   },
@@ -2995,10 +2995,10 @@
    "classes": 24,
    "gaps": 1,
    "dispositions": {
-    "retarget": 0,
+    "retarget": 1,
     "unsupported": 0,
     "already-on-device-API": 0,
-    "desugar": 1
+    "desugar": 0
    },
    "error": null
   },
@@ -3034,10 +3034,10 @@
    "classes": 407,
    "gaps": 14,
    "dispositions": {
-    "retarget": 0,
+    "retarget": 1,
     "unsupported": 0,
     "already-on-device-API": 1,
-    "desugar": 13
+    "desugar": 12
    },
    "error": null
   },
@@ -3073,10 +3073,10 @@
    "classes": 91,
    "gaps": 7,
    "dispositions": {
-    "retarget": 0,
+    "retarget": 2,
     "unsupported": 0,
     "already-on-device-API": 0,
-    "desugar": 7
+    "desugar": 5
    },
    "error": null
   },
@@ -3320,10 +3320,10 @@
    "classes": 104,
    "gaps": 5,
    "dispositions": {
-    "retarget": 0,
+    "retarget": 1,
     "unsupported": 0,
     "already-on-device-API": 1,
-    "desugar": 4
+    "desugar": 3
    },
    "error": null
   },
@@ -3346,10 +3346,10 @@
    "classes": 100,
    "gaps": 6,
    "dispositions": {
-    "retarget": 2,
+    "retarget": 3,
     "unsupported": 0,
     "already-on-device-API": 0,
-    "desugar": 4
+    "desugar": 3
    },
    "error": null
   },
@@ -4061,10 +4061,10 @@
    "classes": 20,
    "gaps": 8,
    "dispositions": {
-    "retarget": 0,
+    "retarget": 1,
     "unsupported": 0,
     "already-on-device-API": 0,
-    "desugar": 8
+    "desugar": 7
    },
    "error": null
   },
@@ -4074,10 +4074,10 @@
    "classes": 3,
    "gaps": 1,
    "dispositions": {
-    "retarget": 0,
+    "retarget": 1,
     "unsupported": 0,
     "already-on-device-API": 0,
-    "desugar": 1
+    "desugar": 0
    },
    "error": null
   },
