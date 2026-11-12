@@ -289,6 +289,11 @@ if (androidSdkAvailable) {
                 error("releaseRuntimeClasspath lacks plugin API modules: ${missing.joinToString()}")
             }
             val libraries = artifacts.map { it.file }.filter { it.extension == "jar" }
+            // guava-android and guava-jre share one module id; only the variant's file tells them apart.
+            val guavaJars = libraries.filter { it.name.startsWith("guava-") && !it.name.startsWith("guava-listenablefuture") }
+            if (guavaJars.isEmpty() || guavaJars.any { !it.name.endsWith("-jre.jar") }) {
+                error("releaseRuntimeClasspath resolved guava as ${guavaJars.map { it.name }}, expected the -jre variant")
+            }
             val python = providers.environmentVariable("PYTHON").orNull
                 ?: if (System.getProperty("os.name").startsWith("Windows")) "python" else "python3"
             commandLine(listOf(python, rootProject.file("tools-src/verify-release-plugin-api.py").absolutePath,

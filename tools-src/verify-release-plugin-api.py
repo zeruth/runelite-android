@@ -15,6 +15,14 @@ PREFIXES = ("joptsimple/", "com/google/protobuf/", "com/google/common/", "com/go
 # Runtime D8 can introduce these interfaces even when APK code never names them.
 RUNTIME_CLASSES = ("j$/util/Collection", "j$/util/concurrent/Flow$Publisher",
                    "j$/util/concurrent/Flow$Subscriber", "j$/util/concurrent/Flow$Subscription")
+# Guava-jre-only default methods hub plugins call. Both the library jar and the APK must have
+# them: the jar check fails when Gradle resolved the guava-android variant under the same
+# module id (the generic comparison would then pass against the wrong flavour), the APK
+# check fails when R8 or desugaring dropped or rewrote them.
+JRE_FLAVOUR_MEMBERS = (
+    ("com/google/common/collect/Multiset", ("method", "forEachEntry", "(Ljava/util/function/ObjIntConsumer;)V")),
+    ("com/google/common/collect/Multimap", ("method", "forEach", "(Ljava/util/function/BiConsumer;)V")),
+)
 
 
 def class_api(data):
@@ -147,6 +155,12 @@ def main():
             if re.fullmatch(r"classes\d*\.dex", entry):
                 actual.update(dex_api(archive.read(entry)))
     failures = ["Missing runtime class " + name for name in RUNTIME_CLASSES if name not in actual]
+    for name, member in JRE_FLAVOUR_MEMBERS:
+        signature = name + "." + member[1] + member[2]
+        if member not in expected.get(name, (0, {}))[1]:
+            failures.append("Library guava is not the -jre flavour, lacks " + signature)
+        if member not in actual.get(name, (0, {}))[1]:
+            failures.append("APK lacks guava-jre member " + signature)
     member_count = 0
     for name, (access, members) in expected.items():
         if name not in actual:
