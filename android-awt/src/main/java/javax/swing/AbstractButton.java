@@ -287,14 +287,55 @@ public abstract class AbstractButton extends JComponent {
         throw new IllegalArgumentException(exception);
     }
 
+    // As in 8u: set once a client calls the setter, so a look and feel's installProperty
+    // no longer overrides the client's choice.
+    private boolean borderPaintedSet, contentAreaFilledSet, rolloverEnabledSet, iconTextGapSet;
+
     public boolean isBorderPainted() { return borderPainted; }
-    public void setBorderPainted(boolean b) { boolean old = borderPainted; borderPainted = b; firePropertyChange(BORDER_PAINTED_CHANGED_PROPERTY, old, b); if (b != old) { revalidate(); repaint(); } }
+    public void setBorderPainted(boolean b) { boolean old = borderPainted; borderPainted = b; borderPaintedSet = true; firePropertyChange(BORDER_PAINTED_CHANGED_PROPERTY, old, b); if (b != old) { revalidate(); repaint(); } }
     public boolean isContentAreaFilled() { return contentAreaFilled; }
-    public void setContentAreaFilled(boolean b) { boolean old = contentAreaFilled; contentAreaFilled = b; firePropertyChange(CONTENT_AREA_FILLED_CHANGED_PROPERTY, old, b); if (b != old) repaint(); }
+    public void setContentAreaFilled(boolean b) { boolean old = contentAreaFilled; contentAreaFilled = b; contentAreaFilledSet = true; firePropertyChange(CONTENT_AREA_FILLED_CHANGED_PROPERTY, old, b); if (b != old) repaint(); }
     public boolean isFocusPainted() { return focusPainted; }
     public void setFocusPainted(boolean b) { boolean old = focusPainted; focusPainted = b; firePropertyChange(FOCUS_PAINTED_CHANGED_PROPERTY, old, b); if (b != old && isFocusOwner()) { revalidate(); repaint(); } }
     public boolean isRolloverEnabled() { return rolloverEnabled; }
-    public void setRolloverEnabled(boolean b) { boolean old = rolloverEnabled; rolloverEnabled = b; firePropertyChange(ROLLOVER_ENABLED_CHANGED_PROPERTY, old, b); if (b != old) repaint(); }
+    public void setRolloverEnabled(boolean b) { boolean old = rolloverEnabled; rolloverEnabled = b; rolloverEnabledSet = true; firePropertyChange(ROLLOVER_ENABLED_CHANGED_PROPERTY, old, b); if (b != old) repaint(); }
+
+    /** 8u: the look and feel's defaults for the button's own properties, unless the client set them. */
+    @Override
+    void setUIProperty(String propertyName, Object value) {
+        if ("borderPainted".equals(propertyName)) {
+            if (!borderPaintedSet) {
+                setBorderPainted(((Boolean) value).booleanValue());
+                borderPaintedSet = false;
+            }
+        } else if ("rolloverEnabled".equals(propertyName)) {
+            if (!rolloverEnabledSet) {
+                setRolloverEnabled(((Boolean) value).booleanValue());
+                rolloverEnabledSet = false;
+            }
+        } else if ("iconTextGap".equals(propertyName)) {
+            if (!iconTextGapSet) {
+                setIconTextGap(((Number) value).intValue());
+                iconTextGapSet = false;
+            }
+        } else if ("contentAreaFilled".equals(propertyName)) {
+            if (!contentAreaFilledSet) {
+                setContentAreaFilled(((Boolean) value).booleanValue());
+                contentAreaFilledSet = false;
+            }
+        } else {
+            super.setUIProperty(propertyName, value);
+        }
+    }
+
+    /** 8u: the constructors' shared tail; installs the look and feel's delegate. */
+    protected void init(String text, Icon icon) {
+        if (text != null) setText(text);
+        if (icon != null) setIcon(icon);
+        updateUI();
+        setAlignmentX(LEFT_ALIGNMENT);
+        setAlignmentY(CENTER_ALIGNMENT);
+    }
 
     private long multiClickThreshhold;
     /** Clicks closer together than this many milliseconds produce one action event. */
@@ -362,7 +403,13 @@ public abstract class AbstractButton extends JComponent {
      *  etc. — without it Dalvik throws NoSuchMethodError at plugin startup. */
     private int iconTextGap = 4;
     public int getIconTextGap() { return iconTextGap; }
-    public void setIconTextGap(int gap) { this.iconTextGap = gap; invalidate(); }
+    public void setIconTextGap(int gap) {
+        int old = iconTextGap;
+        iconTextGap = gap;
+        iconTextGapSet = true;
+        firePropertyChange("iconTextGap", old, gap);
+        if (gap != old) { revalidate(); repaint(); }
+    }
 
     /** Insets between the border and the button's content. Stored but not honored by
      *  paint (we draw text/icon centered) — plugins set it as a layout hint, that's all

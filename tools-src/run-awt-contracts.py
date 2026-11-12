@@ -400,7 +400,8 @@ class Members:
             if header:
                 current = header.group(1)
                 self.declared[current] = {}
-                supertypes = re.findall(r'\b(?:extends|implements)\s+([^{]*)', header.group(2))
+                # Each clause stops at the next keyword: "extends A implements B,C" is A, B and C.
+                supertypes = re.findall(r'\b(?:extends|implements)\s+(.*?)(?=\s+implements\b|\s*$)', header.group(2))
                 self.parents[current] = [p.strip().split("<")[0] for part in supertypes for p in part.split(",") if p.strip()]
                 continue
             stripped = line.strip()

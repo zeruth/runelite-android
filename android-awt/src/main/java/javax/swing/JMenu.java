@@ -205,10 +205,13 @@ public class JMenu extends JMenuItem implements javax.accessibility.Accessible {
     public JPopupMenu getPopupMenu() { return popup; }
     public boolean isPopupMenuVisible() { return popup.isVisible(); }
 
-    /** As in 8u: shows the popup at {@link #getPopupMenuOrigin} (or the custom location) while showing. */
+    /**
+     * As in 8u: shows the popup at {@link #getPopupMenuOrigin} (or the custom location) while
+     * the menu is showing; a disabled menu can still close it. A menu in a bar the panel host
+     * mounted is showing ({@code setHostShowing} on the mounted root).
+     */
     public void setPopupMenuVisible(boolean visible) {
-        if (!isEnabled()) return;
-        if (visible == isPopupMenuVisible()) return;
+        if (visible == isPopupMenuVisible() || !(isEnabled() || !visible)) return;
         if (visible && isShowing()) {
             Point p = customMenuLocation != null ? customMenuLocation : getPopupMenuOrigin();
             popup.show(this, p.x, p.y);

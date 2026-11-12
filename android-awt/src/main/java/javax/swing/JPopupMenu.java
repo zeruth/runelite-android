@@ -157,6 +157,39 @@ public class JPopupMenu extends JComponent implements javax.accessibility.Access
         return popupLocation;
     }
 
+    /** 8u's two-argument form, sized by the popup's preferred size. */
+    Point adjustPopupLocationToFitScreen(int xPosition, int yPosition) {
+        return adjustPopupLocationToFitScreen(xPosition, yPosition, getPreferredSize());
+    }
+
+    /** 8u: the popup at the root of a cascade of submenu popups. */
+    JPopupMenu getRootPopupMenu() {
+        JPopupMenu mp = this;
+        while (mp != null && !mp.isPopupMenu() && mp.getInvoker() != null
+                && mp.getInvoker().getParent() instanceof JPopupMenu) {
+            mp = (JPopupMenu) mp.getInvoker().getParent();
+        }
+        return mp;
+    }
+
+    /** 8u: whether {@code popup} opens, directly or deeper, from a menu in this popup. */
+    boolean isSubPopupMenu(JPopupMenu popup) {
+        for (Component comp : getComponents()) {
+            if (comp instanceof JMenu) {
+                JPopupMenu subPopup = ((JMenu) comp).getPopupMenu();
+                if (subPopup == popup || subPopup.isSubPopupMenu(popup)) return true;
+            }
+        }
+        return false;
+    }
+
+    /** As in 8u, a popup has no settable margin: the space between its border and its items is zero. */
+    public Insets getMargin() { return new Insets(0, 0, 0, 0); }
+
+    /** Typed delegate accessors, as in 8u; the popup is host-presented until a look and feel sets one. */
+    @Override public javax.swing.plaf.PopupMenuUI getUI() { return (javax.swing.plaf.PopupMenuUI) ui; }
+    public void setUI(javax.swing.plaf.PopupMenuUI ui) { super.setUI(ui); }
+
     /** Lays the open popup out again at its preferred size. */
     public void pack() {
         if (isVisible()) placeOnScreen();
@@ -184,7 +217,11 @@ public class JPopupMenu extends JComponent implements javax.accessibility.Access
 
     private SingleSelectionModel selectionModel = new DefaultSingleSelectionModel();
     public SingleSelectionModel getSelectionModel() { return selectionModel; }
-    public void setSelectionModel(SingleSelectionModel model) { selectionModel = model; }
+    public void setSelectionModel(SingleSelectionModel model) {
+        SingleSelectionModel old = selectionModel;
+        selectionModel = model;
+        firePropertyChange("selectionModel", old, model);
+    }
     public void setSelected(Component sel) { selectionModel.setSelectedIndex(getComponentIndex(sel)); }
 
     /** BasicPopupMenuUI.isPopupTrigger: a right-button release. */
@@ -275,12 +312,46 @@ public class JPopupMenu extends JComponent implements javax.accessibility.Access
 
     @Override public void setVisible(boolean visible) {
         if (visible == isVisible()) return;
+        MenuSelectionManager manager = MenuSelectionManager.defaultManager();
+        if (!visible) {
+            getSelectionModel().clearSelection();
+        } else if (isPopupMenu()) {
+            // 8u: a context popup roots its own selected path before it shows, which is what
+            // routes key events to its items and lets hiding it clear the path below.
+            manager.setSelectedPath(new MenuElement[] {this});
+        }
         if (visible) firePopupMenuWillBecomeVisible();
         else firePopupMenuWillBecomeInvisible();
         super.setVisible(visible);
+        if (visible) return;
         // 8u: a context popup going away ends the menu selection it was part of.
-        if (!visible && isPopupMenu() && MenuSelectionManager.defaultManager().isComponentPartOfCurrentMenu(this)) {
-            MenuSelectionManager.defaultManager().clearSelectedPath();
+        if (isPopupMenu() && manager.isComponentPartOfCurrentMenu(this)) {
+            manager.clearSelectedPath();
+        } else if (invoker instanceof JMenu) {
+            closeMenuPath(manager);
+        }
+    }
+
+    /**
+     * A menu's popup hidden outside the manager (the host dismissing it, or a direct
+     * {@code setVisible(false)}) takes its menu, and anything opened below it, off the selected
+     * path, so the menu is deselected and its bar index cleared as when the manager closes it.
+     * When the manager is the one hiding it the popup is already off the path and nothing happens.
+     */
+    private void closeMenuPath(MenuSelectionManager manager) {
+        MenuElement[] path = manager.getSelectedPath();
+        for (int i = 1; i < path.length; i++) {
+            if (path[i] == this && path[i - 1] == invoker) {
+                MenuElement[] kept = new MenuElement[i - 1];
+                System.arraycopy(path, 0, kept, 0, kept.length);
+                // A bar with no open menu is no selection; a context popup above stays open.
+                if (kept.length == 0 || kept.length == 1 && kept[0] instanceof JMenuBar) {
+                    manager.clearSelectedPath();
+                } else {
+                    manager.setSelectedPath(kept);
+                }
+                return;
+            }
         }
     }
     public boolean isBorderPainted() { return false; }

@@ -64,6 +64,10 @@ public class JMenuBar extends JComponent implements javax.accessibility.Accessib
         setMinimumSize(new Dimension(0, DEFAULT_HEIGHT));
     }
 
+    /** Typed delegate accessors, as in 8u; the bar is host-painted until a look and feel sets one. */
+    @Override public javax.swing.plaf.MenuBarUI getUI() { return (javax.swing.plaf.MenuBarUI) ui; }
+    public void setUI(javax.swing.plaf.MenuBarUI ui) { super.setUI(ui); }
+
     public JMenu add(JMenu c) {
         if (c != null) super.add(c);
         return c;
