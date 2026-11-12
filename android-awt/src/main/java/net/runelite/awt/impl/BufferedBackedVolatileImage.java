@@ -117,12 +117,16 @@ public final class BufferedBackedVolatileImage extends VolatileImage {
 
     @Override
     public int validate(GraphicsConfiguration gc) {
-        if (!lost) {
-            return IMAGE_OK;
+        // Check, reallocate and reset under flush()'s lock, so a concurrent flush cannot
+        // leave the raster null with the lost flag cleared.
+        synchronized (this) {
+            if (!lost) {
+                return IMAGE_OK;
+            }
+            backing();
+            lost = false;
+            return IMAGE_RESTORED;
         }
-        backing();
-        lost = false;
-        return IMAGE_RESTORED;
     }
 
     @Override public boolean contentsLost() { return lost; }

@@ -71,6 +71,9 @@ public final class BufferedImageFontMetrics extends FontMetrics {
      *  shared across callers anyway. */
     private final char[] charScratch = new char[1];
     private final float[] widthScratch = new float[1];
+    /** U+0000..U+00FF widths for getWidths(), built on first use; races only rebuild it. */
+    private volatile int[] latin1Widths;
+    private volatile int maxAdvance = -1;
 
     /** Android's Paint.setTextSize takes pixels; Java Font.size is conventionally points
      *  but the OSRS/RuneLite code paths treat it as pixels too, so pass through. */
@@ -159,8 +162,23 @@ public final class BufferedImageFontMetrics extends FontMetrics {
     public int getHeight()  { return height; }
 
     @Override
+    public int getMaxAdvance() {
+        int max = maxAdvance;
+        if (max < 0) {
+            // Android exposes no hmtx maximum, so the widest Latin-1 glyph stands in for it:
+            // that is the range the client and Swing actually draw.
+            max = 0;
+            for (int w : getWidths()) max = Math.max(max, w);
+            maxAdvance = max;
+        }
+        return max;
+    }
+
+    @Override
     public int charWidth(int codePoint) {
-        return (int)Math.ceil(paint.measureText(new String(Character.toChars(codePoint))));
+        if (!Character.isValidCodePoint(codePoint)) codePoint = 0xffff;
+        if (codePoint < 0x10000) return charWidth((char) codePoint);
+        return charsWidth(Character.toChars(codePoint), 0, 2);
     }
 
     @Override
@@ -173,16 +191,73 @@ public final class BufferedImageFontMetrics extends FontMetrics {
         }
     }
 
+    /*
+     * Widths are summed from per-glyph advances, each rounded up the way charWidth rounds it,
+     * so stringWidth equals the sum of the charWidths as it does on desktop (where hinted
+     * advances are whole pixels). Rounding up rather than to nearest keeps a measured label at
+     * least as wide as what Canvas paints, so Swing never truncates it by a pixel.
+     */
     @Override
     public int charsWidth(char[] data, int off, int len) {
         if (data == null || len <= 0) return 0;
-        return (int) Math.ceil(paint.measureText(data, off, len));
+        if (off < 0 || len > data.length - off) throw new IndexOutOfBoundsException("off " + off + ", len " + len);
+        int sum = 0;
+        for (int i = off, end = off + len; i < end; i++) {
+            char ch = data[i];
+            if (ch >= 128) return sum + measuredWidth(data, i, end - i);
+            sum += asciiWidths[ch];
+        }
+        return sum;
     }
 
     @Override
     public int stringWidth(String str) {
-        if (str == null || str.isEmpty()) return 0;
-        return (int) Math.ceil(paint.measureText(str));
+        // The JDK throws on null; the shadow Swing components measure an unset text (null)
+        // through here and have always got 0, so that stays.
+        if (str == null) return 0;
+        int len = str.length();
+        int sum = 0;
+        for (int i = 0; i < len; i++) {
+            char ch = str.charAt(i);
+            if (ch >= 128) {
+                char[] rest = new char[len - i];
+                str.getChars(i, len, rest, 0);
+                return sum + measuredWidth(rest, 0, rest.length);
+            }
+            sum += asciiWidths[ch];
+        }
+        return sum;
+    }
+
+    @Override
+    public int bytesWidth(byte[] data, int off, int len) {
+        if (len <= 0) return 0;
+        if (off < 0 || len > data.length - off) throw new IndexOutOfBoundsException("off " + off + ", len " + len);
+        // The JDK reads the bytes as ISO-8859-1 (String(byte[], 0, off, len)).
+        char[] chars = new char[len];
+        for (int i = 0; i < len; i++) chars[i] = (char) (data[off + i] & 0xff);
+        return charsWidth(chars, 0, len);
+    }
+
+    @Override
+    public int[] getWidths() {
+        int[] widths = latin1Widths;
+        if (widths == null) {
+            widths = new int[256];
+            for (int i = 0; i < 256; i++) widths[i] = charWidth((char) i);
+            latin1Widths = widths;
+        }
+        return widths.clone();
+    }
+
+    /** Sum of the rounded-up advances of a run Minikin shapes (surrogates carry their width
+     *  on the high char, the low one reports 0). */
+    private int measuredWidth(char[] data, int off, int len) {
+        float[] w = new float[len];
+        paint.getTextWidths(data, off, len, w);
+        int sum = 0;
+        for (float f : w) sum += (int) Math.ceil(f);
+        return sum;
     }
 }
 

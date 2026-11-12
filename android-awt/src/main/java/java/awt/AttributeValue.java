@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000, 2013, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1999, 2013, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -22,28 +22,33 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
+
 package java.awt;
 
 /**
- * Base of the enumerated attribute values of {@link BufferCapabilities}
- * and the print attribute classes. The {@code sun.util.logging} trace of
- * the original constructor is dropped with the rest of the peer plumbing.
+ * Base of the type-safe enumerations of {@link JobAttributes},
+ * {@link PageAttributes} and {@link BufferCapabilities.FlipContents}.
  *
  * @author      David Mendenhall
  */
-abstract class AttributeValue {
+// 8u logs a warning through sun.util.logging.PlatformLogger before the assertion; the logger
+// is not part of the shadow surface, the assertion is kept.
+class AttributeValue {
     private final int value;
     private final String[] names;
 
     protected AttributeValue(int value, String[] names) {
+        assert value >= 0 && names != null && value < names.length;
         this.value = value;
         this.names = names;
     }
+
     // This hashCode is used by the sun.awt implementation as an array
     // index.
     public int hashCode() {
         return value;
     }
+
     public String toString() {
         return names[value];
     }

@@ -39,9 +39,8 @@ public class AWTException extends Exception {
 
     /**
      * Constructs an instance of <code>AWTException</code> with the
-     * specified detail message. A detail message is an
-     * instance of <code>String</code> that describes this particular
-     * exception.
+     * specified detail message. A detail message is a
+     * <code>String</code> that describes this particular exception.
      * @param   msg     the detail message
      * @since   JDK1.0
      */
