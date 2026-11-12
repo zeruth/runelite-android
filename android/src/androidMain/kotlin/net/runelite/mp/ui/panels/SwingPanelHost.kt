@@ -182,7 +182,6 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
     }
 
     private var paintedRoot: JComponent? = null // AWT thread only
-    private var paintedLayoutGeneration = -1L // AWT thread only
     private val render = object : Runnable {
         override fun run() {
             if (!running) return
@@ -216,16 +215,18 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
                                 val active = android.os.SystemClock.uptimeMillis() - lastInteraction < 500 || !flinger.isFinished
                                 // Taken every tick, painted or not, so the region never outlives the frame it asked for.
                                 val repaints = javax.swing.RepaintManager.currentManager(component)
+                                // Layout changes arrive here too: Component.invalidate() repaints, and a
+                                // child the RepaintManager re-laid out repaints from reshape, so the
+                                // region and the root's validity are the whole change signal.
                                 val requested = repaints.hostTakeDirtyRegion(component)
                                 val dirty = component !== paintedRoot || resized || !component.isValid() ||
-                                    component.subtreeLayoutGeneration() != paintedLayoutGeneration ||
                                     requested != null
                                 if (!dirty && !active) return@invokeLater
                                 if (!component.isValid()) component.validate()
-                                // The full repaint below covers what the layout pass asked for; repaint
-                                // requests raised during paint stay pending for the next frame.
+                                // Everything past here repaints the whole raster (fillRect + hostPaint of
+                                // the root), which covers what the layout pass asked for; requests raised
+                                // during paint stay pending for the next frame.
                                 repaints.hostTakeDirtyRegion(component)
-                                val layoutGeneration = component.subtreeLayoutGeneration()
                                 if (!diagnosed) {
                                     diagnosed = true
                                     fun describe(c: Component, depth: Int): String =
@@ -249,7 +250,6 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
                                 backBitmap = backBitmap xor 1
                                 bitmap = target
                                 paintedRoot = component
-                                paintedLayoutGeneration = layoutGeneration
                             }
                         }
                     } catch (t: Throwable) {

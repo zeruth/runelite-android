@@ -389,30 +389,52 @@ public class RepaintManager {
         Map<Component, Rectangle> pending = dirtyComponents;
         dirtyComponents = new IdentityHashMap<Component, Rectangle>();
         for (Map.Entry<Component, Rectangle> entry : pending.entrySet()) {
-            Component c = entry.getKey();
-            Rectangle r = entry.getValue();
-            long x0 = Math.max(0, r.x), y0 = Math.max(0, r.y);
-            long x1 = Math.min(c.getWidth(), (long) r.x + r.width);
-            long y1 = Math.min(c.getHeight(), (long) r.y + r.height);
-            // An embedded Applet (the game client inside its frame) folds into the frame's
-            // region: the frame's walker is the host that paints both.
-            Component root = paintRoot(c);
-            if (root == null) continue;
-            for (Component p = c; p != root && x0 < x1 && y0 < y1; ) {
-                Container parent = p.getParent();
-                x0 += p.getX(); x1 += p.getX();
-                y0 += p.getY(); y1 += p.getY();
-                x0 = Math.max(0, x0); y0 = Math.max(0, y0);
-                x1 = Math.min(parent.getWidth(), x1); y1 = Math.min(parent.getHeight(), y1);
-                p = parent;
-            }
-            if (x0 >= x1 || y0 >= y1) continue;
-            Rectangle region = rootRegions.get(root);
-            if (region == null) {
-                rootRegions.put(root, new Rectangle((int) x0, (int) y0, (int) (x1 - x0), (int) (y1 - y0)));
-            } else {
-                union(region, (int) x0, (int) y0, (int) (x1 - x0), (int) (y1 - y0));
-            }
+            foldIntoRoot(entry.getKey(), entry.getValue());
+        }
+    }
+
+    /**
+     * JComponent.paintImmediately: folds {@code c}'s region, with whatever {@code c} had
+     * pending, into its root's region now, without flushing other components' requests the
+     * way a full {@link #paintDirtyRegions()} would.
+     */
+    synchronized void paintImmediately(Component c, int x, int y, int w, int h) {
+        if (c == null || w <= 0 || h <= 0) return;
+        Rectangle r = dirtyComponents.remove(c);
+        if (r == null) {
+            r = new Rectangle(x, y, w, h);
+        } else {
+            union(r, x, y, w, h);
+        }
+        foldIntoRoot(c, r);
+    }
+
+    /**
+     * Clip {@code r} (in {@code c}'s coordinates) to {@code c} and its ancestors and union it,
+     * in root coordinates, into the region of {@code c}'s paint root. Caller holds the lock.
+     */
+    private void foldIntoRoot(Component c, Rectangle r) {
+        long x0 = Math.max(0, r.x), y0 = Math.max(0, r.y);
+        long x1 = Math.min(c.getWidth(), (long) r.x + r.width);
+        long y1 = Math.min(c.getHeight(), (long) r.y + r.height);
+        // An embedded Applet (the game client inside its frame) folds into the frame's
+        // region: the frame's walker is the host that paints both.
+        Component root = paintRoot(c);
+        if (root == null) return;
+        for (Component p = c; p != root && x0 < x1 && y0 < y1; ) {
+            Container parent = p.getParent();
+            x0 += p.getX(); x1 += p.getX();
+            y0 += p.getY(); y1 += p.getY();
+            x0 = Math.max(0, x0); y0 = Math.max(0, y0);
+            x1 = Math.min(parent.getWidth(), x1); y1 = Math.min(parent.getHeight(), y1);
+            p = parent;
+        }
+        if (x0 >= x1 || y0 >= y1) return;
+        Rectangle region = rootRegions.get(root);
+        if (region == null) {
+            rootRegions.put(root, new Rectangle((int) x0, (int) y0, (int) (x1 - x0), (int) (y1 - y0)));
+        } else {
+            union(region, (int) x0, (int) y0, (int) (x1 - x0), (int) (y1 - y0));
         }
     }
 

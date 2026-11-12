@@ -249,19 +249,6 @@ public class JComponent extends Container {
     protected void printChildren(java.awt.Graphics g) { paintChildren(g); }
     protected void printBorder(java.awt.Graphics g) { paintBorder(g); }
 
-    /**
-     * The JDK paints the region synchronously into the window. The Android host owns the
-     * surface and draws a tree when its repaint generation moves, so this requests that
-     * repaint; the region is on screen at the host's next frame, not on return.
-     */
-    public void paintImmediately(int x, int y, int w, int h) {
-        repaint(0, x, y, w, h);
-    }
-
-    public void paintImmediately(java.awt.Rectangle r) {
-        paintImmediately(r.x, r.y, r.width, r.height);
-    }
-
     public javax.swing.plaf.ComponentUI getUI() { return ui; }
     public void setUI(javax.swing.plaf.ComponentUI ui) { javax.swing.plaf.ComponentUI old=this.ui;if(old!=null)old.uninstallUI(this);this.ui=ui;if(ui!=null)ui.installUI(this);firePropertyChange("UI",old,ui);revalidate();repaint(); }
     public String getUIClassID() { return "ComponentUI"; }
@@ -317,9 +304,10 @@ public class JComponent extends Container {
 
     /**
      * Paints the specified region in this component and all of its descendants that overlap
-     * the region, immediately. There is no screen to paint to: the region is handed to the
-     * host that rasterizes this tree, which paints it on its next frame, and the dirty region
-     * pending for this component is folded in with it.
+     * the region, immediately. There is no screen to paint to: the region, with the dirty
+     * region pending for this component, is folded into its root's region right away, which
+     * the host that rasterizes the root takes with {@code RepaintManager.hostTakeDirtyRegion}
+     * and paints on its next frame. Other components' pending regions are left queued.
      *
      * @param x  the x value of the region to be painted
      * @param y  the y value of the region to be painted
@@ -327,9 +315,7 @@ public class JComponent extends Container {
      * @param h  the height of the region to be painted
      */
     public void paintImmediately(int x, int y, int w, int h) {
-        RepaintManager manager = RepaintManager.currentManager(this);
-        manager.addDirtyRegion(this, x, y, w, h);
-        manager.paintDirtyRegions();
+        RepaintManager.currentManager(this).paintImmediately(this, x, y, w, h);
     }
 
     /**
