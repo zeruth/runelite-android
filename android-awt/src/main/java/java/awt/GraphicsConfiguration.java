@@ -86,9 +86,6 @@ public abstract class GraphicsConfiguration {
         return new BufferCapabilities(caps, caps, null);
     }
 
-    public ImageCapabilities getImageCapabilities() {
-        return new ImageCapabilities(false);
-    }
     public java.awt.image.BufferedImage createCompatibleImage(int width,int height){return createCompatibleImage(width,height,Transparency.OPAQUE);}
     public java.awt.image.BufferedImage createCompatibleImage(int width,int height,int transparency){return new java.awt.image.BufferedImage(width,height,transparency==Transparency.OPAQUE?java.awt.image.BufferedImage.TYPE_INT_RGB:java.awt.image.BufferedImage.TYPE_INT_ARGB);}
 }
