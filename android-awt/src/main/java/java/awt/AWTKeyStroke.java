@@ -49,6 +49,63 @@ public class AWTKeyStroke implements Serializable {
         this.onKeyRelease = onKeyRelease;
     }
 
+    /**
+     * Returns a key-typed stroke for the character. Instances are not shared
+     * the way the JDK caches them; equality is by value, which is all the
+     * traversal-key sets and input maps rely on.
+     */
+    public static AWTKeyStroke getAWTKeyStroke(char keyChar) {
+        return create(keyChar, java.awt.event.KeyEvent.VK_UNDEFINED, 0, false);
+    }
+
+    public static AWTKeyStroke getAWTKeyStroke(Character keyChar, int modifiers) {
+        if (keyChar == null) throw new IllegalArgumentException("keyChar cannot be null");
+        return create(keyChar.charValue(), java.awt.event.KeyEvent.VK_UNDEFINED, modifiers, false);
+    }
+
+    public static AWTKeyStroke getAWTKeyStroke(int keyCode, int modifiers, boolean onKeyRelease) {
+        return create(java.awt.event.KeyEvent.CHAR_UNDEFINED, keyCode, modifiers, onKeyRelease);
+    }
+
+    public static AWTKeyStroke getAWTKeyStroke(int keyCode, int modifiers) {
+        return getAWTKeyStroke(keyCode, modifiers, false);
+    }
+
+    public static AWTKeyStroke getAWTKeyStrokeForEvent(java.awt.event.KeyEvent anEvent) {
+        switch (anEvent.getID()) {
+            case java.awt.event.KeyEvent.KEY_PRESSED:
+            case java.awt.event.KeyEvent.KEY_RELEASED:
+                return create(java.awt.event.KeyEvent.CHAR_UNDEFINED, anEvent.getKeyCode(),
+                    anEvent.getModifiers() | anEvent.getModifiersEx(),
+                    anEvent.getID() == java.awt.event.KeyEvent.KEY_RELEASED);
+            case java.awt.event.KeyEvent.KEY_TYPED:
+                return create(anEvent.getKeyChar(), java.awt.event.KeyEvent.VK_UNDEFINED,
+                    anEvent.getModifiers() | anEvent.getModifiersEx(), false);
+            default:
+                return null;
+        }
+    }
+
+    private static AWTKeyStroke create(char keyChar, int keyCode, int modifiers, boolean onKeyRelease) {
+        AWTKeyStroke stroke = new AWTKeyStroke();
+        stroke.init(keyChar, keyCode, normalizeModifiers(modifiers), onKeyRelease);
+        return stroke;
+    }
+
+    /** The JDK stores both the old (*_MASK) and extended (*_DOWN_MASK) bit of every modifier key. */
+    private static int normalizeModifiers(int modifiers) {
+        int[] oldMasks = {java.awt.event.InputEvent.SHIFT_MASK, java.awt.event.InputEvent.CTRL_MASK,
+            java.awt.event.InputEvent.META_MASK, java.awt.event.InputEvent.ALT_MASK, java.awt.event.InputEvent.ALT_GRAPH_MASK};
+        int[] newMasks = {java.awt.event.InputEvent.SHIFT_DOWN_MASK, java.awt.event.InputEvent.CTRL_DOWN_MASK,
+            java.awt.event.InputEvent.META_DOWN_MASK, java.awt.event.InputEvent.ALT_DOWN_MASK, java.awt.event.InputEvent.ALT_GRAPH_DOWN_MASK};
+        int result = modifiers & (java.awt.event.InputEvent.BUTTON1_DOWN_MASK
+            | java.awt.event.InputEvent.BUTTON2_DOWN_MASK | java.awt.event.InputEvent.BUTTON3_DOWN_MASK);
+        for (int i = 0; i < oldMasks.length; i++) {
+            if ((modifiers & (oldMasks[i] | newMasks[i])) != 0) result |= oldMasks[i] | newMasks[i];
+        }
+        return result;
+    }
+
     public char getKeyChar() { return keyChar; }
     public int getKeyCode() { return keyCode; }
     public int getModifiers() { return modifiers; }
