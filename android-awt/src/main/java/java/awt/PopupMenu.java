@@ -31,6 +31,8 @@
 package java.awt;
 
 public class PopupMenu extends Menu {
+    private static int nameCounter = 0;
+    @Override String constructComponentName() { synchronized (PopupMenu.class) { return "popup" + nameCounter++; } }
     public PopupMenu() { this(""); }
     public PopupMenu(String label) { super(label); }
     public void show(Component origin, int x, int y) {
