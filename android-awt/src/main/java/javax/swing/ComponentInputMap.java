@@ -31,18 +31,11 @@ package javax.swing;
  * the <code>ComponentInputMap</code> changes.
  * <code>ComponentInputMap</code>s are used for
  * <code>WHEN_IN_FOCUSED_WINDOW</code> bindings.
-<<<<<<< HEAD
- * <p>
- * The shadow's <code>JComponent</code> resolves <code>WHEN_IN_FOCUSED_WINDOW</code>
- * bindings by walking the window on each key event rather than through a
- * keyboard manager, so there is no change notification to deliver.
-=======
  *
  * <p>The shadow <code>JComponent</code> resolves
  * <code>WHEN_IN_FOCUSED_WINDOW</code> bindings by walking its input maps at
  * dispatch time rather than through a registration table, so the
  * notification the JDK sends on every change has no receiver here.
->>>>>>> up
  *
  * @author Scott Violet
  * @since 1.3
@@ -73,11 +66,7 @@ public class ComponentInputMap extends InputMap {
      *
      * @param map  a <code>ComponentInputMap</code>
      *
-<<<<<<< HEAD
-     * @throws IllegalArgumentException  if <code>map</code>
-=======
      * @throws IllegalArgumentException if <code>map</code>
->>>>>>> up
      *         is not a <code>ComponentInputMap</code>
      *         or is not associated with the same component
      */
@@ -98,7 +87,6 @@ public class ComponentInputMap extends InputMap {
     public JComponent getComponent() {
         return component;
     }
-<<<<<<< HEAD
 
     /**
      * Adds a binding for <code>keyStroke</code> to <code>actionMapKey</code>.
@@ -122,6 +110,4 @@ public class ComponentInputMap extends InputMap {
     public void clear() {
         super.clear();
     }
-=======
->>>>>>> up
 }

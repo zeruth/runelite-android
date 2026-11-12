@@ -19,3 +19,11 @@ export ORG_GRADLE_PROJECT_glslangPath="$GLSLANG_DIR/bin/glslangValidator"
 python3 tools-src/run-awt-contracts.py
 ./gradlew --build-cache ':android-awt:awtSurfaceCheck'
 ./gradlew --build-cache ':android:verifyReleasePluginApi'
+
+# Hub compatibility gate (docs/hub-compat.md). The release build above leaves the
+# android-awt and app javac output behind; the client and api jars are asked for
+# explicitly because the app may consume them as class directories. CI.yml restores
+# build/hub-cache, so only new or updated plugin jars are downloaded.
+./gradlew --build-cache ':client:jar' ':runelite-api:jar'
+python3 tools-src/hub-compat-scan.py --refresh
+python3 tools-src/hub-compat-issues.py --check

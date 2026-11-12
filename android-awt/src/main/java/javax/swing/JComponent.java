@@ -65,18 +65,19 @@ public class JComponent extends Container {
     private float alignmentY = 0.5f;
 
     public JComponent() {
+        // As the JDK's JComponent(): key events reach processKeyEvent overrides.
+        enableEvents(java.awt.AWTEvent.KEY_EVENT_MASK);
         addHierarchyListener(e -> {
             if ((e.getChangeFlags() & (java.awt.event.HierarchyEvent.PARENT_CHANGED | java.awt.event.HierarchyEvent.SHOWING_CHANGED)) == 0) return;
             boolean attached = getParent() != null && isVisible();
             int id = attached ? javax.swing.event.AncestorEvent.ANCESTOR_ADDED : javax.swing.event.AncestorEvent.ANCESTOR_REMOVED;
             javax.swing.event.AncestorEvent event = new javax.swing.event.AncestorEvent(this, id,
                 e.getChanged() instanceof Container ? (Container)e.getChanged() : getParent(), e.getChangedParent());
-            for (AncestorListener listener : ancestorListeners.getListeners(AncestorListener.class)) {
+            for (AncestorListener listener : listenerList.getListeners(AncestorListener.class)) {
                 if (attached) listener.ancestorAdded(event); else listener.ancestorRemoved(event);
             }
         });
     }
-    private final javax.swing.event.EventListenerList ancestorListeners = new javax.swing.event.EventListenerList();
     public Border getBorder() { return border; }
     // Border drives getInsets(), which every layout manager reads — a border change is a
     // layout change.
@@ -156,9 +157,108 @@ public class JComponent extends Container {
         vetoableChangeSupport.fireVetoableChange(propertyName, oldValue, newValue);
     }
 
-    public void addAncestorListener(AncestorListener l) { ancestorListeners.add(AncestorListener.class, l); }
-    public void removeAncestorListener(AncestorListener l) { ancestorListeners.remove(AncestorListener.class, l); }
-    public AncestorListener[] getAncestorListeners() { return ancestorListeners.getListeners(AncestorListener.class); }
+    public void addAncestorListener(AncestorListener l) { listenerList.add(AncestorListener.class, l); }
+    public void removeAncestorListener(AncestorListener l) { listenerList.remove(AncestorListener.class, l); }
+    public AncestorListener[] getAncestorListeners() { return listenerList.getListeners(AncestorListener.class); }
+
+    /**
+     * The listeners of the given type: AncestorListener, VetoableChangeListener and
+     * PropertyChangeListener from their own registries, anything a subclass added to
+     * {@link #listenerList}, else Component's.
+     */
+    @SuppressWarnings("unchecked")
+    @Override
+    public <T extends java.util.EventListener> T[] getListeners(Class<T> listenerType) {
+        T[] result;
+        if (listenerType == AncestorListener.class) {
+            result = (T[]) getAncestorListeners();
+        } else if (listenerType == java.beans.VetoableChangeListener.class) {
+            result = (T[]) getVetoableChangeListeners();
+        } else if (listenerType == PropertyChangeListener.class) {
+            result = (T[]) getPropertyChangeListeners();
+        } else {
+            result = listenerList.getListeners(listenerType);
+        }
+        if (result.length == 0) {
+            return super.getListeners(listenerType);
+        }
+        return result;
+    }
+
+    /** Delegates to the UI so a round button's corners are not hits, as in the JDK. */
+    @Override
+    public boolean contains(int x, int y) {
+        return (ui != null) ? ui.contains(this, x, y) : super.contains(x, y);
+    }
+
+    /** @deprecated As of JDK 5, replaced by {@code Component.setBounds(int, int, int, int)}. */
+    @Deprecated
+    @Override
+    public void reshape(int x, int y, int w, int h) {
+        super.reshape(x, y, w, h);
+    }
+
+    @Override
+    public int getBaseline(int width, int height) {
+        // check size.
+        super.getBaseline(width, height);
+        if (ui != null) {
+            return ui.getBaseline(this, width, height);
+        }
+        return -1;
+    }
+
+    @Override
+    public java.awt.Component.BaselineResizeBehavior getBaselineResizeBehavior() {
+        if (ui != null) {
+            return ui.getBaselineResizeBehavior(this);
+        }
+        return java.awt.Component.BaselineResizeBehavior.OTHER;
+    }
+
+    private boolean printing;
+
+    /**
+     * Prints this component: paints it with the print hooks (printComponent, printBorder,
+     * printChildren) in place of the paint ones, firing "paintingForPrint" around it.
+     */
+    @Override
+    public void print(java.awt.Graphics g) {
+        printing = true;
+        firePropertyChange("paintingForPrint", false, true);
+        try {
+            paint(g);
+        } finally {
+            printing = false;
+            firePropertyChange("paintingForPrint", true, false);
+        }
+    }
+
+    /** Unlike Component.printAll this prints whether or not the component is showing, as in the JDK. */
+    @Override
+    public void printAll(java.awt.Graphics g) {
+        print(g);
+    }
+
+    /** Whether a print operation is in progress on this component. */
+    public final boolean isPaintingForPrint() { return printing; }
+
+    protected void printComponent(java.awt.Graphics g) { paintComponent(g); }
+    protected void printChildren(java.awt.Graphics g) { paintChildren(g); }
+    protected void printBorder(java.awt.Graphics g) { paintBorder(g); }
+
+    /**
+     * The JDK paints the region synchronously into the window. The Android host owns the
+     * surface and draws a tree when its repaint generation moves, so this requests that
+     * repaint; the region is on screen at the host's next frame, not on return.
+     */
+    public void paintImmediately(int x, int y, int w, int h) {
+        repaint(0, x, y, w, h);
+    }
+
+    public void paintImmediately(java.awt.Rectangle r) {
+        paintImmediately(r.x, r.y, r.width, r.height);
+    }
 
     public javax.swing.plaf.ComponentUI getUI() { return ui; }
     public void setUI(javax.swing.plaf.ComponentUI ui) { javax.swing.plaf.ComponentUI old=this.ui;if(old!=null)old.uninstallUI(this);this.ui=ui;if(ui!=null)ui.installUI(this);firePropertyChange("UI",old,ui);revalidate();repaint(); }
@@ -353,6 +453,46 @@ public class JComponent extends Container {
 
     public java.awt.Insets getInsets() { return border != null ? border.getBorderInsets(this) : super.getInsets(); }
 
+    private boolean autoscrolls;
+    public void setAutoscrolls(boolean autoscrolls) { this.autoscrolls = autoscrolls; }
+    public boolean getAutoscrolls() { return autoscrolls; }
+
+    private TransferHandler transferHandler;
+
+    /**
+     * Sets the {@code TransferHandler}, which provides support for transfer
+     * of data into and out of this component via cut/copy/paste and drag
+     * and drop. As on desktop, a drop target is installed unless the
+     * application set its own.
+     *
+     * @since 1.4
+     */
+    public void setTransferHandler(TransferHandler newHandler) {
+        TransferHandler oldHandler = transferHandler;
+        transferHandler = newHandler;
+        TransferHandler.installSwingDropTargetAsNecessary(this, newHandler);
+        firePropertyChange("transferHandler", oldHandler, newHandler);
+    }
+
+    public TransferHandler getTransferHandler() { return transferHandler; }
+
+    /**
+     * Calculates a custom drop location for this type of component,
+     * representing where a drop at the given point should insert data.
+     * {@code null} means the plain point-only location.
+     */
+    TransferHandler.DropLocation dropLocationForPoint(java.awt.Point p) {
+        return null;
+    }
+
+    /**
+     * Called to set or clear the drop location during a DnD operation;
+     * returns the state the next call is handed back.
+     */
+    Object setDropLocation(TransferHandler.DropLocation location, Object state, boolean forDrop) {
+        return null;
+    }
+
     private JPopupMenu componentPopupMenu;
     public void setComponentPopupMenu(JPopupMenu menu) { this.componentPopupMenu = menu; }
     public JPopupMenu getComponentPopupMenu() { if (componentPopupMenu == null && inheritsPopupMenu && getParent() instanceof JComponent) return ((JComponent)getParent()).getComponentPopupMenu(); return componentPopupMenu; }
@@ -366,9 +506,15 @@ public class JComponent extends Container {
             g.fillRect(0, 0, getWidth(), getHeight());
             if (saved != null) g.setColor(saved);
         }
-        paintComponent(g);
-        paintBorder(g);
-        paintChildren(g);
+        if (printing) {
+            printComponent(g);
+            printBorder(g);
+            printChildren(g);
+        } else {
+            paintComponent(g);
+            paintBorder(g);
+            paintChildren(g);
+        }
     }
 
     protected void paintComponent(java.awt.Graphics g) {
