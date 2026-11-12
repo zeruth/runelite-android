@@ -35,8 +35,9 @@ import java.util.List;
 
 public class Clipboard {
     private final String name;
-    private Transferable contents;
-    private ClipboardOwner owner;
+    // Protected as in the JDK: subclasses (a plugin's private clipboard) read and set them directly.
+    protected Transferable contents;
+    protected ClipboardOwner owner;
     private final List<FlavorListener> flavorListeners = new ArrayList<>();
     /**
      * The host (Android) clipboard behind the system clipboard. A text-only bridge implements
