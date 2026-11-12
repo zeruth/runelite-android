@@ -751,7 +751,18 @@ public class JInternalFrame extends JComponent implements
         if (isSelected()) {
             return getFocusOwner();
         }
-        return lastFocusOwner;
+        if (lastFocusOwner != null) {
+            return lastFocusOwner;
+        }
+        FocusTraversalPolicy policy = getFocusTraversalPolicy();
+        if (policy instanceof InternalFrameFocusTraversalPolicy) {
+            return ((InternalFrameFocusTraversalPolicy) policy).getInitialComponent(this);
+        }
+        Component toFocus = policy.getDefaultComponent(this);
+        if (toFocus != null) {
+            return toFocus;
+        }
+        return getContentPane();
     }
 
     /** Requests the internal frame to restore focus to the last subcomponent that had focus. */
