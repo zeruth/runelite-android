@@ -870,8 +870,10 @@ public class JTable extends JComponent implements javax.swing.event.TableModelLi
     /**
      * The JDK's AccessibleJTable members over the table's rows, columns and selection. The JDK
      * class also implements AccessibleTable/AccessibleSelection and extends AccessibleJComponent;
-     * the module has neither yet (they land with the accessibility card), so these members are
-     * declared here with the JDK's semantics and pick up the interfaces then.
+     * the module has none of them, nor AccessibleRole/AccessibleStateSet, until B27 lands, so
+     * these members carry the JDK's semantics but are unreachable through the JDK interfaces.
+     * Deferred to B27, and parity is blocked until then: that card rebases this class onto
+     * AccessibleJComponent and adds the two interfaces to its declaration.
      */
     protected class AccessibleJTable extends javax.accessibility.AccessibleContext {
         protected AccessibleJTable() {}
