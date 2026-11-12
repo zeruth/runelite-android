@@ -484,6 +484,23 @@ public class JComboBox<E> extends JComponent implements ListDataListener, javax.
         if (paintDelegate(g)) return;
         hostPaintValue(g, new java.awt.Rectangle(4, 1, Math.max(0, getWidth() - 20), Math.max(0, getHeight() - 2)));
     }
+    /**
+     * Android: the plain BasicComboBoxUI draws the combo's outline in its
+     * background pass, and an editable combo's editor child covers the edges of it;
+     * the outline is drawn again over the children so editable combos keep the
+     * frame they had before the editor became a real child. Look and feel
+     * subclasses (FlatLaf) paint their own border and are left alone.
+     */
+    @Override protected void paintChildren(java.awt.Graphics g) {
+        super.paintChildren(g);
+        if (isEditable && getBorder() == null && ui != null
+                && ui.getClass() == javax.swing.plaf.basic.BasicComboBoxUI.class
+                && getWidth() > 0 && getHeight() > 0) {
+            g.setColor(isEnabled() ? getForeground() : java.awt.Color.GRAY);
+            g.drawRect(0, 0, getWidth() - 1, getHeight() - 1);
+        }
+    }
+
     public void hostPaintValue(java.awt.Graphics g, java.awt.Rectangle bounds) {
         java.awt.Color fg = isEnabled() ? getForeground() : java.awt.Color.GRAY;
         g.setColor(fg);

@@ -83,6 +83,12 @@ public class BasicComboBoxUI extends ComboBoxUI {
     // The arrow button that invokes the popup.
     protected JButton arrowButton;
 
+    /**
+     * Used to render the currently selected item in the combo box.
+     * It doesn't have anything to do with the popup's rendering.
+     */
+    protected CellRendererPane currentValuePane = new CellRendererPane();
+
     // Listeners that are attached to the JComboBox
     /**
      * This protected field is implementation specific. Do not access directly
@@ -195,6 +201,7 @@ public class BasicComboBoxUI extends ComboBoxUI {
         if (comboBox.isEditable()) {
             addEditor();
         }
+        comboBox.add(currentValuePane);
     }
 
     /**
@@ -558,6 +565,11 @@ public class BasicComboBoxUI extends ComboBoxUI {
     /**
      * Paints the current value of a non-editable combo box; the arrow
      * button and the editor are children and paint themselves.
+     * <p>
+     * Android: an editable combo still gets the background and outline of
+     * {@link #paintCurrentValueBackground}, which the JDK leaves to the look
+     * and feel border; {@code JComboBox.paintChildren} redraws the outline
+     * over the editor, which would otherwise cover its edges.
      */
     @Override public void paint(Graphics g, JComponent c) {
         hasFocus = comboBox.hasFocus();
@@ -567,9 +579,9 @@ public class BasicComboBoxUI extends ComboBoxUI {
             // the value rectangle is measured from the arrow button's bounds.
             layoutArrowButton();
         }
+        Rectangle r = rectangleForCurrentValue();
+        paintCurrentValueBackground(g, r, hasFocus);
         if (!comboBox.isEditable()) {
-            Rectangle r = rectangleForCurrentValue();
-            paintCurrentValueBackground(g, r, hasFocus);
             paintCurrentValue(g, r, hasFocus);
         }
     }

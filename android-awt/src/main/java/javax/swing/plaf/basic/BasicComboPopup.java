@@ -781,6 +781,135 @@ public class BasicComboPopup extends JPopupMenu implements ComboPopup {
         }
     }
 
+    /**
+     * A listener to be registered upon the combo box
+     * (<em>not</em> its popup menu)
+     * to handle mouse events
+     * that affect the state of the popup menu.
+     * The main purpose of this listener is to make the popup menu
+     * appear and disappear.
+     * This listener also helps
+     * with click-and-drag scenarios by setting the selection if the mouse was
+     * released over the list during a drag.
+     */
+    protected class InvocationMouseHandler extends java.awt.event.MouseAdapter {
+        /**
+         * Responds to mouse-pressed events on the combo box.
+         *
+         * @param e the mouse-press event to be handled
+         */
+        public void mousePressed(MouseEvent e) {
+            getHandler().mousePressed(e);
+        }
+
+        /**
+         * Responds to the user terminating
+         * a click or drag that began on the combo box.
+         *
+         * @param e the mouse-release event to be handled
+         */
+        public void mouseReleased(MouseEvent e) {
+            getHandler().mouseReleased(e);
+        }
+    }
+
+    /**
+     * This listener watches for dragging and updates the current selection in the
+     * list if it is dragging over the list.
+     */
+    protected class InvocationMouseMotionHandler extends java.awt.event.MouseMotionAdapter {
+        public void mouseDragged(MouseEvent e) {
+            getHandler().mouseDragged(e);
+        }
+    }
+
+    /**
+     * As of Java 2 platform v 1.4, this class is now obsolete and is only included for
+     * backwards API compatibility. Do not instantiate or subclass.
+     * <p>
+     * All the functionality of this class has been included in
+     * BasicComboBoxUI ActionMap/InputMap methods.
+     */
+    public class InvocationKeyHandler extends java.awt.event.KeyAdapter {
+        public void keyReleased(java.awt.event.KeyEvent e) {}
+    }
+
+    /**
+     * As of Java 2 platform v 1.4, this class is now obsolete, doesn't do anything, and
+     * is only included for backwards API compatibility. Do not call or
+     * override.
+     */
+    protected class ListSelectionHandler implements ListSelectionListener {
+        public void valueChanged(javax.swing.event.ListSelectionEvent e) {}
+    }
+
+    /**
+     * As of 1.4, this class is now obsolete, doesn't do anything, and
+     * is only included for backwards API compatibility. Do not call or
+     * override.
+     * <p>
+     * The functionality has been migrated into <code>ItemHandler</code>.
+     *
+     * @see #createItemListener
+     */
+    public class ListDataHandler implements ListDataListener {
+        public void contentsChanged(javax.swing.event.ListDataEvent e) {}
+
+        public void intervalAdded(javax.swing.event.ListDataEvent e) {
+        }
+
+        public void intervalRemoved(javax.swing.event.ListDataEvent e) {
+        }
+    }
+
+    /**
+     * This listener hides the popup when the mouse is released in the list.
+     */
+    protected class ListMouseHandler extends java.awt.event.MouseAdapter {
+        public void mousePressed(MouseEvent e) {
+        }
+
+        public void mouseReleased(MouseEvent anEvent) {
+            getHandler().mouseReleased(anEvent);
+        }
+    }
+
+    /**
+     * This listener changes the selected item as you move the mouse over the list.
+     * The selection change is not committed to the model, this is for user feedback only.
+     */
+    protected class ListMouseMotionHandler extends java.awt.event.MouseMotionAdapter {
+        public void mouseMoved(MouseEvent anEvent) {
+            getHandler().mouseMoved(anEvent);
+        }
+    }
+
+    /**
+     * This listener watches for changes to the selection in the
+     * combo box.
+     */
+    protected class ItemHandler implements ItemListener {
+        public void itemStateChanged(ItemEvent e) {
+            getHandler().itemStateChanged(e);
+        }
+    }
+
+    /**
+     * This listener watches for bound properties that have changed in the
+     * combo box.
+     * <p>
+     * Subclasses which wish to listen to combo box property changes should
+     * call the superclass methods to ensure that the combo popup correctly
+     * handles property changes.
+     *
+     * @see #createPropertyChangeListener
+     */
+    protected class PropertyChangeHandler implements PropertyChangeListener {
+        public void propertyChange(PropertyChangeEvent e) {
+            getHandler().propertyChange(e);
+        }
+    }
+
     //
     // end Event Listeners
     //=================================================================
