@@ -119,6 +119,51 @@ public abstract class Toolkit {
         return new Cursor(Cursor.CUSTOM_CURSOR);
     }
 
+    /**
+     * Fills {@code systemColors} with the platform's colors, indexed as the
+     * {@link SystemColor} constants. Android has no native widget palette to read, so
+     * this is a deliberate no-op that leaves the OpenJDK defaults in place.
+     */
+    protected void loadSystemColors(int[] systemColors) {
+    }
+
+    /**
+     * Returns the screen insets of {@code gc}. Android's system bars are handled by
+     * the host activity around the game surface, so the AWT screen has none.
+     */
+    public Insets getScreenInsets(GraphicsConfiguration gc) {
+        return new Insets(0, 0, 0, 0);
+    }
+
+    /**
+     * Gets a {@code PrintJob} for printing on this platform. Android has no AWT print
+     * service, so the dialog is answered as cancelled: the spec's {@code null}.
+     *
+     * @throws NullPointerException if {@code frame} is null
+     */
+    public PrintJob getPrintJob(Frame frame, String jobtitle, java.util.Properties props) {
+        if (frame == null) {
+            throw new NullPointerException("frame must not be null");
+        }
+        return null;
+    }
+
+    /**
+     * Gets a {@code PrintJob} with the given job and page attributes; delegates to the
+     * {@code Properties} form, as 8u's default does.
+     */
+    public PrintJob getPrintJob(Frame frame, String jobtitle,
+                                JobAttributes jobAttributes,
+                                PageAttributes pageAttributes) {
+        if (this != Toolkit.getDefaultToolkit()) {
+            return Toolkit.getDefaultToolkit().getPrintJob(frame, jobtitle,
+                                                           jobAttributes,
+                                                           pageAttributes);
+        } else {
+            return getPrintJob(frame, jobtitle, null);
+        }
+    }
+
     public void sync() {}
     public void beep() {}
 

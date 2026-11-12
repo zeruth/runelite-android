@@ -1,92 +1,336 @@
 /*
- * Copyright (c) 2026, Tyler Bochard
- * All rights reserved.
+ * Copyright (c) 1996, 2013, Oracle and/or its affiliates. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
- * Part of android-awt, the Android shadow of the desktop JDK surface used by
- * runelite-android. Original work of this project, not derived from OpenJDK;
- * licensed under the BSD 2-Clause License (see the LICENSE file at the
- * repository root). Files ported from OpenJDK carry the OpenJDK header instead;
- * see android-awt/LICENSE.
+ * This code is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 only, as
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
+ * This code is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ * version 2 for more details (a copy is included in the LICENSE file that
+ * accompanied this code).
  *
- * 1. Redistributions of source code must retain the above copyright notice, this
- *    list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright notice,
- *    this list of conditions and the following disclaimer in the documentation
- *    and/or other materials provided with the distribution.
+ * You should have received a copy of the GNU General Public License version
+ * 2 along with this work; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
- * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
+ * or visit www.oracle.com if you need additional information or have any
+ * questions.
  */
 package java.awt;
 
-/** Stable desktop-compatible system palette for Android's peerless AWT environment. */
-public final class SystemColor extends Color {
+import java.io.ObjectStreamException;
+
+/**
+ * A class to encapsulate symbolic colors representing the color of
+ * native GUI objects on a system.  For systems which support the dynamic
+ * update of the system colors (when the user changes the colors)
+ * the actual RGB values of these symbolic colors will also change
+ * dynamically.
+ * <p>
+ * On Android there is no native look to follow: {@link Toolkit#loadSystemColors}
+ * keeps the table, so every color has the OpenJDK default value below.
+ *
+ * @author      Carl Quinn
+ * @author      Amy Fowler
+ */
+public final class SystemColor extends Color implements java.io.Serializable {
+
+   /** The array index for the {@link #desktop} system color. */
+    public final static int DESKTOP = 0;
+    /** The array index for the {@link #activeCaption} system color. */
+    public final static int ACTIVE_CAPTION = 1;
+    /** The array index for the {@link #activeCaptionText} system color. */
+    public final static int ACTIVE_CAPTION_TEXT = 2;
+    /** The array index for the {@link #activeCaptionBorder} system color. */
+    public final static int ACTIVE_CAPTION_BORDER = 3;
+    /** The array index for the {@link #inactiveCaption} system color. */
+    public final static int INACTIVE_CAPTION = 4;
+    /** The array index for the {@link #inactiveCaptionText} system color. */
+    public final static int INACTIVE_CAPTION_TEXT = 5;
+    /** The array index for the {@link #inactiveCaptionBorder} system color. */
+    public final static int INACTIVE_CAPTION_BORDER = 6;
+    /** The array index for the {@link #window} system color. */
+    public final static int WINDOW = 7;
+    /** The array index for the {@link #windowBorder} system color. */
+    public final static int WINDOW_BORDER = 8;
+    /** The array index for the {@link #windowText} system color. */
+    public final static int WINDOW_TEXT = 9;
+    /** The array index for the {@link #menu} system color. */
+    public final static int MENU = 10;
+    /** The array index for the {@link #menuText} system color. */
+    public final static int MENU_TEXT = 11;
+    /** The array index for the {@link #text} system color. */
+    public final static int TEXT = 12;
+    /** The array index for the {@link #textText} system color. */
+    public final static int TEXT_TEXT = 13;
+    /** The array index for the {@link #textHighlight} system color. */
+    public final static int TEXT_HIGHLIGHT = 14;
+    /** The array index for the {@link #textHighlightText} system color. */
+    public final static int TEXT_HIGHLIGHT_TEXT = 15;
+    /** The array index for the {@link #textInactiveText} system color. */
+    public final static int TEXT_INACTIVE_TEXT = 16;
+    /** The array index for the {@link #control} system color. */
+    public final static int CONTROL = 17;
+    /** The array index for the {@link #controlText} system color. */
+    public final static int CONTROL_TEXT = 18;
+    /** The array index for the {@link #controlHighlight} system color. */
+    public final static int CONTROL_HIGHLIGHT = 19;
+    /** The array index for the {@link #controlLtHighlight} system color. */
+    public final static int CONTROL_LT_HIGHLIGHT = 20;
+    /** The array index for the {@link #controlShadow} system color. */
+    public final static int CONTROL_SHADOW = 21;
+    /** The array index for the {@link #controlDkShadow} system color. */
+    public final static int CONTROL_DK_SHADOW = 22;
+    /** The array index for the {@link #scrollbar} system color. */
+    public final static int SCROLLBAR = 23;
+    /** The array index for the {@link #info} system color. */
+    public final static int INFO = 24;
+    /** The array index for the {@link #infoText} system color. */
+    public final static int INFO_TEXT = 25;
+    /** The number of system colors in the array. */
+    public final static int NUM_COLORS = 26;
+
+    /******************************************************************************************/
+
+    /*
+     * System colors with default initial values, overwritten by toolkit if
+     * system values differ and are available.
+     * Should put array initialization above first field that is using
+     * SystemColor constructor to initialize.
+     */
+    private static int[] systemColors = {
+        0xFF005C5C,  // desktop = new Color(0,92,92);
+        0xFF000080,  // activeCaption = new Color(0,0,128);
+        0xFFFFFFFF,  // activeCaptionText = Color.white;
+        0xFFC0C0C0,  // activeCaptionBorder = Color.lightGray;
+        0xFF808080,  // inactiveCaption = Color.gray;
+        0xFFC0C0C0,  // inactiveCaptionText = Color.lightGray;
+        0xFFC0C0C0,  // inactiveCaptionBorder = Color.lightGray;
+        0xFFFFFFFF,  // window = Color.white;
+        0xFF000000,  // windowBorder = Color.black;
+        0xFF000000,  // windowText = Color.black;
+        0xFFC0C0C0,  // menu = Color.lightGray;
+        0xFF000000,  // menuText = Color.black;
+        0xFFC0C0C0,  // text = Color.lightGray;
+        0xFF000000,  // textText = Color.black;
+        0xFF000080,  // textHighlight = new Color(0,0,128);
+        0xFFFFFFFF,  // textHighlightText = Color.white;
+        0xFF808080,  // textInactiveText = Color.gray;
+        0xFFC0C0C0,  // control = Color.lightGray;
+        0xFF000000,  // controlText = Color.black;
+        0xFFFFFFFF,  // controlHighlight = Color.white;
+        0xFFE0E0E0,  // controlLtHighlight = new Color(224,224,224);
+        0xFF808080,  // controlShadow = Color.gray;
+        0xFF000000,  // controlDkShadow = Color.black;
+        0xFFE0E0E0,  // scrollbar = new Color(224,224,224);
+        0xFFE0E000,  // info = new Color(224,224,0);
+        0xFF000000,  // infoText = Color.black;
+    };
+
+    // 8u fills the table through Toolkit.loadSystemColors in a static block before the
+    // fields below are built, then re-reads it on desktop theme changes through AWTAccessor.
+    // The shadow Color value is final and the Android toolkit keeps the defaults, so the
+    // table is loaded once, here, ahead of the constructors that read it.
+    static {
+        Toolkit.getDefaultToolkit().loadSystemColors(systemColors);
+    }
+
+    /** The color rendered for the background of the desktop. */
+    public final static SystemColor desktop = new SystemColor((byte)DESKTOP);
+
+    /** The color rendered for the window-title background of the currently active window. */
+    public final static SystemColor activeCaption = new SystemColor((byte)ACTIVE_CAPTION);
+
+    /** The color rendered for the window-title text of the currently active window. */
+    public final static SystemColor activeCaptionText = new SystemColor((byte)ACTIVE_CAPTION_TEXT);
+
+    /** The color rendered for the border around the currently active window. */
+    public final static SystemColor activeCaptionBorder = new SystemColor((byte)ACTIVE_CAPTION_BORDER);
+
+    /** The color rendered for the window-title background of inactive windows. */
+    public final static SystemColor inactiveCaption = new SystemColor((byte)INACTIVE_CAPTION);
+
+    /** The color rendered for the window-title text of inactive windows. */
+    public final static SystemColor inactiveCaptionText = new SystemColor((byte)INACTIVE_CAPTION_TEXT);
+
+    /** The color rendered for the border around inactive windows. */
+    public final static SystemColor inactiveCaptionBorder = new SystemColor((byte)INACTIVE_CAPTION_BORDER);
+
+    /** The color rendered for the background of interior regions inside windows. */
+    public final static SystemColor window = new SystemColor((byte)WINDOW);
+
+    /** The color rendered for the border around interior regions inside windows. */
+    public final static SystemColor windowBorder = new SystemColor((byte)WINDOW_BORDER);
+
+    /** The color rendered for text of interior regions inside windows. */
+    public final static SystemColor windowText = new SystemColor((byte)WINDOW_TEXT);
+
+    /** The color rendered for the background of menus. */
+    public final static SystemColor menu = new SystemColor((byte)MENU);
+
+    /** The color rendered for the text of menus. */
+    public final static SystemColor menuText = new SystemColor((byte)MENU_TEXT);
+
+    /** The color rendered for the background of text control objects, such as textfields and comboboxes. */
+    public final static SystemColor text = new SystemColor((byte)TEXT);
+
+    /** The color rendered for the text of text control objects, such as textfields and comboboxes. */
+    public final static SystemColor textText = new SystemColor((byte)TEXT_TEXT);
+
+    /** The color rendered for the background of selected items, such as in menus, comboboxes, and text. */
+    public final static SystemColor textHighlight = new SystemColor((byte)TEXT_HIGHLIGHT);
+
+    /** The color rendered for the text of selected items, such as in menus, comboboxes, and text. */
+    public final static SystemColor textHighlightText = new SystemColor((byte)TEXT_HIGHLIGHT_TEXT);
+
+    /** The color rendered for the text of inactive items, such as in menus. */
+    public final static SystemColor textInactiveText = new SystemColor((byte)TEXT_INACTIVE_TEXT);
+
+    /** The color rendered for the background of control panels and control objects, such as pushbuttons. */
+    public final static SystemColor control = new SystemColor((byte)CONTROL);
+
+    /** The color rendered for the text of control panels and control objects, such as pushbuttons. */
+    public final static SystemColor controlText = new SystemColor((byte)CONTROL_TEXT);
+
+    /** The color rendered for light areas of 3D control objects, such as pushbuttons. */
+    public final static SystemColor controlHighlight = new SystemColor((byte)CONTROL_HIGHLIGHT);
+
+    /** The color rendered for highlight areas of 3D control objects, such as pushbuttons. */
+    public final static SystemColor controlLtHighlight = new SystemColor((byte)CONTROL_LT_HIGHLIGHT);
+
+    /** The color rendered for shadow areas of 3D control objects, such as pushbuttons. */
+    public final static SystemColor controlShadow = new SystemColor((byte)CONTROL_SHADOW);
+
+    /** The color rendered for dark shadow areas on 3D control objects, such as pushbuttons. */
+    public final static SystemColor controlDkShadow = new SystemColor((byte)CONTROL_DK_SHADOW);
+
+    /** The color rendered for the background of scrollbars. */
+    public final static SystemColor scrollbar = new SystemColor((byte)SCROLLBAR);
+
+    /** The color rendered for the background of tooltips or spot help. */
+    public final static SystemColor info = new SystemColor((byte)INFO);
+
+    /** The color rendered for the text of tooltips or spot help. */
+    public final static SystemColor infoText = new SystemColor((byte)INFO_TEXT);
+
+    /*
+     * JDK 1.1 serialVersionUID.
+     */
     private static final long serialVersionUID = 4503142729533789064L;
-    public static final int DESKTOP = 0;
-    public static final int ACTIVE_CAPTION = 1;
-    public static final int ACTIVE_CAPTION_TEXT = 2;
-    public static final int ACTIVE_CAPTION_BORDER = 3;
-    public static final int INACTIVE_CAPTION = 4;
-    public static final int INACTIVE_CAPTION_TEXT = 5;
-    public static final int INACTIVE_CAPTION_BORDER = 6;
-    public static final int WINDOW = 7;
-    public static final int WINDOW_BORDER = 8;
-    public static final int WINDOW_TEXT = 9;
-    public static final int MENU = 10;
-    public static final int MENU_TEXT = 11;
-    public static final int TEXT = 12;
-    public static final int TEXT_TEXT = 13;
-    public static final int TEXT_HIGHLIGHT = 14;
-    public static final int TEXT_HIGHLIGHT_TEXT = 15;
-    public static final int TEXT_INACTIVE_TEXT = 16;
-    public static final int CONTROL = 17;
-    public static final int CONTROL_TEXT = 18;
-    public static final int CONTROL_HIGHLIGHT = 19;
-    public static final int CONTROL_LT_HIGHLIGHT = 20;
-    public static final int CONTROL_SHADOW = 21;
-    public static final int CONTROL_DK_SHADOW = 22;
-    public static final int SCROLLBAR = 23;
-    public static final int INFO = 24;
-    public static final int INFO_TEXT = 25;
-    public static final int NUM_COLORS = 26;
-    public static final SystemColor desktop = new SystemColor(DESKTOP, 0x005c5c);
-    public static final SystemColor activeCaption = new SystemColor(ACTIVE_CAPTION, 0x000080);
-    public static final SystemColor activeCaptionText = new SystemColor(ACTIVE_CAPTION_TEXT, 0xffffff);
-    public static final SystemColor activeCaptionBorder = new SystemColor(ACTIVE_CAPTION_BORDER, 0xc0c0c0);
-    public static final SystemColor inactiveCaption = new SystemColor(INACTIVE_CAPTION, 0x808080);
-    public static final SystemColor inactiveCaptionText = new SystemColor(INACTIVE_CAPTION_TEXT, 0xc0c0c0);
-    public static final SystemColor inactiveCaptionBorder = new SystemColor(INACTIVE_CAPTION_BORDER, 0xc0c0c0);
-    public static final SystemColor window = new SystemColor(WINDOW, 0xffffff);
-    public static final SystemColor windowBorder = new SystemColor(WINDOW_BORDER, 0x000000);
-    public static final SystemColor windowText = new SystemColor(WINDOW_TEXT, 0x000000);
-    public static final SystemColor menu = new SystemColor(MENU, 0xc0c0c0);
-    public static final SystemColor menuText = new SystemColor(MENU_TEXT, 0x000000);
-    public static final SystemColor text = new SystemColor(TEXT, 0xffffff);
-    public static final SystemColor textText = new SystemColor(TEXT_TEXT, 0x000000);
-    public static final SystemColor textHighlight = new SystemColor(TEXT_HIGHLIGHT, 0x000080);
-    public static final SystemColor textHighlightText = new SystemColor(TEXT_HIGHLIGHT_TEXT, 0xffffff);
-    public static final SystemColor textInactiveText = new SystemColor(TEXT_INACTIVE_TEXT, 0x808080);
-    public static final SystemColor control = new SystemColor(CONTROL, 0xc0c0c0);
-    public static final SystemColor controlText = new SystemColor(CONTROL_TEXT, 0x000000);
-    public static final SystemColor controlHighlight = new SystemColor(CONTROL_HIGHLIGHT, 0xc0c0c0);
-    public static final SystemColor controlLtHighlight = new SystemColor(CONTROL_LT_HIGHLIGHT, 0xffffff);
-    public static final SystemColor controlShadow = new SystemColor(CONTROL_SHADOW, 0x808080);
-    public static final SystemColor controlDkShadow = new SystemColor(CONTROL_DK_SHADOW, 0x000000);
-    public static final SystemColor scrollbar = new SystemColor(SCROLLBAR, 0xe0e0e0);
-    public static final SystemColor info = new SystemColor(INFO, 0xffffe1);
-    public static final SystemColor infoText = new SystemColor(INFO_TEXT, 0x000000);
-    private final int index;
-    private SystemColor(int index, int rgb) { super(rgb); this.index = index; }
-    @Override public String toString() { return getClass().getName() + "[i=" + index + "]"; }
+
+    /*
+     * An index into either array of SystemColor objects or values.
+     */
+    private transient int index;
+
+    private static SystemColor systemColorObjects [] = {
+        SystemColor.desktop,
+        SystemColor.activeCaption,
+        SystemColor.activeCaptionText,
+        SystemColor.activeCaptionBorder,
+        SystemColor.inactiveCaption,
+        SystemColor.inactiveCaptionText,
+        SystemColor.inactiveCaptionBorder,
+        SystemColor.window,
+        SystemColor.windowBorder,
+        SystemColor.windowText,
+        SystemColor.menu,
+        SystemColor.menuText,
+        SystemColor.text,
+        SystemColor.textText,
+        SystemColor.textHighlight,
+        SystemColor.textHighlightText,
+        SystemColor.textInactiveText,
+        SystemColor.control,
+        SystemColor.controlText,
+        SystemColor.controlHighlight,
+        SystemColor.controlLtHighlight,
+        SystemColor.controlShadow,
+        SystemColor.controlDkShadow,
+        SystemColor.scrollbar,
+        SystemColor.info,
+        SystemColor.infoText
+    };
+
+    /**
+     * Creates a symbolic color that represents an indexed entry into system
+     * color cache. Used by above static system colors.
+     */
+    private SystemColor(byte index) {
+        super(systemColors[index], true);
+        this.index = index;
+    }
+
+    /**
+     * The serialized form of 8u: the color value field carries the index, which
+     * {@link #readResolve} maps back to the shared instance.
+     */
+    private SystemColor(int serializedIndex, boolean serialForm) {
+        super(serializedIndex, true);
+        this.index = serializedIndex;
+    }
+
+    /**
+     * Returns a string representation of this <code>Color</code>'s values.
+     * This method is intended to be used only for debugging purposes,
+     * and the content and format of the returned string may vary between
+     * implementations.
+     * The returned string may be empty but may not be <code>null</code>.
+     *
+     * @return  a string representation of this <code>Color</code>
+     */
+    public String toString() {
+        return getClass().getName() + "[i=" + (index) + "]";
+    }
+
+    /**
+     * The design of the {@code SystemColor} class assumes that
+     * the {@code SystemColor} object instances stored in the
+     * static final fields above are the only instances used
+     * by developers.
+     * This method helps maintain those limits on instantiation
+     * by using the index stored in the value field of the
+     * serialized form of the object to replace the serialized
+     * object with the equivalent static object constant field
+     * of {@code SystemColor}.
+     * See the {@link #writeReplace} method for more information
+     * on the serialized form of these objects.
+     * @return one of the {@code SystemColor} static object
+     *         fields that refers to the same system color.
+     */
+    private Object readResolve() {
+        // The instances of SystemColor are tightly controlled and
+        // only the canonical instances appearing above as static
+        // constants are allowed.  The serial form of SystemColor
+        // objects stores the color index as the value.  Here we
+        // map that index back into the canonical instance.
+        return systemColorObjects[getRGB()];
+    }
+
+    /**
+     * Returns a specialized version of the {@code SystemColor}
+     * object for writing to the serialized stream.
+     * @serialData
+     * The value field of a serialized {@code SystemColor} object
+     * contains the array index of the system color instead of the
+     * rgb data for the system color.
+     * This index is used by the {@link #readResolve} method to
+     * resolve the deserialized objects back to the original
+     * static constant versions to ensure unique instances of
+     * each {@code SystemColor} object.
+     * @return a proxy {@code SystemColor} object with its value
+     *         replaced by the corresponding system color index.
+     */
+    private Object writeReplace() throws ObjectStreamException
+    {
+        // we put an array index in the SystemColor.value while serialize
+        // to keep compatibility.
+        return new SystemColor(index, true);
+    }
 }
