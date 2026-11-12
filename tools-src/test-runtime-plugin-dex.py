@@ -49,21 +49,29 @@ def check_host_api(host_api):
 
 def main():
     parser = argparse.ArgumentParser()
-    for name in ("java-home", "sdk", "r8", "apk", "output"):
+    for name in ("java-home", "output"):
         parser.add_argument("--" + name, type=Path, required=True)
-    parser.add_argument("--serial", required=True)
+    for name in ("sdk", "r8", "apk"):
+        parser.add_argument("--" + name, type=Path)
+    parser.add_argument("--serial")
     parser.add_argument("--asm", type=Path, help="ASM jar for the host retargeter (default: Gradle cache)")
     parser.add_argument("--asm-commons", type=Path, help="ASM commons jar (default: Gradle cache)")
+    parser.add_argument("--host-only", action="store_true",
+                        help="run only the host retargeting fixture (no APK, D8 or emulator)")
     args = parser.parse_args()
     asm = args.asm or gradle_jar("org.ow2.asm", "asm")
     asm_commons = args.asm_commons or gradle_jar("org.ow2.asm", "asm-commons")
-    if not re.fullmatch(r"emulator-\d+", args.serial):
-        raise SystemExit("This probe only targets an emulator.")
+    if not args.host_only:
+        absent = [name for name in ("sdk", "r8", "apk", "serial") if getattr(args, name) is None]
+        if absent:
+            parser.error("--" + ", --".join(absent) + " required unless --host-only")
+        if not re.fullmatch(r"emulator-\d+", args.serial):
+            raise SystemExit("This probe only targets an emulator.")
     out = args.output.resolve()
     out.mkdir(parents=True, exist_ok=True)
     suffix = ".exe" if os.name == "nt" else ""
     java = args.java_home / "bin"
-    adb = args.sdk / "platform-tools" / ("adb" + suffix)
+    adb = args.sdk / "platform-tools" / ("adb" + suffix) if args.sdk else None
     logs = []
 
     def run(label, *command, expected_failure=False):
@@ -79,6 +87,28 @@ def main():
         elif result.returncode:
             raise SystemExit(result.returncode)
         return result.stdout + result.stderr
+
+    # Retargeting fixtures: the app's own JdkRetargeter, compiled on the host, rewrites a
+    # desktop-compiled plugin the way PluginDexer does before D8; the driver checks the bytecode,
+    # the emulator runs it against the APK's shims.
+    tool_classes = out / "retarget-tool"
+    fixture_classes = out / "retarget-classes"
+    tool_classes.mkdir(exist_ok=True)
+    fixture_classes.mkdir(exist_ok=True)
+    classpath = os.pathsep.join(map(str, (asm, asm_commons)))
+    run("compile JdkRetargeter", java / ("javac" + suffix), "--release", "11", "-encoding", "UTF-8",
+        "-cp", classpath, "-d", tool_classes, RETARGET_SOURCES / "JdkRetargeter.java",
+        *sorted((RETARGET_SOURCES / "jdk").glob("*.java")), Path(__file__).resolve().parent / "TestRuntimeRetarget.java")
+    run("compile retarget fixture", java / ("javac" + suffix), "--release", "11", "-encoding", "UTF-8",
+        "-d", fixture_classes, Path(__file__).resolve().parent / "TestRuntimeRetargetPlugin.java")
+    run("package retarget fixture", java / ("jar" + suffix), "cf", out / "retarget-plugin.jar", "-C", fixture_classes, ".")
+    result = run("retarget fixture", java / ("java" + suffix), "-Xverify:all",
+                 "-cp", os.pathsep.join((str(tool_classes), classpath)), "TestRuntimeRetarget",
+                 out / "retarget-plugin.jar", out / "retarget-rewritten.jar")
+    if "PASS:" not in result:
+        raise SystemExit("Missing retarget success marker")
+    if args.host_only:
+        return
 
     with zipfile.ZipFile(args.apk) as archive:
         manifest = dict(line.split("=", 1) for line in archive.read("assets/runtime-dex/inputs.properties")
@@ -101,26 +131,6 @@ def main():
     run("aligned D8 conversion", *compiler, "--desugared-lib", out / "desugar.json",
         "--lib", out / "java-api.jar", "--classpath", out / "host-api.jar",
         "--output", out / "aligned.jar", out / "plugin.jar")
-
-    # Retargeting fixtures: the app's own JdkRetargeter, compiled on the host, rewrites a
-    # desktop-compiled plugin the way PluginDexer does before D8; the driver checks the bytecode,
-    # the emulator runs it against the APK's shims.
-    tool_classes = out / "retarget-tool"
-    fixture_classes = out / "retarget-classes"
-    tool_classes.mkdir(exist_ok=True)
-    fixture_classes.mkdir(exist_ok=True)
-    classpath = os.pathsep.join(map(str, (asm, asm_commons)))
-    run("compile JdkRetargeter", java / ("javac" + suffix), "--release", "11", "-encoding", "UTF-8",
-        "-cp", classpath, "-d", tool_classes, RETARGET_SOURCES / "JdkRetargeter.java",
-        *sorted((RETARGET_SOURCES / "jdk").glob("*.java")), Path(__file__).resolve().parent / "TestRuntimeRetarget.java")
-    run("compile retarget fixture", java / ("javac" + suffix), "--release", "11", "-encoding", "UTF-8",
-        "-d", fixture_classes, Path(__file__).resolve().parent / "TestRuntimeRetargetPlugin.java")
-    run("package retarget fixture", java / ("jar" + suffix), "cf", out / "retarget-plugin.jar", "-C", fixture_classes, ".")
-    result = run("retarget fixture", java / ("java" + suffix), "-Xverify:all",
-                 "-cp", os.pathsep.join((str(tool_classes), classpath)), "TestRuntimeRetarget",
-                 out / "retarget-plugin.jar", out / "retarget-rewritten.jar")
-    if "PASS:" not in result:
-        raise SystemExit("Missing retarget success marker")
     run("retarget D8 conversion", *compiler, "--desugared-lib", out / "desugar.json",
         "--lib", out / "java-api.jar", "--classpath", out / "host-api.jar",
         "--output", out / "retarget.jar", out / "retarget-rewritten.jar")

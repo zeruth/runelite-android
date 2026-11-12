@@ -420,7 +420,7 @@ if (androidSdkAvailable) {
         return methodRefs.map { (owner, nat) -> "${utf[classNames[owner]]}.${utf[natNames[nat]]}${utf[natDescriptors[nat]]}" } +
             classNames.filter { it != 0 }.map { "class ${utf[it]}" }
     }
-    val retargetTable =file("src/androidMain/java/net/runelite/mp/compat/jdk/JdkRetargets.java")
+    val retargetTable = file("src/androidMain/java/net/runelite/mp/compat/jdk/JdkRetargets.java")
     val appCompileTasks = tasks.matching { it.name == "compileDebugJavaWithJavac" || it.name == "compileDebugKotlin" }
     val jdkRetargetCheck = tasks.register("jdkRetargetCheck") {
         group = "verification"

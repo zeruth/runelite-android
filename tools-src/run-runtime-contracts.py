@@ -25,20 +25,27 @@ def main():
     parser.add_argument("--java-home", default=os.environ.get("JAVA_HOME"))
     parser.add_argument("--output", type=Path, help="also write the runner's output to this file")
     parser.add_argument("--h2-jar", type=Path, help="Pinned H2 runtime JAR for the actual JDBC timeout probe")
+    parser.add_argument("--shims-only", action="store_true",
+                        help="run only the JdkRetargets shim contracts, not the shadow runner")
     args = parser.parse_args()
     repo = Path(__file__).resolve().parent.parent
-    command = [sys.executable, str(repo / "tools-src/run-awt-contracts.py")]
-    if args.java_home:
-        command += ["--java-home", str(args.java_home)]
-    for name in CONTRACTS:
-        command += ["--only", name]
-    result = subprocess.run(command, text=True, encoding="utf-8", errors="replace", stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    print(result.stdout, end="", flush=True)
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(result.stdout, encoding="utf-8")
-    if result.returncode:
-        raise SystemExit(result.returncode)
+        args.output.write_text("", encoding="utf-8")
+    # The shim contracts are independent of the shadow patching, so a shadow failure is
+    # reported at the end rather than hiding their result.
+    failed = 0
+    if not args.shims_only:
+        command = [sys.executable, str(repo / "tools-src/run-awt-contracts.py")]
+        if args.java_home:
+            command += ["--java-home", str(args.java_home)]
+        for name in CONTRACTS:
+            command += ["--only", name]
+        result = subprocess.run(command, text=True, encoding="utf-8", errors="replace", stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        print(result.stdout, end="", flush=True)
+        if args.output:
+            args.output.write_text(result.stdout, encoding="utf-8")
+        failed = result.returncode
 
     java = Path(args.java_home) / "bin" if args.java_home else None
     suffix = ".exe" if os.name == "nt" else ""
@@ -73,7 +80,9 @@ def main():
         run("compile shim contracts", "javac", "-encoding", "UTF-8", "-cp", shims, "-d", tests,
             repo / "tools-src/TestJdkShimContracts.java")
         run("shim contracts", "java", "-cp", str(tests) + os.pathsep + str(shims), "TestJdkShimContracts")
-    if not args.h2_jar:
+    if failed:
+        raise SystemExit(failed)
+    if not args.h2_jar or args.shims_only:
         return
 
     with tempfile.TemporaryDirectory(prefix="runtime-contracts-") as directory:

@@ -39,6 +39,10 @@ public final class RuntimeVersion implements Comparable<RuntimeVersion> {
         if (s == null) {
             throw new NullPointerException();
         }
+        if (s.isEmpty()) {
+            // The JDK's all-digits fast path takes "" and fails in Integer.parseInt.
+            throw new NumberFormatException("For input string: \"\"");
+        }
         Matcher m = FORMAT.matcher(s);
         if (!m.matches()) {
             throw new IllegalArgumentException("Invalid version string: '" + s + "'");

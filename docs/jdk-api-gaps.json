@@ -1,6 +1,6 @@
 {
  "_comment": "JDK 9-21 java.*/javax.* references the floor API lacks, from tools-src/hub-compat-scan.py --jdk-gaps. disposition: desugar = D8 backport or desugar_jdk_libs supplies it at minSdk; retarget = an app shim already rewrites it (via names it) or the dexer needs a retargeting entry (via empty); already-on-device-API = the device API has it, older devices do not; unsupported = nothing on ART can stand in for it.",
- "generatedAt": "2026-11-12T12:13:23Z",
+ "generatedAt": "2026-11-12T12:58:14Z",
  "hubVersion": "1.13.6",
  "minApi": 26,
  "deviceApi": 35,
@@ -8,14 +8,14 @@
   "floor": "android-37.0/android.jar cut to API 26 by android-37.0/data/api-versions.xml",
   "device": "android-35/android.jar",
   "desugar": "com.tools.android:desugar_jdk_libs_configuration:2.1.4",
-  "shims": "DesktopRegexTransformer, DesugarApisTask (IndyConcat), ProcessHandleShim; StringShim covers no JDK member"
+  "shims": "JdkRetargeter over the JdkRetargets table (net.runelite.mp.compat.jdk), regex relocation for hub jars"
  },
  "sourcesScanned": 201,
  "dispositions": {
   "retarget": {
-   "signatures": 12,
-   "plugins": 6,
-   "references": 25
+   "signatures": 13,
+   "plugins": 7,
+   "references": 26
   },
   "unsupported": {
    "signatures": 0,
@@ -23,9 +23,9 @@
    "references": 0
   },
   "already-on-device-API": {
-   "signatures": 8,
-   "plugins": 15,
-   "references": 28
+   "signatures": 7,
+   "plugins": 14,
+   "references": 27
   },
   "desugar": {
    "signatures": 59,
@@ -41,11 +41,11 @@
    "name": "writeString",
    "descriptor": "(Ljava/nio/file/Path;Ljava/lang/CharSequence;Ljava/nio/charset/Charset;[Ljava/nio/file/OpenOption;)Ljava/nio/file/Path;",
    "disposition": "retarget",
-   "via": "planned (#91): Files.write(path, s.getBytes(charset), options), UTF-8 default",
+   "via": "JdkRetargeter -> net.runelite.mp.compat.jdk.JdkFiles (client + hub jars)",
    "androidSince": 36.1,
    "pluginCount": 3,
    "referenceCount": 4,
-   "installs": 492322,
+   "installs": 499458,
    "plugins": [
     "sailing",
     "osrs-tcg",
@@ -59,11 +59,11 @@
    "name": "readString",
    "descriptor": "(Ljava/nio/file/Path;)Ljava/lang/String;",
    "disposition": "retarget",
-   "via": "planned (#91): Files.readAllBytes + new String(bytes, charset), UTF-8 default",
+   "via": "JdkRetargeter -> net.runelite.mp.compat.jdk.JdkFiles (client + hub jars)",
    "androidSince": 36.1,
    "pluginCount": 3,
    "referenceCount": 5,
-   "installs": 189452,
+   "installs": 192380,
    "plugins": [
     "resource-packs",
     "odablock",
@@ -77,11 +77,11 @@
    "name": "writeString",
    "descriptor": "(Ljava/nio/file/Path;Ljava/lang/CharSequence;[Ljava/nio/file/OpenOption;)Ljava/nio/file/Path;",
    "disposition": "retarget",
-   "via": "planned (#91): Files.write(path, s.getBytes(charset), options), UTF-8 default",
+   "via": "JdkRetargeter -> net.runelite.mp.compat.jdk.JdkFiles (client + hub jars)",
    "androidSince": 36.1,
    "pluginCount": 2,
    "referenceCount": 3,
-   "installs": 378166,
+   "installs": 383170,
    "plugins": [
     "tombs-of-amascut",
     "odablock"
@@ -94,13 +94,29 @@
    "name": "readString",
    "descriptor": "(Ljava/nio/file/Path;Ljava/nio/charset/Charset;)Ljava/lang/String;",
    "disposition": "retarget",
-   "via": "planned (#91): Files.readAllBytes + new String(bytes, charset), UTF-8 default",
+   "via": "JdkRetargeter -> net.runelite.mp.compat.jdk.JdkFiles (client + hub jars)",
    "androidSince": 36.1,
    "pluginCount": 1,
    "referenceCount": 3,
-   "installs": 117481,
+   "installs": 118982,
    "plugins": [
     "osrs-tcg"
+   ]
+  },
+  {
+   "signature": "method java/lang/String.lines()Ljava/util/stream/Stream;",
+   "kind": "method",
+   "owner": "java/lang/String",
+   "name": "lines",
+   "descriptor": "()Ljava/util/stream/Stream;",
+   "disposition": "retarget",
+   "via": "JdkRetargeter -> net.runelite.mp.compat.jdk.JdkStrings (client + hub jars)",
+   "androidSince": 33,
+   "pluginCount": 1,
+   "referenceCount": 1,
+   "installs": 73791,
+   "plugins": [
+    "dink"
    ]
   },
   {
@@ -110,7 +126,7 @@
    "name": "command",
    "descriptor": "()Ljava/util/Optional;",
    "disposition": "retarget",
-   "via": "ClientTransforms -> ProcessHandleShim.sanitizedCommand (client)",
+   "via": "JdkRetargeter -> net.runelite.mp.compat.jdk.JdkProcess (client + hub jars)",
    "androidSince": null,
    "pluginCount": 1,
    "referenceCount": 1,
@@ -126,7 +142,7 @@
    "name": "version",
    "descriptor": "()Ljava/lang/Runtime$Version;",
    "disposition": "retarget",
-   "via": "planned (#91): static helper answering a Runtime$Version shadow that parses java.specification.version",
+   "via": "JdkRetargeter -> net.runelite.mp.compat.jdk.JdkRuntime (client + hub jars)",
    "androidSince": null,
    "pluginCount": 1,
    "referenceCount": 1,
@@ -142,7 +158,7 @@
    "name": "",
    "descriptor": "",
    "disposition": "retarget",
-   "via": "planned (#91): android-awt shadow class over java.specification.version",
+   "via": "JdkRetargeter relocates to net.runelite.mp.compat.jdk.RuntimeVersion (client + hub jars)",
    "androidSince": null,
    "pluginCount": 1,
    "referenceCount": 1,
@@ -158,7 +174,7 @@
    "name": "feature",
    "descriptor": "()I",
    "disposition": "retarget",
-   "via": "planned (#91): android-awt shadow class over java.specification.version",
+   "via": "JdkRetargeter relocates to net.runelite.mp.compat.jdk.RuntimeVersion (client + hub jars)",
    "androidSince": null,
    "pluginCount": 1,
    "referenceCount": 1,
@@ -174,7 +190,7 @@
    "name": "keySet",
    "descriptor": "()Ljava/util/concurrent/ConcurrentHashMap$KeySetView;",
    "disposition": "retarget",
-   "via": "planned (#91): keySet()Ljava/util/Set; + checkcast ConcurrentHashMap$KeySetView",
+   "via": "JdkRetargeter -> net.runelite.mp.compat.jdk.JdkConcurrent (client + hub jars)",
    "androidSince": null,
    "pluginCount": 1,
    "referenceCount": 1,
@@ -190,7 +206,7 @@
    "name": "appendReplacement",
    "descriptor": "(Ljava/lang/StringBuilder;Ljava/lang/String;)Ljava/util/regex/Matcher;",
    "disposition": "retarget",
-   "via": "DesktopRegexTransformer -> net.runelite.mp.compat.regex (hub jars)",
+   "via": "JdkRetargeter -> net.runelite.mp.compat.jdk.JdkRegex (client); hub jars relocate to net.runelite.mp.compat.regex",
    "androidSince": 34,
    "pluginCount": 1,
    "referenceCount": 2,
@@ -206,7 +222,7 @@
    "name": "appendTail",
    "descriptor": "(Ljava/lang/StringBuilder;)Ljava/lang/StringBuilder;",
    "disposition": "retarget",
-   "via": "DesktopRegexTransformer -> net.runelite.mp.compat.regex (hub jars)",
+   "via": "JdkRetargeter -> net.runelite.mp.compat.jdk.JdkRegex (client); hub jars relocate to net.runelite.mp.compat.regex",
    "androidSince": 34,
    "pluginCount": 1,
    "referenceCount": 2,
@@ -222,7 +238,7 @@
    "name": "replaceAll",
    "descriptor": "(Ljava/util/function/Function;)Ljava/lang/String;",
    "disposition": "retarget",
-   "via": "DesktopRegexTransformer -> net.runelite.mp.compat.regex (hub jars)",
+   "via": "JdkRetargeter -> net.runelite.mp.compat.jdk.JdkRegex (client); hub jars relocate to net.runelite.mp.compat.regex",
    "androidSince": 34,
    "pluginCount": 1,
    "referenceCount": 1,
@@ -242,7 +258,7 @@
    "androidSince": 33,
    "pluginCount": 6,
    "referenceCount": 7,
-   "installs": 899932,
+   "installs": 914223,
    "plugins": [
     "quest-helper",
     "osrs-tcg",
@@ -263,7 +279,7 @@
    "androidSince": 33,
    "pluginCount": 5,
    "referenceCount": 5,
-   "installs": 1008697,
+   "installs": 1023486,
    "plugins": [
     "117hd",
     "inventory-setups",
@@ -283,7 +299,7 @@
    "androidSince": 34,
    "pluginCount": 4,
    "referenceCount": 11,
-   "installs": 368428,
+   "installs": 373747,
    "plugins": [
     "resource-packs",
     "c-engineer-completed",
@@ -302,7 +318,7 @@
    "androidSince": 33,
    "pluginCount": 1,
    "referenceCount": 1,
-   "installs": 312260,
+   "installs": 316490,
    "plugins": [
     "wikisync"
    ]
@@ -318,7 +334,7 @@
    "androidSince": 33,
    "pluginCount": 1,
    "referenceCount": 1,
-   "installs": 312260,
+   "installs": 316490,
    "plugins": [
     "wikisync"
    ]
@@ -334,7 +350,7 @@
    "androidSince": 33,
    "pluginCount": 1,
    "referenceCount": 1,
-   "installs": 117880,
+   "installs": 119812,
    "plugins": [
     "c-engineer-completed"
    ]
@@ -350,25 +366,9 @@
    "androidSince": 33,
    "pluginCount": 1,
    "referenceCount": 1,
-   "installs": 117481,
+   "installs": 118982,
    "plugins": [
     "osrs-tcg"
-   ]
-  },
-  {
-   "signature": "method java/lang/String.lines()Ljava/util/stream/Stream;",
-   "kind": "method",
-   "owner": "java/lang/String",
-   "name": "lines",
-   "descriptor": "()Ljava/util/stream/Stream;",
-   "disposition": "already-on-device-API",
-   "via": "android API 33",
-   "androidSince": 33,
-   "pluginCount": 1,
-   "referenceCount": 1,
-   "installs": 72666,
-   "plugins": [
-    "dink"
    ]
   },
   {
@@ -382,7 +382,7 @@
    "androidSince": 30,
    "pluginCount": 21,
    "referenceCount": 150,
-   "installs": 2730469,
+   "installs": 2772415,
    "plugins": [
     "quest-helper",
     "117hd",
@@ -418,7 +418,7 @@
    "androidSince": 30,
    "pluginCount": 18,
    "referenceCount": 80,
-   "installs": 2402405,
+   "installs": 2439857,
    "plugins": [
     "quest-helper",
     "117hd",
@@ -451,7 +451,7 @@
    "androidSince": 30,
    "pluginCount": 15,
    "referenceCount": 96,
-   "installs": 1749610,
+   "installs": 1776921,
    "plugins": [
     "quest-helper",
     "totem-fletching",
@@ -481,7 +481,7 @@
    "androidSince": 30,
    "pluginCount": 13,
    "referenceCount": 61,
-   "installs": 1885203,
+   "installs": 1913132,
    "plugins": [
     "quest-helper",
     "mastering-mixology",
@@ -509,7 +509,7 @@
    "androidSince": 30,
    "pluginCount": 13,
    "referenceCount": 16,
-   "installs": 1598341,
+   "installs": 1622978,
    "plugins": [
     "117hd",
     "port-tasks",
@@ -537,7 +537,7 @@
    "androidSince": 30,
    "pluginCount": 12,
    "referenceCount": 102,
-   "installs": 1786290,
+   "installs": 1814018,
    "plugins": [
     "quest-helper",
     "117hd",
@@ -564,7 +564,7 @@
    "androidSince": 30,
    "pluginCount": 12,
    "referenceCount": 17,
-   "installs": 1689505,
+   "installs": 1714582,
    "plugins": [
     "117hd",
     "sailing",
@@ -591,7 +591,7 @@
    "androidSince": 33,
    "pluginCount": 12,
    "referenceCount": 74,
-   "installs": 1504775,
+   "installs": 1528243,
    "plugins": [
     "quest-helper",
     "shortest-path",
@@ -618,7 +618,7 @@
    "androidSince": 30,
    "pluginCount": 11,
    "referenceCount": 19,
-   "installs": 2050494,
+   "installs": 2081498,
    "plugins": [
     "quest-helper",
     "117hd",
@@ -644,7 +644,7 @@
    "androidSince": 30,
    "pluginCount": 11,
    "referenceCount": 13,
-   "installs": 866926,
+   "installs": 880854,
    "plugins": [
     "barracuda-trials-pathfinder",
     "c-engineer-completed",
@@ -670,7 +670,7 @@
    "androidSince": 30,
    "pluginCount": 10,
    "referenceCount": 77,
-   "installs": 1280006,
+   "installs": 1300431,
    "plugins": [
     "quest-helper",
     "shortest-path",
@@ -695,7 +695,7 @@
    "androidSince": 30,
    "pluginCount": 10,
    "referenceCount": 12,
-   "installs": 963933,
+   "installs": 978677,
    "plugins": [
     "117hd",
     "attacktimer",
@@ -720,7 +720,7 @@
    "androidSince": 30,
    "pluginCount": 9,
    "referenceCount": 12,
-   "installs": 794254,
+   "installs": 805903,
    "plugins": [
     "shortest-path",
     "spawnpredictor",
@@ -744,7 +744,7 @@
    "androidSince": 30,
    "pluginCount": 8,
    "referenceCount": 26,
-   "installs": 1455132,
+   "installs": 1477448,
    "plugins": [
     "quest-helper",
     "the-gauntlet",
@@ -767,7 +767,7 @@
    "androidSince": 30,
    "pluginCount": 8,
    "referenceCount": 47,
-   "installs": 1320473,
+   "installs": 1341170,
    "plugins": [
     "quest-helper",
     "the-gauntlet",
@@ -790,7 +790,7 @@
    "androidSince": 33,
    "pluginCount": 8,
    "referenceCount": 14,
-   "installs": 1142362,
+   "installs": 1160886,
    "plugins": [
     "quest-helper",
     "tictac7x-charges",
@@ -813,7 +813,7 @@
    "androidSince": 30,
    "pluginCount": 8,
    "referenceCount": 63,
-   "installs": 1007542,
+   "installs": 1023707,
    "plugins": [
     "quest-helper",
     "tictac7x-charges",
@@ -836,7 +836,7 @@
    "androidSince": 30,
    "pluginCount": 7,
    "referenceCount": 44,
-   "installs": 977929,
+   "installs": 994326,
    "plugins": [
     "quest-helper",
     "tictac7x-charges",
@@ -858,7 +858,7 @@
    "androidSince": 30,
    "pluginCount": 7,
    "referenceCount": 9,
-   "installs": 813008,
+   "installs": 825533,
    "plugins": [
     "117hd",
     "attacktimer",
@@ -880,7 +880,7 @@
    "androidSince": 30,
    "pluginCount": 7,
    "referenceCount": 10,
-   "installs": 801403,
+   "installs": 813125,
    "plugins": [
     "easy-giantsfoundry",
     "thrall-helper",
@@ -902,7 +902,7 @@
    "androidSince": 30,
    "pluginCount": 6,
    "referenceCount": 7,
-   "installs": 1085034,
+   "installs": 1102658,
    "plugins": [
     "quest-helper",
     "shortest-path",
@@ -923,7 +923,7 @@
    "androidSince": 30,
    "pluginCount": 6,
    "referenceCount": 21,
-   "installs": 958688,
+   "installs": 973019,
    "plugins": [
     "117hd",
     "shortest-path",
@@ -944,7 +944,7 @@
    "androidSince": 30,
    "pluginCount": 6,
    "referenceCount": 7,
-   "installs": 840215,
+   "installs": 852236,
    "plugins": [
     "117hd",
     "inventory-setups",
@@ -965,7 +965,7 @@
    "androidSince": 30,
    "pluginCount": 6,
    "referenceCount": 12,
-   "installs": 667641,
+   "installs": 677670,
    "plugins": [
     "inventory-setups",
     "shortest-path",
@@ -986,7 +986,7 @@
    "androidSince": 30,
    "pluginCount": 5,
    "referenceCount": 16,
-   "installs": 1064698,
+   "installs": 1081392,
    "plugins": [
     "quest-helper",
     "the-gauntlet",
@@ -1006,7 +1006,7 @@
    "androidSince": 30,
    "pluginCount": 5,
    "referenceCount": 28,
-   "installs": 891684,
+   "installs": 906481,
    "plugins": [
     "quest-helper",
     "tictac7x-charges",
@@ -1026,7 +1026,7 @@
    "androidSince": 31,
    "pluginCount": 5,
    "referenceCount": 16,
-   "installs": 654586,
+   "installs": 663820,
    "plugins": [
     "inventory-setups",
     "shortest-path",
@@ -1046,7 +1046,7 @@
    "androidSince": 33,
    "pluginCount": 4,
    "referenceCount": 7,
-   "installs": 940346,
+   "installs": 955385,
    "plugins": [
     "quest-helper",
     "mastering-mixology",
@@ -1065,7 +1065,7 @@
    "androidSince": 30,
    "pluginCount": 4,
    "referenceCount": 7,
-   "installs": 910995,
+   "installs": 925820,
    "plugins": [
     "quest-helper",
     "shortest-path",
@@ -1084,7 +1084,7 @@
    "androidSince": 31,
    "pluginCount": 4,
    "referenceCount": 14,
-   "installs": 764544,
+   "installs": 775968,
    "plugins": [
     "117hd",
     "shortest-path",
@@ -1103,7 +1103,7 @@
    "androidSince": 33,
    "pluginCount": 4,
    "referenceCount": 8,
-   "installs": 710594,
+   "installs": 721510,
    "plugins": [
     "117hd",
     "tictac7x-charges",
@@ -1122,7 +1122,7 @@
    "androidSince": 30,
    "pluginCount": 4,
    "referenceCount": 4,
-   "installs": 606426,
+   "installs": 615053,
    "plugins": [
     "tombs-of-amascut",
     "tictac7x-charges",
@@ -1141,7 +1141,7 @@
    "androidSince": 30,
    "pluginCount": 4,
    "referenceCount": 19,
-   "installs": 508756,
+   "installs": 516190,
    "plugins": [
     "shortest-path",
     "c-engineer-completed",
@@ -1160,7 +1160,7 @@
    "androidSince": 30,
    "pluginCount": 4,
    "referenceCount": 6,
-   "installs": 271378,
+   "installs": 275752,
    "plugins": [
     "maxhitplugin",
     "dink",
@@ -1179,7 +1179,7 @@
    "androidSince": 30,
    "pluginCount": 4,
    "referenceCount": 4,
-   "installs": 217717,
+   "installs": 221069,
    "plugins": [
     "dink",
     "watchdog",
@@ -1198,7 +1198,7 @@
    "androidSince": 31,
    "pluginCount": 3,
    "referenceCount": 10,
-   "installs": 710274,
+   "installs": 720795,
    "plugins": [
     "117hd",
     "shortest-path",
@@ -1216,7 +1216,7 @@
    "androidSince": 30,
    "pluginCount": 3,
    "referenceCount": 5,
-   "installs": 577490,
+   "installs": 586023,
    "plugins": [
     "117hd",
     "osrs-tcg",
@@ -1234,7 +1234,7 @@
    "androidSince": 33,
    "pluginCount": 3,
    "referenceCount": 4,
-   "installs": 546592,
+   "installs": 554631,
    "plugins": [
     "sailing",
     "osrs-tcg",
@@ -1252,7 +1252,7 @@
    "androidSince": 33,
    "pluginCount": 3,
    "referenceCount": 4,
-   "installs": 416112,
+   "installs": 421614,
    "plugins": [
     "tombs-of-amascut",
     "odablock",
@@ -1270,7 +1270,7 @@
    "androidSince": 30,
    "pluginCount": 3,
    "referenceCount": 12,
-   "installs": 378755,
+   "installs": 384825,
    "plugins": [
     "shortest-path",
     "maxhitplugin",
@@ -1288,7 +1288,7 @@
    "androidSince": 31,
    "pluginCount": 3,
    "referenceCount": 3,
-   "installs": 262215,
+   "installs": 266579,
    "plugins": [
     "tree-despawn-timer",
     "clue-scroll-juggling",
@@ -1306,7 +1306,7 @@
    "androidSince": 30,
    "pluginCount": 3,
    "referenceCount": 4,
-   "installs": 195109,
+   "installs": 198451,
    "plugins": [
     "c-engineer-completed",
     "attack-ranges",
@@ -1324,7 +1324,7 @@
    "androidSince": 30,
    "pluginCount": 3,
    "referenceCount": 3,
-   "installs": 178766,
+   "installs": 181502,
    "plugins": [
     "dink",
     "watchdog",
@@ -1342,7 +1342,7 @@
    "androidSince": 30,
    "pluginCount": 3,
    "referenceCount": 4,
-   "installs": 173305,
+   "installs": 176262,
    "plugins": [
     "maxhitplugin",
     "dink",
@@ -1360,7 +1360,7 @@
    "androidSince": 30,
    "pluginCount": 2,
    "referenceCount": 2,
-   "installs": 460009,
+   "installs": 467041,
    "plugins": [
     "117hd",
     "dink"
@@ -1377,7 +1377,7 @@
    "androidSince": 33,
    "pluginCount": 2,
    "referenceCount": 3,
-   "installs": 454062,
+   "installs": 461084,
    "plugins": [
     "117hd",
     "pvp-performance-tracker"
@@ -1394,7 +1394,7 @@
    "androidSince": 33,
    "pluginCount": 2,
    "referenceCount": 2,
-   "installs": 454062,
+   "installs": 461084,
    "plugins": [
     "117hd",
     "pvp-performance-tracker"
@@ -1411,7 +1411,7 @@
    "androidSince": 33,
    "pluginCount": 2,
    "referenceCount": 5,
-   "installs": 387343,
+   "installs": 393250,
    "plugins": [
     "117hd",
     "(runelite-client)"
@@ -1428,7 +1428,7 @@
    "androidSince": 31,
    "pluginCount": 2,
    "referenceCount": 2,
-   "installs": 157311,
+   "installs": 159767,
    "plugins": [
     "tree-despawn-timer",
     "timers-ca"
@@ -1445,7 +1445,7 @@
    "androidSince": 33,
    "pluginCount": 2,
    "referenceCount": 2,
-   "installs": 113061,
+   "installs": 114637,
    "plugins": [
     "tasks-tracker",
     "tzhaar-hp-tracker"
@@ -1462,7 +1462,7 @@
    "androidSince": 30,
    "pluginCount": 2,
    "referenceCount": 2,
-   "installs": 107145,
+   "installs": 108952,
    "plugins": [
     "mastering-mixology-strategy",
     "shortest-clue"
@@ -1479,7 +1479,7 @@
    "androidSince": 33,
    "pluginCount": 1,
    "referenceCount": 1,
-   "installs": 387343,
+   "installs": 393250,
    "plugins": [
     "117hd"
    ]
@@ -1495,7 +1495,7 @@
    "androidSince": 30,
    "pluginCount": 1,
    "referenceCount": 1,
-   "installs": 205450,
+   "installs": 208563,
    "plugins": [
     "shortest-path"
    ]
@@ -1511,7 +1511,7 @@
    "androidSince": 33,
    "pluginCount": 1,
    "referenceCount": 1,
-   "installs": 133067,
+   "installs": 134953,
    "plugins": [
     "resource-packs"
    ]
@@ -1527,7 +1527,7 @@
    "androidSince": 31,
    "pluginCount": 1,
    "referenceCount": 1,
-   "installs": 114215,
+   "installs": 116069,
    "plugins": [
     "tree-despawn-timer"
    ]
@@ -1543,7 +1543,7 @@
    "androidSince": 33,
    "pluginCount": 1,
    "referenceCount": 1,
-   "installs": 72666,
+   "installs": 73791,
    "plugins": [
     "dink"
    ]
@@ -1559,7 +1559,7 @@
    "androidSince": 30,
    "pluginCount": 1,
    "referenceCount": 1,
-   "installs": 54270,
+   "installs": 55173,
    "plugins": [
     "instant-inventory"
    ]
@@ -1575,7 +1575,7 @@
    "androidSince": 31,
    "pluginCount": 1,
    "referenceCount": 1,
-   "installs": 43096,
+   "installs": 43698,
    "plugins": [
     "timers-ca"
    ]
@@ -1613,7 +1613,7 @@
   },
   {
    "name": "quest-helper",
-   "installs": 565016,
+   "installs": 574524,
    "classes": 835,
    "gaps": 19,
    "dispositions": {
@@ -1626,7 +1626,7 @@
   },
   {
    "name": "117hd",
-   "installs": 387343,
+   "installs": 393250,
    "classes": 347,
    "gaps": 20,
    "dispositions": {
@@ -1639,7 +1639,7 @@
   },
   {
    "name": "sailing",
-   "installs": 374841,
+   "installs": 380476,
    "classes": 86,
    "gaps": 3,
    "dispositions": {
@@ -1652,7 +1652,7 @@
   },
   {
    "name": "tile-packs",
-   "installs": 366262,
+   "installs": 371110,
    "classes": 53,
    "gaps": 0,
    "dispositions": {
@@ -1665,7 +1665,7 @@
   },
   {
    "name": "guardians-of-the-rift-helper",
-   "installs": 342846,
+   "installs": 346933,
    "classes": 16,
    "gaps": 0,
    "dispositions": {
@@ -1678,7 +1678,7 @@
   },
   {
    "name": "tombs-of-amascut",
-   "installs": 321781,
+   "installs": 325743,
    "classes": 126,
    "gaps": 3,
    "dispositions": {
@@ -1691,7 +1691,7 @@
   },
   {
    "name": "wikisync",
-   "installs": 312260,
+   "installs": 316490,
    "classes": 158,
    "gaps": 2,
    "dispositions": {
@@ -1704,7 +1704,7 @@
   },
   {
    "name": "better-npc-highlight",
-   "installs": 301869,
+   "installs": 305544,
    "classes": 25,
    "gaps": 1,
    "dispositions": {
@@ -1717,7 +1717,7 @@
   },
   {
    "name": "the-gauntlet",
-   "installs": 278150,
+   "installs": 281731,
    "classes": 24,
    "gaps": 4,
    "dispositions": {
@@ -1730,7 +1730,7 @@
   },
   {
    "name": "zulrah-helper",
-   "installs": 272058,
+   "installs": 276040,
    "classes": 30,
    "gaps": 0,
    "dispositions": {
@@ -1743,7 +1743,7 @@
   },
   {
    "name": "mahogany-homes",
-   "installs": 255212,
+   "installs": 258683,
    "classes": 17,
    "gaps": 0,
    "dispositions": {
@@ -1755,21 +1755,8 @@
    "error": null
   },
   {
-   "name": "tempoross",
-   "installs": 249087,
-   "classes": 7,
-   "gaps": 0,
-   "dispositions": {
-    "retarget": 0,
-    "unsupported": 0,
-    "already-on-device-API": 0,
-    "desugar": 0
-   },
-   "error": null
-  },
-  {
    "name": "party-panel",
-   "installs": 248841,
+   "installs": 252734,
    "classes": 37,
    "gaps": 0,
    "dispositions": {
@@ -1781,8 +1768,21 @@
    "error": null
   },
   {
+   "name": "tempoross",
+   "installs": 252418,
+   "classes": 7,
+   "gaps": 0,
+   "dispositions": {
+    "retarget": 0,
+    "unsupported": 0,
+    "already-on-device-API": 0,
+    "desugar": 0
+   },
+   "error": null
+  },
+  {
    "name": "easy-giantsfoundry",
-   "installs": 241117,
+   "installs": 244581,
    "classes": 30,
    "gaps": 1,
    "dispositions": {
@@ -1795,7 +1795,7 @@
   },
   {
    "name": "mastering-mixology",
-   "installs": 236725,
+   "installs": 239809,
    "classes": 18,
    "gaps": 2,
    "dispositions": {
@@ -1808,7 +1808,7 @@
   },
   {
    "name": "banked-experience",
-   "installs": 235943,
+   "installs": 239192,
    "classes": 45,
    "gaps": 1,
    "dispositions": {
@@ -1821,7 +1821,7 @@
   },
   {
    "name": "bank-tag-layouts",
-   "installs": 235016,
+   "installs": 238456,
    "classes": 16,
    "gaps": 0,
    "dispositions": {
@@ -1834,7 +1834,7 @@
   },
   {
    "name": "rogues-den",
-   "installs": 233643,
+   "installs": 236723,
    "classes": 7,
    "gaps": 0,
    "dispositions": {
@@ -1847,7 +1847,7 @@
   },
   {
    "name": "wilderness-player-alarm",
-   "installs": 227650,
+   "installs": 231074,
    "classes": 8,
    "gaps": 0,
    "dispositions": {
@@ -1860,7 +1860,7 @@
   },
   {
    "name": "fight-cave-waves",
-   "installs": 225341,
+   "installs": 228523,
    "classes": 10,
    "gaps": 0,
    "dispositions": {
@@ -1873,7 +1873,7 @@
   },
   {
    "name": "port-tasks",
-   "installs": 224382,
+   "installs": 227712,
    "classes": 43,
    "gaps": 3,
    "dispositions": {
@@ -1886,7 +1886,7 @@
   },
   {
    "name": "hunter-rumours",
-   "installs": 223754,
+   "installs": 226696,
    "classes": 28,
    "gaps": 0,
    "dispositions": {
@@ -1899,7 +1899,7 @@
   },
   {
    "name": "skills-tab-progress-bars",
-   "installs": 221433,
+   "installs": 224904,
    "classes": 6,
    "gaps": 1,
    "dispositions": {
@@ -1912,7 +1912,7 @@
   },
   {
    "name": "inventory-setups",
-   "installs": 221023,
+   "installs": 223903,
    "classes": 108,
    "gaps": 5,
    "dispositions": {
@@ -1925,7 +1925,7 @@
   },
   {
    "name": "totem-fletching",
-   "installs": 209946,
+   "installs": 212932,
    "classes": 24,
    "gaps": 3,
    "dispositions": {
@@ -1938,7 +1938,7 @@
   },
   {
    "name": "shortest-path",
-   "installs": 205450,
+   "installs": 208563,
    "classes": 223,
    "gaps": 20,
    "dispositions": {
@@ -1951,7 +1951,7 @@
   },
   {
    "name": "spawnpredictor",
-   "installs": 203638,
+   "installs": 206405,
    "classes": 15,
    "gaps": 2,
    "dispositions": {
@@ -1964,7 +1964,7 @@
   },
   {
    "name": "equipment-inspector",
-   "installs": 200507,
+   "installs": 204118,
    "classes": 6,
    "gaps": 0,
    "dispositions": {
@@ -1977,7 +1977,7 @@
   },
   {
    "name": "radius-markers",
-   "installs": 193625,
+   "installs": 196387,
    "classes": 41,
    "gaps": 0,
    "dispositions": {
@@ -1990,7 +1990,7 @@
   },
   {
    "name": "customizable-xp-drops",
-   "installs": 191937,
+   "installs": 194517,
    "classes": 72,
    "gaps": 0,
    "dispositions": {
@@ -2003,7 +2003,7 @@
   },
   {
    "name": "barrows-door-highlighter",
-   "installs": 190843,
+   "installs": 193631,
    "classes": 4,
    "gaps": 0,
    "dispositions": {
@@ -2016,7 +2016,7 @@
   },
   {
    "name": "wilderness-multi-lines",
-   "installs": 181056,
+   "installs": 183939,
    "classes": 3,
    "gaps": 0,
    "dispositions": {
@@ -2029,7 +2029,7 @@
   },
   {
    "name": "varlamore-house-thieving",
-   "installs": 179332,
+   "installs": 181741,
    "classes": 10,
    "gaps": 0,
    "dispositions": {
@@ -2042,7 +2042,7 @@
   },
   {
    "name": "visual-metronome",
-   "installs": 168365,
+   "installs": 170574,
    "classes": 12,
    "gaps": 0,
    "dispositions": {
@@ -2055,7 +2055,7 @@
   },
   {
    "name": "hotkeyable-menu-swaps",
-   "installs": 166875,
+   "installs": 169267,
    "classes": 33,
    "gaps": 0,
    "dispositions": {
@@ -2068,7 +2068,7 @@
   },
   {
    "name": "cox-additions",
-   "installs": 161709,
+   "installs": 164109,
    "classes": 17,
    "gaps": 0,
    "dispositions": {
@@ -2081,7 +2081,7 @@
   },
   {
    "name": "thrall-helper",
-   "installs": 153251,
+   "installs": 155474,
    "classes": 41,
    "gaps": 1,
    "dispositions": {
@@ -2094,7 +2094,7 @@
   },
   {
    "name": "barracuda-trials-pathfinder",
-   "installs": 149369,
+   "installs": 151698,
    "classes": 47,
    "gaps": 7,
    "dispositions": {
@@ -2107,7 +2107,7 @@
   },
   {
    "name": "kitten-tracker",
-   "installs": 149279,
+   "installs": 151417,
    "classes": 10,
    "gaps": 0,
    "dispositions": {
@@ -2120,7 +2120,7 @@
   },
   {
    "name": "tictac7x-charges",
-   "installs": 143956,
+   "installs": 146461,
    "classes": 428,
    "gaps": 15,
    "dispositions": {
@@ -2133,7 +2133,7 @@
   },
   {
    "name": "loot-lookup",
-   "installs": 141209,
+   "installs": 143570,
    "classes": 272,
    "gaps": 0,
    "dispositions": {
@@ -2146,7 +2146,7 @@
   },
   {
    "name": "chompy-hunter",
-   "installs": 137767,
+   "installs": 139552,
    "classes": 5,
    "gaps": 0,
    "dispositions": {
@@ -2159,7 +2159,7 @@
   },
   {
    "name": "ping-grapher",
-   "installs": 136640,
+   "installs": 138677,
    "classes": 7,
    "gaps": 0,
    "dispositions": {
@@ -2172,7 +2172,7 @@
   },
   {
    "name": "resource-packs",
-   "installs": 133067,
+   "installs": 134953,
    "classes": 761,
    "gaps": 8,
    "dispositions": {
@@ -2185,7 +2185,7 @@
   },
   {
    "name": "ba-minigame",
-   "installs": 132403,
+   "installs": 134501,
    "classes": 60,
    "gaps": 0,
    "dispositions": {
@@ -2198,7 +2198,7 @@
   },
   {
    "name": "hunllef-helper",
-   "installs": 131597,
+   "installs": 133313,
    "classes": 12,
    "gaps": 0,
    "dispositions": {
@@ -2211,7 +2211,7 @@
   },
   {
    "name": "fortis-colosseum",
-   "installs": 129267,
+   "installs": 131037,
    "classes": 48,
    "gaps": 0,
    "dispositions": {
@@ -2224,7 +2224,7 @@
   },
   {
    "name": "wasted-bank-space",
-   "installs": 128176,
+   "installs": 129856,
    "classes": 32,
    "gaps": 1,
    "dispositions": {
@@ -2237,7 +2237,7 @@
   },
   {
    "name": "easy-empty",
-   "installs": 125213,
+   "installs": 127335,
    "classes": 2,
    "gaps": 0,
    "dispositions": {
@@ -2250,7 +2250,7 @@
   },
   {
    "name": "monster-hp-percentage",
-   "installs": 122663,
+   "installs": 124520,
    "classes": 10,
    "gaps": 0,
    "dispositions": {
@@ -2263,7 +2263,7 @@
   },
   {
    "name": "large-logout",
-   "installs": 121342,
+   "installs": 123259,
    "classes": 2,
    "gaps": 0,
    "dispositions": {
@@ -2276,7 +2276,7 @@
   },
   {
    "name": "crab-stun-timers",
-   "installs": 121154,
+   "installs": 123154,
    "classes": 7,
    "gaps": 0,
    "dispositions": {
@@ -2289,7 +2289,7 @@
   },
   {
    "name": "better-teleport-menu",
-   "installs": 118725,
+   "installs": 120547,
    "classes": 12,
    "gaps": 0,
    "dispositions": {
@@ -2302,7 +2302,7 @@
   },
   {
    "name": "c-engineer-completed",
-   "installs": 117880,
+   "installs": 119812,
    "classes": 17,
    "gaps": 7,
    "dispositions": {
@@ -2314,21 +2314,8 @@
    "error": null
   },
   {
-   "name": "osrs-tcg",
-   "installs": 117481,
-   "classes": 226,
-   "gaps": 21,
-   "dispositions": {
-    "retarget": 2,
-    "unsupported": 0,
-    "already-on-device-API": 3,
-    "desugar": 16
-   },
-   "error": null
-  },
-  {
    "name": "cox-qol",
-   "installs": 117372,
+   "installs": 119262,
    "classes": 40,
    "gaps": 0,
    "dispositions": {
@@ -2340,8 +2327,21 @@
    "error": null
   },
   {
+   "name": "osrs-tcg",
+   "installs": 118982,
+   "classes": 226,
+   "gaps": 21,
+   "dispositions": {
+    "retarget": 2,
+    "unsupported": 0,
+    "already-on-device-API": 3,
+    "desugar": 16
+   },
+   "error": null
+  },
+  {
    "name": "tobqol",
-   "installs": 114504,
+   "installs": 116290,
    "classes": 81,
    "gaps": 0,
    "dispositions": {
@@ -2354,7 +2354,7 @@
   },
   {
    "name": "tree-despawn-timer",
-   "installs": 114215,
+   "installs": 116069,
    "classes": 9,
    "gaps": 4,
    "dispositions": {
@@ -2367,7 +2367,7 @@
   },
   {
    "name": "improved-tile-indicators",
-   "installs": 111474,
+   "installs": 113349,
    "classes": 5,
    "gaps": 0,
    "dispositions": {
@@ -2380,7 +2380,7 @@
   },
   {
    "name": "crab-solver",
-   "installs": 111223,
+   "installs": 112929,
    "classes": 5,
    "gaps": 0,
    "dispositions": {
@@ -2392,21 +2392,8 @@
    "error": null
   },
   {
-   "name": "attacktimer",
-   "installs": 110168,
-   "classes": 61,
-   "gaps": 4,
-   "dispositions": {
-    "retarget": 0,
-    "unsupported": 0,
-    "already-on-device-API": 0,
-    "desugar": 4
-   },
-   "error": null
-  },
-  {
    "name": "plank-sack",
-   "installs": 110090,
+   "installs": 112031,
    "classes": 28,
    "gaps": 0,
    "dispositions": {
@@ -2418,8 +2405,21 @@
    "error": null
   },
   {
+   "name": "attacktimer",
+   "installs": 111662,
+   "classes": 61,
+   "gaps": 4,
+   "dispositions": {
+    "retarget": 0,
+    "unsupported": 0,
+    "already-on-device-API": 0,
+    "desugar": 4
+   },
+   "error": null
+  },
+  {
    "name": "kph-tracker",
-   "installs": 108137,
+   "installs": 110004,
    "classes": 22,
    "gaps": 0,
    "dispositions": {
@@ -2432,7 +2432,7 @@
   },
   {
    "name": "dt2-mistake-tracker",
-   "installs": 107472,
+   "installs": 108767,
    "classes": 15,
    "gaps": 0,
    "dispositions": {
@@ -2445,7 +2445,7 @@
   },
   {
    "name": "one-click-summer-garden",
-   "installs": 105511,
+   "installs": 106828,
    "classes": 6,
    "gaps": 0,
    "dispositions": {
@@ -2458,7 +2458,7 @@
   },
   {
    "name": "runeprofile",
-   "installs": 104843,
+   "installs": 106179,
    "classes": 97,
    "gaps": 2,
    "dispositions": {
@@ -2471,7 +2471,7 @@
   },
   {
    "name": "stealing-artefacts",
-   "installs": 103738,
+   "installs": 105091,
    "classes": 11,
    "gaps": 1,
    "dispositions": {
@@ -2484,7 +2484,7 @@
   },
   {
    "name": "maxhitplugin",
-   "installs": 100639,
+   "installs": 102471,
    "classes": 91,
    "gaps": 9,
    "dispositions": {
@@ -2497,7 +2497,7 @@
   },
   {
    "name": "demonic-larva-tracker",
-   "installs": 98992,
+   "installs": 100403,
    "classes": 10,
    "gaps": 2,
    "dispositions": {
@@ -2510,7 +2510,7 @@
   },
   {
    "name": "star-calling-assist",
-   "installs": 95680,
+   "installs": 96889,
    "classes": 24,
    "gaps": 0,
    "dispositions": {
@@ -2523,7 +2523,7 @@
   },
   {
    "name": "zom-con-qol",
-   "installs": 94964,
+   "installs": 96295,
    "classes": 3,
    "gaps": 0,
    "dispositions": {
@@ -2536,7 +2536,7 @@
   },
   {
    "name": "zalcano",
-   "installs": 93881,
+   "installs": 95262,
    "classes": 4,
    "gaps": 0,
    "dispositions": {
@@ -2549,7 +2549,7 @@
   },
   {
    "name": "gauntlet-minimap",
-   "installs": 90681,
+   "installs": 92166,
    "classes": 17,
    "gaps": 0,
    "dispositions": {
@@ -2562,7 +2562,7 @@
   },
   {
    "name": "detached-camera",
-   "installs": 90657,
+   "installs": 92128,
    "classes": 3,
    "gaps": 0,
    "dispositions": {
@@ -2574,8 +2574,8 @@
    "error": null
   },
   {
-   "name": "fight-cave-helper",
-   "installs": 89550,
+   "name": "improved-tears-of-guthix-interface",
+   "installs": 91189,
    "classes": 7,
    "gaps": 0,
    "dispositions": {
@@ -2587,8 +2587,8 @@
    "error": null
   },
   {
-   "name": "improved-tears-of-guthix-interface",
-   "installs": 89462,
+   "name": "fight-cave-helper",
+   "installs": 90854,
    "classes": 7,
    "gaps": 0,
    "dispositions": {
@@ -2601,7 +2601,7 @@
   },
   {
    "name": "elysiumevents-plugin",
-   "installs": 88750,
+   "installs": 89924,
    "classes": 804,
    "gaps": 0,
    "dispositions": {
@@ -2614,7 +2614,7 @@
   },
   {
    "name": "tictac7x-motherlode",
-   "installs": 88133,
+   "installs": 89412,
    "classes": 22,
    "gaps": 1,
    "dispositions": {
@@ -2627,7 +2627,7 @@
   },
   {
    "name": "ba-call-highlight",
-   "installs": 87190,
+   "installs": 88499,
    "classes": 3,
    "gaps": 0,
    "dispositions": {
@@ -2640,7 +2640,7 @@
   },
   {
    "name": "projectile-override",
-   "installs": 86332,
+   "installs": 87597,
    "classes": 5,
    "gaps": 0,
    "dispositions": {
@@ -2653,20 +2653,7 @@
   },
   {
    "name": "optimal-quest-guide",
-   "installs": 85998,
-   "classes": 9,
-   "gaps": 0,
-   "dispositions": {
-    "retarget": 0,
-    "unsupported": 0,
-    "already-on-device-API": 0,
-    "desugar": 0
-   },
-   "error": null
-  },
-  {
-   "name": "annoyance-mute",
-   "installs": 85355,
+   "installs": 87487,
    "classes": 9,
    "gaps": 0,
    "dispositions": {
@@ -2679,7 +2666,7 @@
   },
   {
    "name": "clue-scroll-juggling",
-   "installs": 85272,
+   "installs": 86709,
    "classes": 14,
    "gaps": 1,
    "dispositions": {
@@ -2691,8 +2678,21 @@
    "error": null
   },
   {
+   "name": "annoyance-mute",
+   "installs": 86447,
+   "classes": 9,
+   "gaps": 0,
+   "dispositions": {
+    "retarget": 0,
+    "unsupported": 0,
+    "already-on-device-API": 0,
+    "desugar": 0
+   },
+   "error": null
+  },
+  {
    "name": "collection-log-luck",
-   "installs": 84803,
+   "installs": 85977,
    "classes": 828,
    "gaps": 0,
    "dispositions": {
@@ -2705,7 +2705,7 @@
   },
   {
    "name": "target-true-tile",
-   "installs": 84400,
+   "installs": 85741,
    "classes": 12,
    "gaps": 0,
    "dispositions": {
@@ -2718,7 +2718,7 @@
   },
   {
    "name": "party-defence-tracker",
-   "installs": 82975,
+   "installs": 84010,
    "classes": 14,
    "gaps": 2,
    "dispositions": {
@@ -2731,7 +2731,7 @@
   },
   {
    "name": "runedoku-helper",
-   "installs": 82830,
+   "installs": 83964,
    "classes": 9,
    "gaps": 0,
    "dispositions": {
@@ -2744,7 +2744,7 @@
   },
   {
    "name": "wom-utils",
-   "installs": 82738,
+   "installs": 83755,
    "classes": 75,
    "gaps": 0,
    "dispositions": {
@@ -2757,7 +2757,7 @@
   },
   {
    "name": "object-hider",
-   "installs": 81469,
+   "installs": 82701,
    "classes": 6,
    "gaps": 0,
    "dispositions": {
@@ -2770,7 +2770,7 @@
   },
   {
    "name": "easy-blastfurnace",
-   "installs": 80255,
+   "installs": 81523,
    "classes": 57,
    "gaps": 0,
    "dispositions": {
@@ -2783,7 +2783,7 @@
   },
   {
    "name": "one-tick-flick",
-   "installs": 78705,
+   "installs": 79925,
    "classes": 4,
    "gaps": 0,
    "dispositions": {
@@ -2796,7 +2796,7 @@
   },
   {
    "name": "vardorvis-projectiles",
-   "installs": 78097,
+   "installs": 79105,
    "classes": 3,
    "gaps": 0,
    "dispositions": {
@@ -2809,7 +2809,7 @@
   },
   {
    "name": "time-tracking-reminder",
-   "installs": 77597,
+   "installs": 78832,
    "classes": 64,
    "gaps": 0,
    "dispositions": {
@@ -2822,7 +2822,7 @@
   },
   {
    "name": "flipping-utilities",
-   "installs": 76679,
+   "installs": 77940,
    "classes": 202,
    "gaps": 2,
    "dispositions": {
@@ -2835,7 +2835,7 @@
   },
   {
    "name": "herbi-afk",
-   "installs": 73704,
+   "installs": 74983,
    "classes": 12,
    "gaps": 0,
    "dispositions": {
@@ -2848,7 +2848,7 @@
   },
   {
    "name": "menuhp",
-   "installs": 73676,
+   "installs": 74771,
    "classes": 4,
    "gaps": 0,
    "dispositions": {
@@ -2860,8 +2860,21 @@
    "error": null
   },
   {
+   "name": "dink",
+   "installs": 73791,
+   "classes": 175,
+   "gaps": 22,
+   "dispositions": {
+    "retarget": 1,
+    "unsupported": 0,
+    "already-on-device-API": 0,
+    "desugar": 21
+   },
+   "error": null
+  },
+  {
    "name": "razor-kebbit-tracking",
-   "installs": 72842,
+   "installs": 73682,
    "classes": 5,
    "gaps": 0,
    "dispositions": {
@@ -2873,21 +2886,8 @@
    "error": null
   },
   {
-   "name": "dink",
-   "installs": 72666,
-   "classes": 175,
-   "gaps": 22,
-   "dispositions": {
-    "retarget": 0,
-    "unsupported": 0,
-    "already-on-device-API": 1,
-    "desugar": 21
-   },
-   "error": null
-  },
-  {
    "name": "looting-bag-value",
-   "installs": 71052,
+   "installs": 72791,
    "classes": 7,
    "gaps": 0,
    "dispositions": {
@@ -2900,7 +2900,7 @@
   },
   {
    "name": "raid-reloader",
-   "installs": 70617,
+   "installs": 71548,
    "classes": 3,
    "gaps": 0,
    "dispositions": {
@@ -2913,7 +2913,7 @@
   },
   {
    "name": "emote-clue-items",
-   "installs": 69968,
+   "installs": 71051,
    "classes": 75,
    "gaps": 0,
    "dispositions": {
@@ -2926,7 +2926,7 @@
   },
   {
    "name": "zom-leftclick-dropper",
-   "installs": 69538,
+   "installs": 70582,
    "classes": 2,
    "gaps": 0,
    "dispositions": {
@@ -2939,7 +2939,7 @@
   },
   {
    "name": "slayer-assistant",
-   "installs": 68722,
+   "installs": 69850,
    "classes": 27,
    "gaps": 1,
    "dispositions": {
@@ -2951,21 +2951,8 @@
    "error": null
   },
   {
-   "name": "visual-ticks",
-   "installs": 68365,
-   "classes": 14,
-   "gaps": 0,
-   "dispositions": {
-    "retarget": 0,
-    "unsupported": 0,
-    "already-on-device-API": 0,
-    "desugar": 0
-   },
-   "error": null
-  },
-  {
    "name": "mastering-mixology-strategy",
-   "installs": 68194,
+   "installs": 69385,
    "classes": 5,
    "gaps": 3,
    "dispositions": {
@@ -2977,21 +2964,21 @@
    "error": null
   },
   {
-   "name": "nyloer",
-   "installs": 68164,
-   "classes": 24,
-   "gaps": 1,
+   "name": "visual-ticks",
+   "installs": 69229,
+   "classes": 14,
+   "gaps": 0,
    "dispositions": {
     "retarget": 0,
     "unsupported": 0,
     "already-on-device-API": 0,
-    "desugar": 1
+    "desugar": 0
    },
    "error": null
   },
   {
    "name": "action-progress",
-   "installs": 68023,
+   "installs": 69058,
    "classes": 84,
    "gaps": 1,
    "dispositions": {
@@ -3003,21 +2990,21 @@
    "error": null
   },
   {
-   "name": "watchdog",
-   "installs": 67945,
-   "classes": 407,
-   "gaps": 14,
+   "name": "nyloer",
+   "installs": 69008,
+   "classes": 24,
+   "gaps": 1,
    "dispositions": {
     "retarget": 0,
     "unsupported": 0,
-    "already-on-device-API": 1,
-    "desugar": 13
+    "already-on-device-API": 0,
+    "desugar": 1
    },
    "error": null
   },
   {
    "name": "consumable-cooldowns",
-   "installs": 67863,
+   "installs": 68942,
    "classes": 21,
    "gaps": 2,
    "dispositions": {
@@ -3030,7 +3017,7 @@
   },
   {
    "name": "tictac7x-tithe",
-   "installs": 67656,
+   "installs": 68893,
    "classes": 11,
    "gaps": 0,
    "dispositions": {
@@ -3042,8 +3029,21 @@
    "error": null
   },
   {
+   "name": "watchdog",
+   "installs": 68833,
+   "classes": 407,
+   "gaps": 14,
+   "dispositions": {
+    "retarget": 0,
+    "unsupported": 0,
+    "already-on-device-API": 1,
+    "desugar": 13
+   },
+   "error": null
+  },
+  {
    "name": "spirit-tree-map",
-   "installs": 67524,
+   "installs": 68633,
    "classes": 41,
    "gaps": 0,
    "dispositions": {
@@ -3055,21 +3055,8 @@
    "error": null
   },
   {
-   "name": "pvp-performance-tracker",
-   "installs": 66719,
-   "classes": 91,
-   "gaps": 7,
-   "dispositions": {
-    "retarget": 0,
-    "unsupported": 0,
-    "already-on-device-API": 0,
-    "desugar": 7
-   },
-   "error": null
-  },
-  {
    "name": "loot-logger",
-   "installs": 66669,
+   "installs": 67971,
    "classes": 36,
    "gaps": 0,
    "dispositions": {
@@ -3081,8 +3068,21 @@
    "error": null
   },
   {
+   "name": "pvp-performance-tracker",
+   "installs": 67834,
+   "classes": 91,
+   "gaps": 7,
+   "dispositions": {
+    "retarget": 0,
+    "unsupported": 0,
+    "already-on-device-API": 0,
+    "desugar": 7
+   },
+   "error": null
+  },
+  {
    "name": "runewatch",
-   "installs": 65420,
+   "installs": 66473,
    "classes": 9,
    "gaps": 0,
    "dispositions": {
@@ -3095,7 +3095,7 @@
   },
   {
    "name": "gauntlet-chest-popup",
-   "installs": 65340,
+   "installs": 66305,
    "classes": 20,
    "gaps": 2,
    "dispositions": {
@@ -3108,7 +3108,7 @@
   },
   {
    "name": "barrows-potential",
-   "installs": 64956,
+   "installs": 65911,
    "classes": 10,
    "gaps": 0,
    "dispositions": {
@@ -3120,8 +3120,21 @@
    "error": null
   },
   {
+   "name": "weapon-charges-2",
+   "installs": 65589,
+   "classes": 24,
+   "gaps": 1,
+   "dispositions": {
+    "retarget": 0,
+    "unsupported": 0,
+    "already-on-device-API": 0,
+    "desugar": 1
+   },
+   "error": null
+  },
+  {
    "name": "menu-swapper-extended",
-   "installs": 64290,
+   "installs": 65378,
    "classes": 15,
    "gaps": 0,
    "dispositions": {
@@ -3134,7 +3147,7 @@
   },
   {
    "name": "pyramid-plunder-counter",
-   "installs": 64258,
+   "installs": 65352,
    "classes": 4,
    "gaps": 0,
    "dispositions": {
@@ -3146,21 +3159,8 @@
    "error": null
   },
   {
-   "name": "weapon-charges-2",
-   "installs": 64123,
-   "classes": 24,
-   "gaps": 1,
-   "dispositions": {
-    "retarget": 0,
-    "unsupported": 0,
-    "already-on-device-API": 0,
-    "desugar": 1
-   },
-   "error": null
-  },
-  {
    "name": "not-empty",
-   "installs": 63732,
+   "installs": 64688,
    "classes": 1,
    "gaps": 0,
    "dispositions": {
@@ -3173,7 +3173,7 @@
   },
   {
    "name": "forestrycc",
-   "installs": 62728,
+   "installs": 63801,
    "classes": 4,
    "gaps": 10,
    "dispositions": {
@@ -3186,7 +3186,7 @@
   },
   {
    "name": "door-kicker",
-   "installs": 62626,
+   "installs": 63384,
    "classes": 1,
    "gaps": 0,
    "dispositions": {
@@ -3199,7 +3199,7 @@
   },
   {
    "name": "gemstone-crab-timer",
-   "installs": 62429,
+   "installs": 63332,
    "classes": 9,
    "gaps": 0,
    "dispositions": {
@@ -3212,7 +3212,7 @@
   },
   {
    "name": "shooting-stars-tracking",
-   "installs": 62199,
+   "installs": 63112,
    "classes": 22,
    "gaps": 0,
    "dispositions": {
@@ -3225,7 +3225,7 @@
   },
   {
    "name": "guardians-of-the-rift-optimizer",
-   "installs": 61814,
+   "installs": 62817,
    "classes": 87,
    "gaps": 2,
    "dispositions": {
@@ -3238,7 +3238,7 @@
   },
   {
    "name": "clue-steps",
-   "installs": 61169,
+   "installs": 62165,
    "classes": 11,
    "gaps": 0,
    "dispositions": {
@@ -3251,7 +3251,7 @@
   },
   {
    "name": "bank-memory",
-   "installs": 60333,
+   "installs": 61082,
    "classes": 63,
    "gaps": 0,
    "dispositions": {
@@ -3264,7 +3264,7 @@
   },
   {
    "name": "gauntlet-map",
-   "installs": 59552,
+   "installs": 60426,
    "classes": 11,
    "gaps": 4,
    "dispositions": {
@@ -3276,21 +3276,8 @@
    "error": null
   },
   {
-   "name": "treecount",
-   "installs": 58550,
-   "classes": 6,
-   "gaps": 0,
-   "dispositions": {
-    "retarget": 0,
-    "unsupported": 0,
-    "already-on-device-API": 0,
-    "desugar": 0
-   },
-   "error": null
-  },
-  {
    "name": "corner-tile-indicators",
-   "installs": 58544,
+   "installs": 59621,
    "classes": 4,
    "gaps": 0,
    "dispositions": {
@@ -3302,8 +3289,21 @@
    "error": null
   },
   {
+   "name": "treecount",
+   "installs": 59571,
+   "classes": 6,
+   "gaps": 0,
+   "dispositions": {
+    "retarget": 0,
+    "unsupported": 0,
+    "already-on-device-API": 0,
+    "desugar": 0
+   },
+   "error": null
+  },
+  {
    "name": "cox-light-colors",
-   "installs": 58519,
+   "installs": 59545,
    "classes": 4,
    "gaps": 0,
    "dispositions": {
@@ -3316,7 +3316,7 @@
   },
   {
    "name": "tasks-tracker",
-   "installs": 58417,
+   "installs": 59247,
    "classes": 104,
    "gaps": 5,
    "dispositions": {
@@ -3329,7 +3329,7 @@
   },
   {
    "name": "fish-barrel",
-   "installs": 57859,
+   "installs": 58721,
    "classes": 7,
    "gaps": 1,
    "dispositions": {
@@ -3342,7 +3342,7 @@
   },
   {
    "name": "odablock",
-   "installs": 56385,
+   "installs": 57427,
    "classes": 100,
    "gaps": 6,
    "dispositions": {
@@ -3354,21 +3354,8 @@
    "error": null
   },
   {
-   "name": "delve-calculator",
-   "installs": 56298,
-   "classes": 12,
-   "gaps": 0,
-   "dispositions": {
-    "retarget": 0,
-    "unsupported": 0,
-    "already-on-device-API": 0,
-    "desugar": 0
-   },
-   "error": null
-  },
-  {
    "name": "player-outline",
-   "installs": 56150,
+   "installs": 57141,
    "classes": 3,
    "gaps": 0,
    "dispositions": {
@@ -3380,8 +3367,21 @@
    "error": null
   },
   {
+   "name": "delve-calculator",
+   "installs": 57078,
+   "classes": 12,
+   "gaps": 0,
+   "dispositions": {
+    "retarget": 0,
+    "unsupported": 0,
+    "already-on-device-API": 0,
+    "desugar": 0
+   },
+   "error": null
+  },
+  {
    "name": "raid-data-tracker",
-   "installs": 55805,
+   "installs": 56744,
    "classes": 36,
    "gaps": 0,
    "dispositions": {
@@ -3393,21 +3393,8 @@
    "error": null
   },
   {
-   "name": "tzhaar-hp-tracker",
-   "installs": 54644,
-   "classes": 34,
-   "gaps": 4,
-   "dispositions": {
-    "retarget": 0,
-    "unsupported": 0,
-    "already-on-device-API": 0,
-    "desugar": 4
-   },
-   "error": null
-  },
-  {
    "name": "startierindicator",
-   "installs": 54540,
+   "installs": 55436,
    "classes": 13,
    "gaps": 0,
    "dispositions": {
@@ -3419,21 +3406,21 @@
    "error": null
   },
   {
-   "name": "did-i-compost",
-   "installs": 54468,
-   "classes": 6,
-   "gaps": 0,
+   "name": "tzhaar-hp-tracker",
+   "installs": 55390,
+   "classes": 34,
+   "gaps": 4,
    "dispositions": {
     "retarget": 0,
     "unsupported": 0,
     "already-on-device-API": 0,
-    "desugar": 0
+    "desugar": 4
    },
    "error": null
   },
   {
    "name": "camera-smoothing",
-   "installs": 54439,
+   "installs": 55293,
    "classes": 2,
    "gaps": 0,
    "dispositions": {
@@ -3446,7 +3433,7 @@
   },
   {
    "name": "pickpocket-helper",
-   "installs": 54378,
+   "installs": 55204,
    "classes": 20,
    "gaps": 3,
    "dispositions": {
@@ -3458,8 +3445,21 @@
    "error": null
   },
   {
+   "name": "did-i-compost",
+   "installs": 55197,
+   "classes": 6,
+   "gaps": 0,
+   "dispositions": {
+    "retarget": 0,
+    "unsupported": 0,
+    "already-on-device-API": 0,
+    "desugar": 0
+   },
+   "error": null
+  },
+  {
    "name": "instant-inventory",
-   "installs": 54270,
+   "installs": 55173,
    "classes": 41,
    "gaps": 4,
    "dispositions": {
@@ -3472,7 +3472,7 @@
   },
   {
    "name": "fashionscape",
-   "installs": 52918,
+   "installs": 53759,
    "classes": 167,
    "gaps": 1,
    "dispositions": {
@@ -3485,7 +3485,7 @@
   },
   {
    "name": "deepseatrawling",
-   "installs": 50920,
+   "installs": 51604,
    "classes": 29,
    "gaps": 4,
    "dispositions": {
@@ -3498,7 +3498,7 @@
   },
   {
    "name": "wintertodt-notifications",
-   "installs": 50511,
+   "installs": 51311,
    "classes": 6,
    "gaps": 0,
    "dispositions": {
@@ -3511,7 +3511,7 @@
   },
   {
    "name": "vineyard-helper",
-   "installs": 50342,
+   "installs": 51005,
    "classes": 2,
    "gaps": 0,
    "dispositions": {
@@ -3524,7 +3524,7 @@
   },
   {
    "name": "damage-counter",
-   "installs": 49810,
+   "installs": 50645,
    "classes": 7,
    "gaps": 0,
    "dispositions": {
@@ -3537,7 +3537,7 @@
   },
   {
    "name": "ticktracker",
-   "installs": 49657,
+   "installs": 50578,
    "classes": 5,
    "gaps": 0,
    "dispositions": {
@@ -3550,7 +3550,7 @@
   },
   {
    "name": "companion-pet",
-   "installs": 49582,
+   "installs": 50388,
    "classes": 24,
    "gaps": 2,
    "dispositions": {
@@ -3563,7 +3563,7 @@
   },
   {
    "name": "fishing-notifier",
-   "installs": 49437,
+   "installs": 50272,
    "classes": 3,
    "gaps": 0,
    "dispositions": {
@@ -3576,7 +3576,7 @@
   },
   {
    "name": "gnome-restaurant",
-   "installs": 49138,
+   "installs": 49846,
    "classes": 16,
    "gaps": 5,
    "dispositions": {
@@ -3589,7 +3589,7 @@
   },
   {
    "name": "tog-crowdsourcing",
-   "installs": 48938,
+   "installs": 49772,
    "classes": 25,
    "gaps": 0,
    "dispositions": {
@@ -3602,7 +3602,7 @@
   },
   {
    "name": "3d-weather",
-   "installs": 48059,
+   "installs": 48752,
    "classes": 73,
    "gaps": 0,
    "dispositions": {
@@ -3615,7 +3615,7 @@
   },
   {
    "name": "cox-special-loot-hider",
-   "installs": 47605,
+   "installs": 48257,
    "classes": 3,
    "gaps": 0,
    "dispositions": {
@@ -3628,20 +3628,7 @@
   },
   {
    "name": "toa-points-tracker",
-   "installs": 47246,
-   "classes": 6,
-   "gaps": 0,
-   "dispositions": {
-    "retarget": 0,
-    "unsupported": 0,
-    "already-on-device-API": 0,
-    "desugar": 0
-   },
-   "error": null
-  },
-  {
-   "name": "slayer-task-sorter",
-   "installs": 47198,
+   "installs": 47977,
    "classes": 6,
    "gaps": 0,
    "dispositions": {
@@ -3654,7 +3641,7 @@
   },
   {
    "name": "collection-log-popup-enhanced",
-   "installs": 47153,
+   "installs": 47886,
    "classes": 53,
    "gaps": 9,
    "dispositions": {
@@ -3666,8 +3653,21 @@
    "error": null
   },
   {
+   "name": "slayer-task-sorter",
+   "installs": 47851,
+   "classes": 6,
+   "gaps": 0,
+   "dispositions": {
+    "retarget": 0,
+    "unsupported": 0,
+    "already-on-device-API": 0,
+    "desugar": 0
+   },
+   "error": null
+  },
+  {
    "name": "nylo-death-indicators",
-   "installs": 46733,
+   "installs": 47425,
    "classes": 9,
    "gaps": 3,
    "dispositions": {
@@ -3679,21 +3679,8 @@
    "error": null
   },
   {
-   "name": "bank-xp-value",
-   "installs": 46351,
-   "classes": 9,
-   "gaps": 0,
-   "dispositions": {
-    "retarget": 0,
-    "unsupported": 0,
-    "already-on-device-API": 0,
-    "desugar": 0
-   },
-   "error": null
-  },
-  {
    "name": "weapon-animation-replacer",
-   "installs": 46325,
+   "installs": 47258,
    "classes": 74,
    "gaps": 0,
    "dispositions": {
@@ -3705,8 +3692,21 @@
    "error": null
   },
   {
+   "name": "bank-xp-value",
+   "installs": 47011,
+   "classes": 9,
+   "gaps": 0,
+   "dispositions": {
+    "retarget": 0,
+    "unsupported": 0,
+    "already-on-device-API": 0,
+    "desugar": 0
+   },
+   "error": null
+  },
+  {
    "name": "cox-scouter-external",
-   "installs": 45943,
+   "installs": 46698,
    "classes": 8,
    "gaps": 0,
    "dispositions": {
@@ -3719,7 +3719,7 @@
   },
   {
    "name": "nexnostalgia",
-   "installs": 45859,
+   "installs": 46585,
    "classes": 5,
    "gaps": 0,
    "dispositions": {
@@ -3732,7 +3732,7 @@
   },
   {
    "name": "afk-countdown",
-   "installs": 45667,
+   "installs": 46373,
    "classes": 4,
    "gaps": 0,
    "dispositions": {
@@ -3745,7 +3745,7 @@
   },
   {
    "name": "maggot-king",
-   "installs": 45278,
+   "installs": 45954,
    "classes": 15,
    "gaps": 0,
    "dispositions": {
@@ -3758,7 +3758,7 @@
   },
   {
    "name": "supplies-tracker",
-   "installs": 45059,
+   "installs": 45726,
    "classes": 32,
    "gaps": 0,
    "dispositions": {
@@ -3771,7 +3771,7 @@
   },
   {
    "name": "easy-pharaoh-sceptre",
-   "installs": 44669,
+   "installs": 45259,
    "classes": 38,
    "gaps": 0,
    "dispositions": {
@@ -3784,7 +3784,7 @@
   },
   {
    "name": "tob-light-colors",
-   "installs": 44366,
+   "installs": 45166,
    "classes": 2,
    "gaps": 0,
    "dispositions": {
@@ -3797,7 +3797,7 @@
   },
   {
    "name": "ring-of-recoil-notifier",
-   "installs": 44305,
+   "installs": 45070,
    "classes": 4,
    "gaps": 0,
    "dispositions": {
@@ -3810,7 +3810,7 @@
   },
   {
    "name": "toa-mistake-tracker",
-   "installs": 43912,
+   "installs": 44698,
    "classes": 47,
    "gaps": 0,
    "dispositions": {
@@ -3823,7 +3823,7 @@
   },
   {
    "name": "bot-detector",
-   "installs": 43780,
+   "installs": 44506,
    "classes": 54,
    "gaps": 0,
    "dispositions": {
@@ -3836,7 +3836,7 @@
   },
   {
    "name": "blackjack",
-   "installs": 43642,
+   "installs": 44364,
    "classes": 7,
    "gaps": 0,
    "dispositions": {
@@ -3848,21 +3848,8 @@
    "error": null
   },
   {
-   "name": "timers-ca",
-   "installs": 43096,
-   "classes": 32,
-   "gaps": 8,
-   "dispositions": {
-    "retarget": 0,
-    "unsupported": 0,
-    "already-on-device-API": 0,
-    "desugar": 8
-   },
-   "error": null
-  },
-  {
    "name": "fixed-mode-hide-chat",
-   "installs": 43064,
+   "installs": 43830,
    "classes": 4,
    "gaps": 0,
    "dispositions": {
@@ -3874,8 +3861,21 @@
    "error": null
   },
   {
+   "name": "timers-ca",
+   "installs": 43698,
+   "classes": 32,
+   "gaps": 8,
+   "dispositions": {
+    "retarget": 0,
+    "unsupported": 0,
+    "already-on-device-API": 0,
+    "desugar": 8
+   },
+   "error": null
+  },
+  {
    "name": "picture-in-picture",
-   "installs": 43039,
+   "installs": 43565,
    "classes": 17,
    "gaps": 0,
    "dispositions": {
@@ -3888,7 +3888,7 @@
   },
   {
    "name": "trouble-brewing",
-   "installs": 42125,
+   "installs": 42681,
    "classes": 13,
    "gaps": 0,
    "dispositions": {
@@ -3901,7 +3901,7 @@
   },
   {
    "name": "tob-mistake-tracker",
-   "installs": 41725,
+   "installs": 42389,
    "classes": 26,
    "gaps": 1,
    "dispositions": {
@@ -3914,7 +3914,7 @@
   },
   {
    "name": "clue-details",
-   "installs": 41702,
+   "installs": 42310,
    "classes": 77,
    "gaps": 12,
    "dispositions": {
@@ -3927,7 +3927,7 @@
   },
   {
    "name": "turael-skipping",
-   "installs": 41423,
+   "installs": 41969,
    "classes": 11,
    "gaps": 8,
    "dispositions": {
@@ -3940,7 +3940,7 @@
   },
   {
    "name": "raid-points-overlay",
-   "installs": 40736,
+   "installs": 41400,
    "classes": 4,
    "gaps": 0,
    "dispositions": {
@@ -3953,7 +3953,7 @@
   },
   {
    "name": "bird-run-alert",
-   "installs": 40034,
+   "installs": 40741,
    "classes": 2,
    "gaps": 0,
    "dispositions": {
@@ -3966,7 +3966,7 @@
   },
   {
    "name": "high-alc-highlight",
-   "installs": 39736,
+   "installs": 40271,
    "classes": 6,
    "gaps": 0,
    "dispositions": {
@@ -3979,7 +3979,7 @@
   },
   {
    "name": "gpu-experimental",
-   "installs": 39652,
+   "installs": 40187,
    "classes": 30,
    "gaps": 0,
    "dispositions": {
@@ -3992,7 +3992,7 @@
   },
   {
    "name": "blindfold",
-   "installs": 39404,
+   "installs": 40032,
    "classes": 6,
    "gaps": 0,
    "dispositions": {
@@ -4005,7 +4005,7 @@
   },
   {
    "name": "attack-ranges",
-   "installs": 39074,
+   "installs": 39761,
    "classes": 33,
    "gaps": 7,
    "dispositions": {
@@ -4018,7 +4018,7 @@
   },
   {
    "name": "shortest-clue",
-   "installs": 38951,
+   "installs": 39567,
    "classes": 1,
    "gaps": 2,
    "dispositions": {
@@ -4031,7 +4031,7 @@
   },
   {
    "name": "hd-minimap",
-   "installs": 38788,
+   "installs": 39450,
    "classes": 16,
    "gaps": 0,
    "dispositions": {
@@ -4044,7 +4044,7 @@
   },
   {
    "name": "boat-upgrades",
-   "installs": 38155,
+   "installs": 38878,
    "classes": 39,
    "gaps": 8,
    "dispositions": {
@@ -4057,7 +4057,7 @@
   },
   {
    "name": "brimhaven-agility",
-   "installs": 37966,
+   "installs": 38581,
    "classes": 20,
    "gaps": 8,
    "dispositions": {
@@ -4070,7 +4070,7 @@
   },
   {
    "name": "spamfilter",
-   "installs": 37946,
+   "installs": 38444,
    "classes": 3,
    "gaps": 1,
    "dispositions": {
@@ -4083,7 +4083,7 @@
   },
   {
    "name": "herblorerecipes",
-   "installs": 37060,
+   "installs": 37607,
    "classes": 19,
    "gaps": 0,
    "dispositions": {
@@ -4096,7 +4096,7 @@
   },
   {
    "name": "tob-utilities",
-   "installs": 36153,
+   "installs": 36707,
    "classes": 38,
    "gaps": 3,
    "dispositions": {
@@ -4109,7 +4109,7 @@
   },
   {
    "name": "line-markers",
-   "installs": 36043,
+   "installs": 36626,
    "classes": 30,
    "gaps": 0,
    "dispositions": {
@@ -4121,21 +4121,8 @@
    "error": null
   },
   {
-   "name": "nexus-map",
-   "installs": 35951,
-   "classes": 28,
-   "gaps": 0,
-   "dispositions": {
-    "retarget": 0,
-    "unsupported": 0,
-    "already-on-device-API": 0,
-    "desugar": 0
-   },
-   "error": null
-  },
-  {
    "name": "boss-health-indicators",
-   "installs": 35827,
+   "installs": 36435,
    "classes": 22,
    "gaps": 0,
    "dispositions": {
@@ -4147,8 +4134,21 @@
    "error": null
   },
   {
+   "name": "nexus-map",
+   "installs": 36416,
+   "classes": 28,
+   "gaps": 0,
+   "dispositions": {
+    "retarget": 0,
+    "unsupported": 0,
+    "already-on-device-API": 0,
+    "desugar": 0
+   },
+   "error": null
+  },
+  {
    "name": "arceuus-timers",
-   "installs": 35812,
+   "installs": 36334,
    "classes": 26,
    "gaps": 0,
    "dispositions": {
@@ -4161,7 +4161,7 @@
   },
   {
    "name": "lazy-farming",
-   "installs": 35216,
+   "installs": 35836,
    "classes": 207,
    "gaps": 0,
    "dispositions": {
@@ -4174,7 +4174,7 @@
   },
   {
    "name": "multi-lines",
-   "installs": 35173,
+   "installs": 35726,
    "classes": 3,
    "gaps": 0,
    "dispositions": {
@@ -4187,7 +4187,7 @@
   },
   {
    "name": "one-tick-flick-metronome",
-   "installs": 34745,
+   "installs": 35284,
    "classes": 4,
    "gaps": 0,
    "dispositions": {
@@ -4200,7 +4200,7 @@
   },
   {
    "name": "tictac7x-sulliuscep",
-   "installs": 34631,
+   "installs": 35075,
    "classes": 9,
    "gaps": 0,
    "dispositions": {

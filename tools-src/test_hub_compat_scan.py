@@ -591,7 +591,7 @@ class JdkGapsTest(unittest.TestCase):
             ('class', 'java/util/HexFormat', '', ''): ('already-on-device-API', 'android API 34'),
             ('method', 'java/lang/Thread', 'onSpinWait', '()V'): ('retarget', ''),
             ('method', 'java/util/regex/Pattern', 'asMatchPredicate', '()Ljava/util/function/Predicate;'):
-                ('retarget', 'DesktopRegexTransformer -> net.runelite.mp.compat.regex (hub jars)'),
+                ('retarget', 'JdkRetargeter -> net.runelite.mp.compat.regex (hub jars)'),
         }
         for key, (disposition, via) in expect.items():
             got = c.classify(*key)
@@ -651,12 +651,12 @@ class JdkGapsTest(unittest.TestCase):
         api = scan.ApiVersions(xml)
         self.assertEqual(api.member_since('java/util/SortedSet', 'add', '(Ljava/lang/Object;)Z', False), 1)
 
-    def test_unshimmed_retargets_name_their_planned_helper(self):
+    def test_retargets_name_their_jdk_retargets_shim(self):
         got = self.classifier.classify('method', 'java/lang/Runtime', 'version', '()Ljava/lang/Runtime$Version;')
         self.assertEqual(got['disposition'], 'retarget')
-        self.assertTrue(got['via'].startswith('planned (#91)'), got)
+        self.assertEqual(got['via'], 'JdkRetargeter -> net.runelite.mp.compat.jdk.JdkRuntime (client + hub jars)')
         got = self.classifier.classify('method', 'java/nio/file/Files', 'readString', '(Ljava/nio/file/Path;)Ljava/lang/String;')
-        self.assertTrue(got['via'].startswith('planned (#91)'), got)
+        self.assertEqual(got['via'], 'JdkRetargeter -> net.runelite.mp.compat.jdk.JdkFiles (client + hub jars)')
 
     def test_report_baseline_and_markdown(self):
         refs = scan.jdk_references([scan.parse_class(jdk_fixture_plugin())])
