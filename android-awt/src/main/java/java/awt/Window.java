@@ -64,6 +64,8 @@ public class Window extends Container {
     public Window(Window owner, GraphicsConfiguration configuration) {
         this.owner = owner;
         visible = false;
+        // As the JDK's Window.init: a window is the root its children's getLocale() reaches.
+        locale = java.util.Locale.getDefault();
         LATEST.set(this);
         ALL_WINDOWS.add(new java.lang.ref.WeakReference<>(this));
     }

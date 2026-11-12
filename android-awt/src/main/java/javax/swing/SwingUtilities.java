@@ -1170,6 +1170,29 @@ public class SwingUtilities implements SwingConstants {
         c.repaint();
     }
 
+    /**
+     * Updates the UI of a renderer or editor that is not in the component
+     * hierarchy (JTree's cell renderer and editor) on a look and feel change.
+     */
+    static void updateRendererOrEditorUI(Object rendererOrEditor) {
+        if (rendererOrEditor == null) {
+            return;
+        }
+
+        Component component = null;
+
+        if (rendererOrEditor instanceof Component) {
+            component = (Component)rendererOrEditor;
+        }
+        if (rendererOrEditor instanceof DefaultCellEditor) {
+            component = ((DefaultCellEditor)rendererOrEditor).getComponent();
+        }
+
+        if (component != null) {
+            SwingUtilities.updateComponentTreeUI(component);
+        }
+    }
+
     private static void updateComponentTreeUI0(Component c) {
         if (c instanceof JComponent) {
             JComponent jc = (JComponent) c;
@@ -1461,6 +1484,14 @@ public class SwingUtilities implements SwingConstants {
      * processing the key bindings associated with JComponents.
      */
     static boolean isValidKeyEventForKeyBindings(KeyEvent e) {
+        if (e.getID() == KeyEvent.KEY_TYPED) {
+            int mod = e.getModifiers();
+            if (((mod & java.awt.event.ActionEvent.ALT_MASK) != 0)
+                    && ((mod & java.awt.event.ActionEvent.CTRL_MASK) == 0)) {
+                // filter out ALT-KEY_TYPED events
+                return false;
+            }
+        }
         return true;
     }
 
