@@ -196,6 +196,10 @@ if (androidSdkAvailable) {
         // resource-packs plugin needs — without it it dies at injector creation with
         // NoClassDefFoundError: org/tomlj/TomlTable.
         "implementation"("org.tomlj:tomlj:1.1.1")
+        // okhttp3 is already in the APK through runelite-client's http-api; named here because the
+        // app's own OkHttpWebSocketTransport (the wire under android-awt's java.net.http.WebSocket)
+        // compiles against it. Same version, so it resolves to the artifact already verified.
+        "implementation"("com.squareup.okhttp3:okhttp:3.14.9")
         // D8, run in-process by PluginDexer to convert upstream hub jars (JVM bytecode) to
         // dex on the device. Pure Java; kept whole in proguard-rules.pro.
         "implementation"("com.android.tools:r8:9.5.28")
