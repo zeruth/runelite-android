@@ -42,10 +42,20 @@ public class ListDataEvent extends EventObject {
 
     public ListDataEvent(Object source, int type, int index0, int index1) {
         super(source);
-        this.type = type; this.index0 = index0; this.index1 = index1;
+        this.type = type;
+        // The JDK normalizes the interval so index0 <= index1 whatever order the model passed.
+        this.index0 = Math.min(index0, index1);
+        this.index1 = Math.max(index0, index1);
     }
 
     public int getType()   { return type; }
     public int getIndex0() { return index0; }
     public int getIndex1() { return index1; }
+
+    public String toString() {
+        return getClass().getName() +
+        "[type=" + type +
+        ",index0=" + index0 +
+        ",index1=" + index1 + "]";
+    }
 }

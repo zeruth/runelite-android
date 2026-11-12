@@ -66,7 +66,8 @@ public class JTable extends JComponent implements javax.swing.event.TableModelLi
     public void editingStopped(javax.swing.event.ChangeEvent e) { if(cellEditor!=null){Object value=cellEditor.getCellEditorValue();int row=editingModelRow,col=editingModelColumn;removeEditor();if(row>=0&&row<dataModel.getRowCount()&&col>=0&&col<dataModel.getColumnCount())dataModel.setValueAt(value,row,col);} }
     public void editingCanceled(javax.swing.event.ChangeEvent e) { removeEditor(); }
     public void sorterChanged(javax.swing.event.RowSorterEvent e) {
-        if(e.getType()==javax.swing.event.RowSorterEvent.Type.SORTED){restoreSelection();relocateEditor();}
+        // Without updateSelectionOnSort the view selection stays on the same view rows, as on the JDK.
+        if(e.getType()==javax.swing.event.RowSorterEvent.Type.SORTED){if(updateSelectionOnSort)restoreSelection();else rememberSelection();relocateEditor();}
         revalidate(); repaint();
     }
 
@@ -124,6 +125,132 @@ public class JTable extends JComponent implements javax.swing.event.TableModelLi
     public int convertRowIndexToView(int row) { return sorter == null ? row : sorter.convertRowIndexToView(row); }
     public int rowAtPoint(java.awt.Point p) { if(p.y<0)return -1;int y=0;for(int row=0;row<getRowCount();row++){y+=getRowHeight(row);if(p.y<y)return row;}return -1; }
     public int columnAtPoint(java.awt.Point p) { return columnModel.getColumnIndexAtX(p.x); }
+
+    private boolean dragEnabled;
+    private DropMode dropMode = DropMode.USE_SELECTION;
+    private transient DropLocation dropLocation;
+    private transient java.awt.dnd.DragGestureRecognizer dragRecognizer;
+
+    /**
+     * A subclass of <code>TransferHandler.DropLocation</code> representing
+     * a drop location for a <code>JTable</code>.
+     *
+     * @see #getDropLocation
+     * @since 1.6
+     */
+    public static final class DropLocation extends TransferHandler.DropLocation {
+        private final int row;
+        private final int col;
+        private final boolean isInsertRow;
+        private final boolean isInsertCol;
+
+        private DropLocation(java.awt.Point p, int row, int col, boolean isInsertRow, boolean isInsertCol) {
+            super(p);
+            this.row = row;
+            this.col = col;
+            this.isInsertRow = isInsertRow;
+            this.isInsertCol = isInsertCol;
+        }
+
+        /** Returns the row index where a dropped item should be placed, or -1 over empty space. */
+        public int getRow() { return row; }
+
+        /** Returns the column index where a dropped item should be placed, or -1 over empty space. */
+        public int getColumn() { return col; }
+
+        /** Whether this location represents insertion of rows. */
+        public boolean isInsertRow() { return isInsertRow; }
+
+        /** Whether this location represents insertion of columns. */
+        public boolean isInsertColumn() { return isInsertCol; }
+
+        public String toString() {
+            return getClass().getName()
+                   + "[dropPoint=" + getDropPoint() + ","
+                   + "row=" + row + ","
+                   + "column=" + col + ","
+                   + "insertRow=" + isInsertRow + ","
+                   + "insertColumn=" + isInsertCol + "]";
+        }
+    }
+
+    /**
+     * Turns on or off automatic drag handling; a press on a cell that moves past
+     * the drag threshold (after a long press on a touchscreen) starts a drag
+     * through the {@code TransferHandler}.
+     *
+     * @since 1.4
+     */
+    public void setDragEnabled(boolean b) {
+        dragEnabled = b;
+        dragRecognizer = net.runelite.awt.impl.SwingDragSupport.setDragEnabled(this, dragRecognizer, b);
+    }
+
+    public boolean getDragEnabled() { return dragEnabled; }
+
+    /**
+     * Sets the drop mode for this component; every {@code DropMode} is supported.
+     *
+     * @throws IllegalArgumentException if the drop mode is <code>null</code>
+     * @since 1.6
+     */
+    public final void setDropMode(DropMode dropMode) {
+        if (dropMode == null) throw new IllegalArgumentException(dropMode + ": Unsupported drop mode for table");
+        this.dropMode = dropMode;
+    }
+
+    public final DropMode getDropMode() { return dropMode; }
+
+    /**
+     * Returns the location that this component should visually indicate
+     * as the drop location during a DnD operation over the component,
+     * or {@code null} if no location is to currently be shown.
+     *
+     * @since 1.6
+     */
+    public final DropLocation getDropLocation() { return dropLocation; }
+
+    @Override
+    DropLocation dropLocationForPoint(java.awt.Point p) {
+        int row = rowAtPoint(p);
+        int col = columnAtPoint(p);
+        Rectangle rect = row >= 0 && col >= 0 ? getCellRect(row, col, true) : null;
+        boolean rows = dropMode == DropMode.INSERT || dropMode == DropMode.INSERT_ROWS
+                || dropMode == DropMode.ON_OR_INSERT || dropMode == DropMode.ON_OR_INSERT_ROWS;
+        boolean cols = dropMode == DropMode.INSERT || dropMode == DropMode.INSERT_COLS
+                || dropMode == DropMode.ON_OR_INSERT || dropMode == DropMode.ON_OR_INSERT_COLS;
+        boolean on = dropMode == DropMode.ON_OR_INSERT || dropMode == DropMode.ON_OR_INSERT_ROWS
+                || dropMode == DropMode.ON_OR_INSERT_COLS;
+        if (!rows && !cols) return new DropLocation(p, row, col, false, false);
+
+        boolean insertRow = false, insertCol = false;
+        if (rows) {
+            if (row < 0) { row = getRowCount(); insertRow = true; }
+            else if (rect != null) {
+                int offset = p.y - rect.y, edge = on ? rect.height / 4 : rect.height / 2;
+                if (offset < edge) insertRow = true;
+                else if (offset >= rect.height - edge) { insertRow = true; row++; }
+            }
+        }
+        if (cols && !insertRow) {
+            if (col < 0) { col = getColumnCount(); insertCol = true; }
+            else if (rect != null) {
+                int offset = p.x - rect.x, edge = on ? rect.width / 4 : rect.width / 2;
+                if (offset < edge) insertCol = true;
+                else if (offset >= rect.width - edge) { insertCol = true; col++; }
+            }
+        }
+        return new DropLocation(p, row, col, insertRow, insertCol);
+    }
+
+    @Override
+    Object setDropLocation(TransferHandler.DropLocation location, Object state, boolean forDrop) {
+        DropLocation old = dropLocation;
+        dropLocation = (DropLocation) location;
+        firePropertyChange("dropLocation", old, dropLocation);
+        repaint();
+        return null;
+    }
     public int convertColumnIndexToModel(int column) { return column<0?column:columnModel.getColumn(column).getModelIndex(); }
     public int convertColumnIndexToView(int column) { for(int i=0;i<getColumnCount();i++)if(convertColumnIndexToModel(i)==column)return i;return -1; }
     public void setGridColor(java.awt.Color c) { gridColor = c; repaint(); }
@@ -261,6 +388,7 @@ public class JTable extends JComponent implements javax.swing.event.TableModelLi
         tableHeader.setTable(this); setModel(model); setOpaque(true);
         selectionModel.addListSelectionListener(this); columnModel.addColumnModelListener(this);
         initializeDefaults();
+        installKeyboardActions();
         addMouseListener(new java.awt.event.MouseAdapter(){public void mousePressed(java.awt.event.MouseEvent e){if(!isEnabled()||e.getButton()!=java.awt.event.MouseEvent.BUTTON1)return;int row=rowAtPoint(e.getPoint()),col=columnAtPoint(e.getPoint());if(row>=0&&col>=0){changeSelection(row,col,e.isControlDown(),e.isShiftDown());if(e.getClickCount()>=2)editCellAt(row,col,e);requestFocusInWindow();}}});
     }
     public JTable(Object[][] rows, Object[] columns) { this(new javax.swing.table.DefaultTableModel(rows, columns)); }
@@ -482,5 +610,298 @@ public class JTable extends JComponent implements javax.swing.event.TableModelLi
     @Override public boolean getScrollableTracksViewportHeight() {
         java.awt.Container parent = getParent();
         return fillsViewportHeight && parent instanceof JViewport && parent.getHeight() > getPreferredSize().height;
+    }
+
+    // ---- BasicTableUI keyboard actions -------------------------------------------------------
+
+    /**
+     * BasicLookAndFeel's Table.ancestorInputMap with BasicTableUI's action names: the editor is a
+     * child of the table, so Escape and the navigation keys reach these bindings while it edits.
+     */
+    private void installKeyboardActions() {
+        InputMap map = getInputMap(WHEN_ANCESTOR_OF_FOCUSED_COMPONENT);
+        ActionMap actions = getActionMap();
+        int shift = java.awt.event.InputEvent.SHIFT_DOWN_MASK, ctrl = java.awt.event.InputEvent.CTRL_DOWN_MASK;
+        bind(map, actions, java.awt.event.KeyEvent.VK_DOWN, 0, "selectNextRow", () -> move(1, 0, false));
+        bind(map, actions, java.awt.event.KeyEvent.VK_UP, 0, "selectPreviousRow", () -> move(-1, 0, false));
+        bind(map, actions, java.awt.event.KeyEvent.VK_RIGHT, 0, "selectNextColumn", () -> move(0, 1, false));
+        bind(map, actions, java.awt.event.KeyEvent.VK_LEFT, 0, "selectPreviousColumn", () -> move(0, -1, false));
+        bind(map, actions, java.awt.event.KeyEvent.VK_DOWN, shift, "selectNextRowExtendSelection", () -> move(1, 0, true));
+        bind(map, actions, java.awt.event.KeyEvent.VK_UP, shift, "selectPreviousRowExtendSelection", () -> move(-1, 0, true));
+        bind(map, actions, java.awt.event.KeyEvent.VK_RIGHT, shift, "selectNextColumnExtendSelection", () -> move(0, 1, true));
+        bind(map, actions, java.awt.event.KeyEvent.VK_LEFT, shift, "selectPreviousColumnExtendSelection", () -> move(0, -1, true));
+        bind(map, actions, java.awt.event.KeyEvent.VK_PAGE_DOWN, 0, "scrollDownChangeSelection", () -> move(visibleRows(), 0, false));
+        bind(map, actions, java.awt.event.KeyEvent.VK_PAGE_UP, 0, "scrollUpChangeSelection", () -> move(-visibleRows(), 0, false));
+        bind(map, actions, java.awt.event.KeyEvent.VK_PAGE_DOWN, shift, "scrollDownExtendSelection", () -> move(visibleRows(), 0, true));
+        bind(map, actions, java.awt.event.KeyEvent.VK_PAGE_UP, shift, "scrollUpExtendSelection", () -> move(-visibleRows(), 0, true));
+        bind(map, actions, java.awt.event.KeyEvent.VK_HOME, 0, "selectFirstColumn", () -> moveTo(-1, 0, false));
+        bind(map, actions, java.awt.event.KeyEvent.VK_END, 0, "selectLastColumn", () -> moveTo(-1, Integer.MAX_VALUE, false));
+        bind(map, actions, java.awt.event.KeyEvent.VK_HOME, shift, "selectFirstColumnExtendSelection", () -> moveTo(-1, 0, true));
+        bind(map, actions, java.awt.event.KeyEvent.VK_END, shift, "selectLastColumnExtendSelection", () -> moveTo(-1, Integer.MAX_VALUE, true));
+        bind(map, actions, java.awt.event.KeyEvent.VK_HOME, ctrl, "selectFirstRow", () -> moveTo(0, -1, false));
+        bind(map, actions, java.awt.event.KeyEvent.VK_END, ctrl, "selectLastRow", () -> moveTo(Integer.MAX_VALUE, -1, false));
+        bind(map, actions, java.awt.event.KeyEvent.VK_HOME, ctrl | shift, "selectFirstRowExtendSelection", () -> moveTo(0, -1, true));
+        bind(map, actions, java.awt.event.KeyEvent.VK_END, ctrl | shift, "selectLastRowExtendSelection", () -> moveTo(Integer.MAX_VALUE, -1, true));
+        bind(map, actions, java.awt.event.KeyEvent.VK_TAB, 0, "selectNextColumnCell", () -> cycle(true, 1));
+        bind(map, actions, java.awt.event.KeyEvent.VK_TAB, shift, "selectPreviousColumnCell", () -> cycle(true, -1));
+        bind(map, actions, java.awt.event.KeyEvent.VK_ENTER, 0, "selectNextRowCell", () -> cycle(false, 1));
+        bind(map, actions, java.awt.event.KeyEvent.VK_ENTER, shift, "selectPreviousRowCell", () -> cycle(false, -1));
+        bind(map, actions, java.awt.event.KeyEvent.VK_SPACE, 0, "addToSelection", () -> { if (stopEditingForAction()) changeSelection(leadRow(), leadColumn(), true, false); });
+        bind(map, actions, java.awt.event.KeyEvent.VK_A, ctrl, "selectAll", () -> { if (stopEditingForAction()) selectAll(); });
+        bind(map, actions, java.awt.event.KeyEvent.VK_BACK_SLASH, ctrl, "clearSelection", () -> { if (stopEditingForAction()) clearSelection(); });
+        bind(map, actions, java.awt.event.KeyEvent.VK_ESCAPE, 0, "cancel", () -> { if (cellEditor != null) cellEditor.cancelCellEditing(); });
+        bind(map, actions, java.awt.event.KeyEvent.VK_F2, 0, "startEditing", this::startEditingLead);
+    }
+
+    private static void bind(InputMap map, ActionMap actions, int key, int modifiers, String name, Runnable body) {
+        map.put(KeyStroke.getKeyStroke(key, modifiers), name);
+        actions.put(name, new AbstractAction(name) {
+            private static final long serialVersionUID = 1L;
+            public void actionPerformed(java.awt.event.ActionEvent e) { body.run(); }
+        });
+    }
+
+    private int leadRow() { int row = selectionModel.getLeadSelectionIndex(); return row < 0 ? 0 : Math.min(row, Math.max(0, getRowCount() - 1)); }
+    private int leadColumn() { int col = columnModel.getSelectionModel().getLeadSelectionIndex(); return col < 0 ? 0 : Math.min(col, Math.max(0, getColumnCount() - 1)); }
+    private int visibleRows() { Rectangle visible = getVisibleRect(); return Math.max(1, (visible.height > 0 ? visible.height : getHeight()) / Math.max(1, rowHeight)); }
+
+    /** BasicTableUI's navigation actions commit the edit first and stay put when the editor refuses. */
+    private boolean stopEditingForAction() { return cellEditor == null || cellEditor.stopCellEditing(); }
+
+    private void move(int rows, int columns, boolean extend) {
+        if (!stopEditingForAction() || getRowCount() == 0 || getColumnCount() == 0) return;
+        int row = Math.max(0, Math.min(getRowCount() - 1, leadRow() + rows));
+        int col = Math.max(0, Math.min(getColumnCount() - 1, leadColumn() + columns));
+        changeSelection(row, col, false, extend);
+    }
+
+    /** A negative index keeps the lead's row or column; anything past the end clamps to the last. */
+    private void moveTo(int row, int column, boolean extend) {
+        if (!stopEditingForAction() || getRowCount() == 0 || getColumnCount() == 0) return;
+        int r = row < 0 ? leadRow() : Math.min(row, getRowCount() - 1);
+        int c = column < 0 ? leadColumn() : Math.min(column, getColumnCount() - 1);
+        changeSelection(r, c, false, extend);
+    }
+
+    /** Tab and Enter: step through the cells, wrapping to the next row (Tab) or column (Enter). */
+    private void cycle(boolean acrossColumns, int step) {
+        if (!stopEditingForAction()) return;
+        int rows = getRowCount(), cols = getColumnCount();
+        if (rows == 0 || cols == 0) return;
+        int row = leadRow(), col = leadColumn();
+        if (acrossColumns) {
+            col += step;
+            if (col >= cols) { col = 0; row = (row + 1) % rows; } else if (col < 0) { col = cols - 1; row = (row - 1 + rows) % rows; }
+        } else {
+            row += step;
+            if (row >= rows) { row = 0; col = (col + 1) % cols; } else if (row < 0) { row = rows - 1; col = (col - 1 + cols) % cols; }
+        }
+        changeSelection(row, col, false, false);
+    }
+
+    private void startEditingLead() {
+        if (editorComponent != null) { editorComponent.requestFocus(); return; }
+        if (getRowCount() == 0 || getColumnCount() == 0) return;
+        if (editCellAt(leadRow(), leadColumn(), null) && editorComponent != null) editorComponent.requestFocus();
+    }
+
+    /**
+     * JTable.processKeyBinding: a key the bindings did not take, pressed on the focused table,
+     * starts editing the lead cell and is handed to the editor (client property
+     * {@code JTable.autoStartsEdit} = FALSE turns that off).
+     */
+    @Override protected boolean processKeyBinding(KeyStroke stroke, java.awt.event.KeyEvent event, int condition, boolean pressed) {
+        boolean handled = super.processKeyBinding(stroke, event, condition, pressed);
+        if (handled || condition != WHEN_ANCESTOR_OF_FOCUSED_COMPONENT || !isFocusOwner()
+                || Boolean.FALSE.equals(getClientProperty("JTable.autoStartsEdit"))) return handled;
+        Component editor = editorComponent;
+        if (editor == null) {
+            if (event == null || event.getID() != java.awt.event.KeyEvent.KEY_PRESSED) return false;
+            int code = event.getKeyCode();
+            if (code == java.awt.event.KeyEvent.VK_SHIFT || code == java.awt.event.KeyEvent.VK_CONTROL
+                    || code == java.awt.event.KeyEvent.VK_ALT || code == java.awt.event.KeyEvent.VK_META) return false;
+            if ((event.getModifiersEx() & (java.awt.event.InputEvent.CTRL_DOWN_MASK | java.awt.event.InputEvent.META_DOWN_MASK | java.awt.event.InputEvent.ALT_DOWN_MASK)) != 0) return false;
+            int row = selectionModel.getLeadSelectionIndex(), col = columnModel.getSelectionModel().getLeadSelectionIndex();
+            if (row == -1 || col == -1 || !editCellAt(row, col, event)) return false;
+            editor = editorComponent;
+            if (editor == null) return false;
+        }
+        if (editor instanceof JComponent) {
+            handled = ((JComponent) editor).processKeyBinding(stroke, event, WHEN_FOCUSED, pressed);
+            if (getSurrendersFocusOnKeystroke()) editor.requestFocus();
+        }
+        return handled;
+    }
+
+    // ---- Printing ------------------------------------------------------------------------------
+
+    /** The printing modes of {@link #getPrintable}. */
+    public enum PrintMode { NORMAL, FIT_WIDTH }
+
+    public boolean print() throws java.awt.print.PrinterException { return print(PrintMode.FIT_WIDTH); }
+    public boolean print(PrintMode printMode) throws java.awt.print.PrinterException { return print(printMode, null, null); }
+    public boolean print(PrintMode printMode, java.text.MessageFormat headerFormat, java.text.MessageFormat footerFormat) throws java.awt.print.PrinterException {
+        boolean showDialogs = !java.awt.GraphicsEnvironment.isHeadless();
+        return print(printMode, headerFormat, footerFormat, showDialogs, null, showDialogs);
+    }
+    public boolean print(PrintMode printMode, java.text.MessageFormat headerFormat, java.text.MessageFormat footerFormat,
+            boolean showPrintDialog, javax.print.attribute.PrintRequestAttributeSet attr, boolean interactive)
+            throws java.awt.print.PrinterException, java.awt.HeadlessException {
+        return print(printMode, headerFormat, footerFormat, showPrintDialog, attr, interactive, null);
+    }
+    /** The JDK's flow on the module's PrinterJob; the job reports the absence of a print service itself. */
+    public boolean print(PrintMode printMode, java.text.MessageFormat headerFormat, java.text.MessageFormat footerFormat,
+            boolean showPrintDialog, javax.print.attribute.PrintRequestAttributeSet attr, boolean interactive,
+            javax.print.PrintService service) throws java.awt.print.PrinterException, java.awt.HeadlessException {
+        if (java.awt.GraphicsEnvironment.isHeadless()) {
+            if (showPrintDialog) throw new java.awt.HeadlessException("Can't show print dialog.");
+            if (interactive) throw new java.awt.HeadlessException("Can't run interactively.");
+        }
+        java.awt.print.PrinterJob job = java.awt.print.PrinterJob.getPrinterJob();
+        if (isEditing() && !getCellEditor().stopCellEditing()) getCellEditor().cancelCellEditing();
+        job.setPrintable(getPrintable(printMode, headerFormat, footerFormat));
+        if (service != null) job.setPrintService(service);
+        if (showPrintDialog && !(attr == null ? job.printDialog() : job.printDialog(attr))) return false;
+        if (attr == null) job.print(); else job.print(attr);
+        return true;
+    }
+
+    /**
+     * javax.swing.TablePrintable: pages of whole rows (and, in NORMAL mode, of whole columns,
+     * across first then down), the table header repeated on each page, FIT_WIDTH scaling the
+     * table down to the imageable width, and the header and footer formats given the page number.
+     */
+    public java.awt.print.Printable getPrintable(PrintMode printMode, java.text.MessageFormat headerFormat, java.text.MessageFormat footerFormat) {
+        return new TablePrintable(this, printMode, headerFormat, footerFormat);
+    }
+
+    private static final class TablePrintable implements java.awt.print.Printable {
+        private static final int TEXT_SPACING = 8;
+        private final JTable table;
+        private final PrintMode mode;
+        private final java.text.MessageFormat headerFormat, footerFormat;
+
+        TablePrintable(JTable table, PrintMode mode, java.text.MessageFormat headerFormat, java.text.MessageFormat footerFormat) {
+            this.table = table; this.mode = mode; this.headerFormat = headerFormat; this.footerFormat = footerFormat;
+        }
+
+        public int print(java.awt.Graphics graphics, java.awt.print.PageFormat format, int pageIndex) throws java.awt.print.PrinterException {
+            int width = (int) format.getImageableWidth(), height = (int) format.getImageableHeight();
+            if (width <= 0) throw new java.awt.print.PrinterException("Width of printable area is too small.");
+            Object[] page = {Integer.valueOf(pageIndex + 1)};
+            String header = headerFormat == null ? null : headerFormat.format(page);
+            String footer = footerFormat == null ? null : footerFormat.format(page);
+            java.awt.Font base = table.getFont() != null ? table.getFont() : graphics.getFont() != null ? graphics.getFont() : new java.awt.Font("Dialog", java.awt.Font.PLAIN, 12);
+            java.awt.Font headerFont = base.deriveFont(java.awt.Font.BOLD, 18f), footerFont = base.deriveFont(java.awt.Font.PLAIN, 12f);
+            java.awt.FontMetrics headerMetrics = graphics.getFontMetrics(headerFont), footerMetrics = graphics.getFontMetrics(footerFont);
+            int headerSpace = header == null ? 0 : headerMetrics.getHeight() + TEXT_SPACING;
+            int footerSpace = footer == null ? 0 : footerMetrics.getHeight() + TEXT_SPACING;
+            int available = height - headerSpace - footerSpace;
+            if (available <= 0) throw new java.awt.print.PrinterException("Height of printable area is too small.");
+
+            javax.swing.table.JTableHeader tableHeader = table.getTableHeader();
+            int tableHeaderHeight = tableHeader == null ? 0 : tableHeader.getHeight();
+            int tableWidth = table.getWidth();
+            double scale = mode == PrintMode.FIT_WIDTH && tableWidth > width ? width / (double) tableWidth : 1;
+            int pageWidth = (int) (width / scale), rowsHeight = (int) (available / scale) - tableHeaderHeight;
+            if (rowsHeight <= 0) throw new java.awt.print.PrinterException("Height of printable area is too small.");
+
+            java.util.List<int[]> rowSpans = spans(table.getRowCount(), rowsHeight, true);
+            java.util.List<int[]> columnSpans = mode == PrintMode.FIT_WIDTH
+                ? java.util.Collections.singletonList(new int[] {0, tableWidth}) : spans(table.getColumnCount(), pageWidth, false);
+            if (pageIndex >= rowSpans.size() * columnSpans.size()) return NO_SUCH_PAGE;
+            int[] rows = rowSpans.get(pageIndex / columnSpans.size()), columns = columnSpans.get(pageIndex % columnSpans.size());
+
+            java.awt.Graphics2D g = (java.awt.Graphics2D) graphics.create();
+            try {
+                g.translate(format.getImageableX(), format.getImageableY());
+                g.setColor(java.awt.Color.BLACK);
+                if (header != null) {
+                    g.setFont(headerFont);
+                    g.drawString(header, Math.max(0, (width - headerMetrics.stringWidth(header)) / 2), headerMetrics.getAscent());
+                }
+                if (footer != null) {
+                    g.setFont(footerFont);
+                    g.drawString(footer, Math.max(0, (width - footerMetrics.stringWidth(footer)) / 2), height - footerMetrics.getDescent());
+                }
+                java.awt.Graphics2D body = (java.awt.Graphics2D) g.create();
+                body.translate(0, headerSpace);
+                body.scale(scale, scale);
+                if (tableHeaderHeight > 0) {
+                    java.awt.Graphics hg = body.create();
+                    hg.clipRect(0, 0, columns[1], tableHeaderHeight);
+                    hg.translate(-columns[0], 0);
+                    tableHeader.paint(hg);
+                    hg.dispose();
+                }
+                java.awt.Graphics tg = body.create();
+                tg.translate(0, tableHeaderHeight);
+                tg.clipRect(0, 0, columns[1], rows[1]);
+                tg.translate(-columns[0], -rows[0]);
+                table.paint(tg);
+                tg.dispose();
+                body.setColor(java.awt.Color.BLACK);
+                body.drawRect(0, 0, columns[1] - 1, tableHeaderHeight + rows[1] - 1);
+                body.dispose();
+            } finally {
+                g.dispose();
+            }
+            return PAGE_EXISTS;
+        }
+
+        /** Whole rows or columns per page; one taller or wider than the page gets a page of its own, cut. */
+        private java.util.List<int[]> spans(int count, int limit, boolean rows) {
+            java.util.List<int[]> spans = new java.util.ArrayList<>();
+            int start = 0, used = 0;
+            for (int i = 0; i < count; i++) {
+                int size = rows ? table.getRowHeight(i) : table.getColumnModel().getColumn(i).getWidth();
+                if (used > 0 && used + size > limit) { spans.add(new int[] {start, used}); start += used; used = 0; }
+                used += size;
+            }
+            if (used > 0 || spans.isEmpty()) spans.add(new int[] {start, used});
+            return spans;
+        }
+    }
+
+    // ---- Accessibility -------------------------------------------------------------------------
+
+    private transient javax.accessibility.AccessibleContext accessibleTable;
+
+    @Override public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleTable == null) accessibleTable = new AccessibleJTable();
+        return accessibleTable;
+    }
+
+    /**
+     * The JDK's AccessibleJTable members over the table's rows, columns and selection. The JDK
+     * class also implements AccessibleTable/AccessibleSelection and extends AccessibleJComponent;
+     * the module has neither yet (they land with the accessibility card), so these members are
+     * declared here with the JDK's semantics and pick up the interfaces then.
+     */
+    protected class AccessibleJTable extends javax.accessibility.AccessibleContext {
+        protected AccessibleJTable() {}
+        public int getAccessibleRowCount() { return getRowCount(); }
+        public int getAccessibleColumnCount() { return getColumnCount(); }
+        public int getAccessibleRow(int index) { int cols = getColumnCount(); return cols == 0 ? -1 : index / cols; }
+        public int getAccessibleColumn(int index) { int cols = getColumnCount(); return cols == 0 ? -1 : index % cols; }
+        public int getAccessibleIndex(int row, int column) { return row * getColumnCount() + column; }
+        public boolean isAccessibleSelected(int row, int column) { return isCellSelected(row, column); }
+        public boolean isAccessibleRowSelected(int row) { return isRowSelected(row); }
+        public boolean isAccessibleColumnSelected(int column) { return isColumnSelected(column); }
+        public int[] getSelectedAccessibleRows() { return getSelectedRows(); }
+        public int[] getSelectedAccessibleColumns() { return getSelectedColumns(); }
+        public int getAccessibleSelectionCount() {
+            int count = 0;
+            for (int row = 0; row < getRowCount(); row++) for (int col = 0; col < getColumnCount(); col++) if (isCellSelected(row, col)) count++;
+            return count;
+        }
+        public boolean isAccessibleChildSelected(int index) { return isCellSelected(getAccessibleRow(index), getAccessibleColumn(index)); }
+        public void addAccessibleSelection(int index) { changeSelection(getAccessibleRow(index), getAccessibleColumn(index), true, false); }
+        public void removeAccessibleSelection(int index) {
+            int row = getAccessibleRow(index), col = getAccessibleColumn(index);
+            if (isCellSelected(row, col)) changeSelection(row, col, true, false);
+        }
+        public void clearAccessibleSelection() { clearSelection(); }
+        public void selectAllAccessibleSelection() { selectAll(); }
     }
 }

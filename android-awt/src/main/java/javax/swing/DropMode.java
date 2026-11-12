@@ -30,6 +30,9 @@ package javax.swing;
  *
  * @author Shannon Hickey
  * @see JTable#setDropMode
+ * @see JList#setDropMode
+ * @see JTree#setDropMode
+ * @see javax.swing.text.JTextComponent#setDropMode
  * @since 1.6
  */
 public enum DropMode {
@@ -49,21 +52,28 @@ public enum DropMode {
 
     /**
      * The drop location should be tracked in terms of the position
-     * where new data should be inserted.
+     * where new data should be inserted. For components that manage
+     * a list of items (list and tree for example), the drop location
+     * should indicate the index where new data should be inserted.
+     * For text components the location should represent a position
+     * between characters. For components that manage tabular data
+     * (table for example), the drop location should indicate
+     * where to insert new rows, columns, or both, to accommodate
+     * the dropped data.
      */
     INSERT,
 
     /**
      * The drop location should be tracked in terms of the row index
      * where new rows should be inserted to accommodate the dropped
-     * data. This is useful for dropping data into tables.
+     * data. This is useful for components that manage tabular data.
      */
     INSERT_ROWS,
 
     /**
      * The drop location should be tracked in terms of the column index
      * where new columns should be inserted to accommodate the dropped
-     * data. This is useful for dropping data into tables.
+     * data. This is useful for components that manage tabular data.
      */
     INSERT_COLS,
 

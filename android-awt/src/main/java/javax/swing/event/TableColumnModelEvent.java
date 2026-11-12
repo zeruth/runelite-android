@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2003, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2013, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -36,13 +36,22 @@ import javax.swing.table.*;
  * @author Alan Chung
  * @see TableColumnModelListener
  */
+@SuppressWarnings("serial")
 public class TableColumnModelEvent extends java.util.EventObject
 {
+//
+//  Instance Variables
+//
+
     /** The index of the column from where it was moved or removed */
     protected int       fromIndex;
 
     /** The index of the column to where it was moved or added */
     protected int       toIndex;
+
+//
+// Constructors
+//
 
     /**
      * Constructs a {@code TableColumnModelEvent} object.
@@ -52,12 +61,18 @@ public class TableColumnModelEvent extends java.util.EventObject
      *                moved or removed
      * @param to      an int specifying the index to where the column was
      *                moved or added
+     * @see #getFromIndex
+     * @see #getToIndex
      */
     public TableColumnModelEvent(TableColumnModel source, int from, int to) {
         super(source);
         fromIndex = from;
         toIndex = to;
     }
+
+//
+// Querying Methods
+//
 
     /** Returns the fromIndex.  Valid for removed or moved events */
     public int getFromIndex() { return fromIndex; };

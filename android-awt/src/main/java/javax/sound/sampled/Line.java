@@ -48,20 +48,33 @@ public interface Line extends AutoCloseable {
         private final Class<?> lineClass;
 
         public Info(Class<?> lineClass) {
-            this.lineClass = lineClass;
+            this.lineClass = lineClass == null ? Line.class : lineClass;
         }
 
         public Class<?> getLineClass() {
             return lineClass;
         }
 
+        /**
+         * True when {@code info} is an instance of this info's class and describes a line class
+         * assignable to this one: a request for a {@code DataLine} is met by a {@code Clip}.
+         */
         public boolean matches(Info info) {
-            return lineClass != null && info != null && lineClass.isAssignableFrom(info.lineClass);
+            if (!getClass().isInstance(info)) {
+                return false;
+            }
+            return getLineClass().isAssignableFrom(info.getLineClass());
         }
 
         @Override
         public String toString() {
-            return lineClass.getSimpleName();
+            String fullPackagePath = "javax.sound.sampled.";
+            String initialString = String.valueOf(lineClass);
+            int index = initialString.indexOf(fullPackagePath);
+            if (index != -1) {
+                return initialString.substring(0, index) + initialString.substring(index + fullPackagePath.length());
+            }
+            return initialString;
         }
     }
 }

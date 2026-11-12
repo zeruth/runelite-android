@@ -51,6 +51,9 @@ public class JFrame extends Frame implements RootPaneContainer {
     public JFrame(String title, java.awt.GraphicsConfiguration gc) { super(title); initFrame(); }
 
     private void initFrame() {
+        // As JFrame.frameInit: window events must reach processWindowEvent (default close
+        // operation) even with no WindowListener registered.
+        enableEvents(java.awt.AWTEvent.KEY_EVENT_MASK | java.awt.AWTEvent.WINDOW_EVENT_MASK);
         // Real Frame defaults to BorderLayout — ContainableFrame.revalidateMinimumSize()
         // calls frame.getLayout().minimumLayoutSize(this), which NPEs without one and
         // aborts the entire validate cascade (ClientUI.Layout → ContainableFrame.revalidate
