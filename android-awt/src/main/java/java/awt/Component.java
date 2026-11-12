@@ -200,13 +200,13 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
     public void setLocation(int x, int y) {
         boolean moved = this.x != x || this.y != y;
         this.x = x; this.y = y;
-        if (moved) { repaint(); fireComponentMoved(); }
+        if (moved) { repaint(); fireComponentMoved(); fireAncestorBounds(java.awt.event.HierarchyEvent.ANCESTOR_MOVED); }
     }
     public void setLocation(Point p)            { setLocation(p.x, p.y); }
     public void setSize(int w, int h) {
         boolean resized = width != w || height != h;
         width = w; height = h;
-        if (resized) { invalidate(); fireComponentResized(); }
+        if (resized) { invalidate(); fireComponentResized(); fireAncestorBounds(java.awt.event.HierarchyEvent.ANCESTOR_RESIZED); }
     }
     public void setSize(Dimension d)            { setSize(d.width, d.height); }
     public void setBounds(int x, int y, int w, int h) {
@@ -219,8 +219,8 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
         // size falls back to getSize(). The JDK invalidates on move too; doing that here
         // would just make every layout pass re-dirty the tree it had just laid out.
         if (resized) invalidate();
-        if (moved) { repaint(); fireComponentMoved(); }
-        if (resized) fireComponentResized();
+        if (moved) { repaint(); fireComponentMoved(); fireAncestorBounds(java.awt.event.HierarchyEvent.ANCESTOR_MOVED); }
+        if (resized) { fireComponentResized(); fireAncestorBounds(java.awt.event.HierarchyEvent.ANCESTOR_RESIZED); }
     }
     public void setBounds(Rectangle r)          { setBounds(r.x, r.y, r.width, r.height); }
 
@@ -721,6 +721,35 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
         return inputMethodsEnabled && getInputMethodRequests() != null;
     }
 
+    private java.awt.dnd.DropTarget dropTarget;
+
+    /**
+     * Associate a {@code DropTarget} with this component, as the JDK does: the old
+     * target is detached and the new one is made reachable by the in-process drag.
+     */
+    public synchronized void setDropTarget(java.awt.dnd.DropTarget dt) {
+        if (dt == dropTarget || (dropTarget != null && dropTarget.equals(dt))) return;
+        java.awt.dnd.DropTarget old;
+        if ((old = dropTarget) != null) {
+            dropTarget.removeNotify();
+            java.awt.dnd.DropTarget t = dropTarget;
+            dropTarget = null;
+            try { t.setComponent(null); } catch (IllegalArgumentException iae) { /* the JDK ignores it too */ }
+        }
+        if ((dropTarget = dt) != null) {
+            try {
+                dropTarget.setComponent(this);
+                dropTarget.addNotify();
+            } catch (IllegalArgumentException iae) {
+                if (old != null) {
+                    try { old.setComponent(this); old.addNotify(); } catch (IllegalArgumentException iae1) { /* as the JDK */ }
+                }
+            }
+        }
+    }
+
+    public synchronized java.awt.dnd.DropTarget getDropTarget() { return dropTarget; }
+
     private String name = "";
     public String getName() { return name; }
     public void setName(String name) { String old = this.name; this.name = name; firePropertyChange("name", old, name); }
@@ -783,40 +812,194 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
         }
     }
 
-    /** Desktop entry point for plugins sending input to a component's listeners. */
+    /**
+     * The JDK pipeline: the Toolkit's AWTEventListeners see the event first, a key event then
+     * goes to the KeyboardFocusManager's dispatchers, and what is left reaches
+     * {@link #processEvent} only when {@link #eventEnabled} says a listener or an
+     * {@link #enableEvents} mask wants it, so subclasses overriding processMouseEvent and
+     * friends see exactly what they would on the desktop.
+     */
     public final void dispatchEvent(AWTEvent event) {
         if (event == null) throw new NullPointerException("event");
         AWTEvent previous = EventQueue.beginDispatch(event);
-        try {
-            if (event instanceof KeyEvent) {
-                // As Component.dispatchEventImpl: a KeyEvent first goes to the focus manager (dispatcher
-                // chain, then redispatchEvent back here); on the way back traversal keys are handled
-                // before the listeners see it.
-                KeyboardFocusManager manager = KeyboardFocusManager.getCurrentKeyboardFocusManager();
-                if (!KeyboardFocusManager.isRedispatching(event)) {
-                    if (manager.dispatchEvent(event)) return;
-                } else {
-                    manager.processKeyEvent(this, (KeyEvent) event);
-                    if (((KeyEvent) event).isConsumed()) return;
-                }
+        try { dispatchEventImpl(event); } finally { EventQueue.endDispatch(previous); }
+    }
+
+    void dispatchEventImpl(AWTEvent event) {
+        if (event instanceof KeyEvent) {
+            // As Component.dispatchEventImpl: a KeyEvent first goes to the focus manager (dispatcher
+            // chain, then redispatchEvent back here); on the way back traversal keys are handled
+            // before the listeners see it. The AWTEventListeners see it on that second pass, once.
+            KeyboardFocusManager manager = KeyboardFocusManager.getCurrentKeyboardFocusManager();
+            if (!KeyboardFocusManager.isRedispatching(event)) {
+                if (manager.dispatchEvent(event)) return;
+            } else {
+                Toolkit.getDefaultToolkit().notifyAWTEventListeners(event);
+                manager.processKeyEvent(this, (KeyEvent) event);
+                if (((KeyEvent) event).isConsumed()) return;
+                if (eventEnabled(event)) processEvent(event);
+                return;
             }
-            processEvent(event);
-        } finally { EventQueue.endDispatch(previous); }
+        }
+        Toolkit.getDefaultToolkit().notifyAWTEventListeners(event);
+        if (eventEnabled(event)) processEvent(event);
+    }
+
+    /** Event types {@link #enableEvents} turned on, independent of registered listeners. */
+    long eventMask;
+
+    protected final void enableEvents(long eventsToEnable) {
+        synchronized (this) { eventMask |= eventsToEnable; }
+    }
+
+    protected final void disableEvents(long eventsToDisable) {
+        synchronized (this) { eventMask &= ~eventsToDisable; }
+    }
+
+    /**
+     * Whether processEvent should see the event, as in the JDK. Ids outside the component,
+     * focus, key, mouse, input method and hierarchy ranges (an ActionEvent sent to a
+     * Button, an id above {@link AWTEvent#RESERVED_ID_MAX}) are passed on: the shadow's
+     * Button, TextField and friends do not override this the way the JDK's do.
+     */
+    boolean eventEnabled(AWTEvent event) {
+        int id = event.getID();
+        switch (id) {
+            case java.awt.event.ComponentEvent.COMPONENT_MOVED:
+            case java.awt.event.ComponentEvent.COMPONENT_RESIZED:
+            case java.awt.event.ComponentEvent.COMPONENT_SHOWN:
+            case java.awt.event.ComponentEvent.COMPONENT_HIDDEN:
+                return (eventMask & AWTEvent.COMPONENT_EVENT_MASK) != 0 || !componentListeners.isEmpty();
+            case java.awt.event.FocusEvent.FOCUS_GAINED:
+            case java.awt.event.FocusEvent.FOCUS_LOST:
+                return (eventMask & AWTEvent.FOCUS_EVENT_MASK) != 0 || !focusListeners.isEmpty();
+            case KeyEvent.KEY_PRESSED:
+            case KeyEvent.KEY_RELEASED:
+            case KeyEvent.KEY_TYPED:
+                return (eventMask & AWTEvent.KEY_EVENT_MASK) != 0 || !keyListeners.isEmpty();
+            case MouseEvent.MOUSE_PRESSED:
+            case MouseEvent.MOUSE_RELEASED:
+            case MouseEvent.MOUSE_ENTERED:
+            case MouseEvent.MOUSE_EXITED:
+            case MouseEvent.MOUSE_CLICKED:
+                return (eventMask & AWTEvent.MOUSE_EVENT_MASK) != 0 || !mouseListeners.isEmpty();
+            case MouseEvent.MOUSE_MOVED:
+            case MouseEvent.MOUSE_DRAGGED:
+                return (eventMask & AWTEvent.MOUSE_MOTION_EVENT_MASK) != 0 || !mouseMotionListeners.isEmpty();
+            case MouseEvent.MOUSE_WHEEL:
+                return (eventMask & AWTEvent.MOUSE_WHEEL_EVENT_MASK) != 0 || !mouseWheelListeners.isEmpty();
+            case java.awt.event.InputMethodEvent.INPUT_METHOD_TEXT_CHANGED:
+            case java.awt.event.InputMethodEvent.CARET_POSITION_CHANGED:
+                return (eventMask & AWTEvent.INPUT_METHOD_EVENT_MASK) != 0 || !inputMethodListeners.isEmpty();
+            case java.awt.event.HierarchyEvent.HIERARCHY_CHANGED:
+                return (eventMask & AWTEvent.HIERARCHY_EVENT_MASK) != 0 || !hierarchyListeners.isEmpty();
+            case java.awt.event.HierarchyEvent.ANCESTOR_MOVED:
+            case java.awt.event.HierarchyEvent.ANCESTOR_RESIZED:
+                return (eventMask & AWTEvent.HIERARCHY_BOUNDS_EVENT_MASK) != 0 || !hierarchyBoundsListeners.isEmpty();
+            default:
+                return true;
+        }
     }
 
     protected void processEvent(AWTEvent event) {
-        if (event instanceof KeyEvent) {
-            dispatchKeyEvent((KeyEvent) event);
-        } else if (event instanceof MouseEvent) {
-            dispatchMouseEvent((MouseEvent) event);
-        } else if (event instanceof java.awt.event.FocusEvent) {
+        if (event instanceof java.awt.event.FocusEvent) {
             processFocusEvent((java.awt.event.FocusEvent) event);
-        } else if (event instanceof InputMethodEvent) {
-            processInputMethodEvent((InputMethodEvent) event);
-        } else if (event instanceof java.awt.event.HierarchyEvent) {
-            processHierarchyEvent((java.awt.event.HierarchyEvent) event);
-        } else if (event instanceof java.awt.event.ComponentEvent) {
+        } else if (event instanceof MouseEvent) {
+            switch (event.getID()) {
+                case MouseEvent.MOUSE_PRESSED:
+                case MouseEvent.MOUSE_RELEASED:
+                case MouseEvent.MOUSE_CLICKED:
+                case MouseEvent.MOUSE_ENTERED:
+                case MouseEvent.MOUSE_EXITED:
+                    processMouseEvent((MouseEvent) event);
+                    break;
+                case MouseEvent.MOUSE_MOVED:
+                case MouseEvent.MOUSE_DRAGGED:
+                    processMouseMotionEvent((MouseEvent) event);
+                    break;
+                case MouseEvent.MOUSE_WHEEL:
+                    if (event instanceof MouseWheelEvent) processMouseWheelEvent((MouseWheelEvent) event);
+                    break;
+            }
+        } else if (event instanceof KeyEvent) {
+            processKeyEvent((KeyEvent) event);
+        } else if (event instanceof java.awt.event.ComponentEvent
+                && !(event instanceof java.awt.event.ContainerEvent)
+                && !(event instanceof java.awt.event.WindowEvent)
+                && !(event instanceof java.awt.event.InputEvent)
+                && !(event instanceof java.awt.event.PaintEvent)) {
             processComponentEvent((java.awt.event.ComponentEvent) event);
+        } else if (event instanceof java.awt.event.InputMethodEvent) {
+            processInputMethodEvent((java.awt.event.InputMethodEvent) event);
+        } else if (event instanceof java.awt.event.HierarchyEvent) {
+            switch (event.getID()) {
+                case java.awt.event.HierarchyEvent.HIERARCHY_CHANGED:
+                    processHierarchyEvent((java.awt.event.HierarchyEvent) event);
+                    break;
+                case java.awt.event.HierarchyEvent.ANCESTOR_MOVED:
+                case java.awt.event.HierarchyEvent.ANCESTOR_RESIZED:
+                    processHierarchyBoundsEvent((java.awt.event.HierarchyEvent) event);
+                    break;
+            }
+        }
+    }
+
+    protected void processMouseEvent(MouseEvent e) {
+        switch (e.getID()) {
+            case MouseEvent.MOUSE_PRESSED: for (MouseListener l : mouseListeners) l.mousePressed(e); break;
+            case MouseEvent.MOUSE_RELEASED: for (MouseListener l : mouseListeners) l.mouseReleased(e); break;
+            case MouseEvent.MOUSE_CLICKED: for (MouseListener l : mouseListeners) l.mouseClicked(e); break;
+            case MouseEvent.MOUSE_ENTERED: for (MouseListener l : mouseListeners) l.mouseEntered(e); break;
+            case MouseEvent.MOUSE_EXITED: for (MouseListener l : mouseListeners) l.mouseExited(e); break;
+        }
+    }
+
+    protected void processMouseMotionEvent(MouseEvent e) {
+        switch (e.getID()) {
+            case MouseEvent.MOUSE_MOVED: for (MouseMotionListener l : mouseMotionListeners) l.mouseMoved(e); break;
+            case MouseEvent.MOUSE_DRAGGED: for (MouseMotionListener l : mouseMotionListeners) l.mouseDragged(e); break;
+        }
+    }
+
+    protected void processMouseWheelEvent(MouseWheelEvent e) {
+        for (MouseWheelListener l : mouseWheelListeners) l.mouseWheelMoved(e);
+    }
+
+    protected void processKeyEvent(KeyEvent e) {
+        dispatchKeyEvent(e);
+    }
+
+    protected void processHierarchyBoundsEvent(java.awt.event.HierarchyEvent e) {
+        for (java.awt.event.HierarchyBoundsListener l : hierarchyBoundsListeners) {
+            switch (e.getID()) {
+                case java.awt.event.HierarchyEvent.ANCESTOR_MOVED: l.ancestorMoved(e); break;
+                case java.awt.event.HierarchyEvent.ANCESTOR_RESIZED: l.ancestorResized(e); break;
+            }
+        }
+    }
+
+    private final List<java.awt.event.HierarchyBoundsListener> hierarchyBoundsListeners = new CopyOnWriteArrayList<>();
+    /** Components with a HierarchyBoundsListener, so a move or resize skips the subtree walk when none exist. */
+    private static final java.util.concurrent.atomic.AtomicInteger boundsListenerCount = new java.util.concurrent.atomic.AtomicInteger();
+
+    public void addHierarchyBoundsListener(java.awt.event.HierarchyBoundsListener l) {
+        if (l != null) { hierarchyBoundsListeners.add(l); boundsListenerCount.incrementAndGet(); }
+    }
+    public void removeHierarchyBoundsListener(java.awt.event.HierarchyBoundsListener l) {
+        if (hierarchyBoundsListeners.remove(l)) boundsListenerCount.decrementAndGet();
+    }
+    public java.awt.event.HierarchyBoundsListener[] getHierarchyBoundsListeners() { return hierarchyBoundsListeners.toArray(new java.awt.event.HierarchyBoundsListener[0]); }
+
+    /** ANCESTOR_MOVED/ANCESTOR_RESIZED to every descendant that wants it, after this one moved or resized. */
+    private void fireAncestorBounds(int id) {
+        if (!(this instanceof Container)) return;
+        if (boundsListenerCount.get() == 0 && !Toolkit.enabledOnToolkit(AWTEvent.HIERARCHY_BOUNDS_EVENT_MASK)) return;
+        for (Component child : ((Container) this).getComponents()) child.ancestorBoundsChanged(this, id);
+    }
+    private void ancestorBoundsChanged(Component changed, int id) {
+        dispatchEvent(new java.awt.event.HierarchyEvent(this, id, changed, changed.getParent()));
+        if (this instanceof Container) {
+            for (Component child : ((Container) this).getComponents()) child.ancestorBoundsChanged(changed, id);
         }
     }
 

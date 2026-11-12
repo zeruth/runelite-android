@@ -25,6 +25,16 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cache-
 
+      # Plugin Hub jars for ci/build.sh's hub-compat gate. Jars are keyed by hash in the
+      # cache, so a run-unique key saves the union and the newest save restores.
+      - name: Cache Plugin Hub jars
+        uses: actions/cache@v5
+        with:
+          path: build/hub-cache
+          key: ${{ runner.os }}-hub-cache-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-hub-cache-
+
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
@@ -98,6 +108,18 @@ jobs:
 
       - name: Build release APK
         run: ./ci/build.sh
+
+      # Uploaded on failure too: a failing gate is when baseline-proposed.json is needed.
+      - name: Upload hub compatibility report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hub-compat-${{ github.run_number }}-${{ github.run_attempt }}
+          path: |
+            build/hub-compat/report.md
+            build/hub-compat/report.json
+            build/hub-compat/baseline-proposed.json
+          if-no-files-found: ignore
 
       - name: Verify release version
         run: |

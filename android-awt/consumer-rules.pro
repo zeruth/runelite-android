@@ -53,6 +53,10 @@
 # its no-arg constructor or every Font metric throws after R8.
 -keep class net.runelite.awt.impl.AndroidFontBackend { <init>(); }
 
+# CompressedAudio loads the MediaCodec decoder by name for the same reason (the host
+# contracts patch the compressed-audio reader and codec over the JDK's sound API).
+-keep class net.runelite.awt.impl.MediaCodecAudioDecoder { <init>(); }
+
 # ----------------------------------------------------------------------------
 # rlawt shim. Published with a stable FQN that the injected runelite-client jar
 # references by string from its AWTContext factory path. Small surface, kept
