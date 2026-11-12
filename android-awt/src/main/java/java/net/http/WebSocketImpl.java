@@ -56,11 +56,19 @@ final class WebSocketImpl implements WebSocket, WebSocketTransport.Events {
     private static final WebSocketTransport TRANSPORT = transport();
 
     private static WebSocketTransport transport() {
-        try {
-            return (WebSocketTransport) Class.forName(WebSocketTransport.ANDROID_TRANSPORT).getDeclaredConstructor().newInstance();
-        } catch (ReflectiveOperationException | LinkageError | ClassCastException absent) {
-            return new SocketWebSocketTransport();
+        // In the APK this class and the transport share the app loader. On a host JDK this class
+        // sits in the platform loader, which cannot see the class path the contract run puts the
+        // okhttp transport on, so the system loader is asked second.
+        ClassLoader[] loaders = {WebSocketImpl.class.getClassLoader(), ClassLoader.getSystemClassLoader()};
+        for (ClassLoader loader : loaders) {
+            try {
+                return (WebSocketTransport) Class.forName(WebSocketTransport.ANDROID_TRANSPORT, true, loader)
+                    .getDeclaredConstructor().newInstance();
+            } catch (ReflectiveOperationException | LinkageError | ClassCastException absent) {
+                // next loader, then the socket transport
+            }
         }
+        return new SocketWebSocketTransport();
     }
 
     static final class BuilderImpl implements WebSocket.Builder {
@@ -364,7 +372,7 @@ final class WebSocketImpl implements WebSocket, WebSocketTransport.Events {
             try {
                 if (!(ping ? connection.ping(payload) : connection.pong(payload)))
                     return failure(new UnsupportedOperationException("java.net.http.WebSocket." + (ping ? "sendPing" : "sendPong")
-                        + "(ByteBuffer) is not supported by android-awt: the okhttp3 transport sends its own pings and pongs"));
+                        + "(ByteBuffer) is not supported by this transport: the okhttp3 frame writer it needs was not found"));
             } catch (IOException | RuntimeException error) {
                 return failure(error);
             }

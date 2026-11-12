@@ -294,6 +294,23 @@ if (androidSdkAvailable) {
                     out.resolve("desugar.json").writeBytes(it.readBytes())
                 }
             }
+            // android-awt's java.net.http (and com.sun.net.httpserver) is built on
+            // java.util.concurrent.Flow, which android.jar only has from API 30. Below that it
+            // must come from the desugared library or from a shadow class; neither means
+            // NoClassDefFoundError on the first HttpClient call on an API 26-29 device.
+            val flowDesugared = out.resolve("desugar.json").readText().contains("\"java.util.concurrent.Flow")
+            val flowShadowed = hostApi.get().resolve("java/util/concurrent/Flow.class").isFile
+            println("java.util.concurrent.Flow below API 30: " + when {
+                flowDesugared -> "desugar_jdk_libs $coreLibraryVersion"
+                flowShadowed -> "android-awt shadow"
+                else -> "missing"
+            })
+            if (!flowDesugared && !flowShadowed) {
+                throw GradleException(
+                    "desugar_jdk_libs $coreLibraryVersion does not provide java.util.concurrent.Flow and " +
+                        "android-awt has no shadow of it; minSdk 26 needs one for java.net.http"
+                )
+            }
             // These are compiler API inputs, never loaded as application code. The
             // platform JDK surface and host compatibility hierarchy are enough for D8
             // to resolve core-library interfaces without shipping the whole SDK jar.

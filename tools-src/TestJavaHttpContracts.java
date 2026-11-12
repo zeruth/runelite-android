@@ -1,5 +1,7 @@
-// host-contract: patched-args=shadow
+// host-contract: patched-args=shadow patched-classpath=okhttp
 // The JDK accepts a request URI with userinfo; the shadow rejects it, so only the shadow run asserts that.
+// The shadow run has okhttp and the app's OkHttpWebSocketTransport on its class path, and asserts the
+// WebSocket echo went through it, ping and pong included.
 import java.io.*;
 import java.net.*;
 import java.net.http.*;
@@ -195,7 +197,7 @@ public final class TestJavaHttpContracts {
             cancelled.cancel(true);check(cancelled.isCancelled(),"cancel completes immediately");
             check(client.send(request,HttpResponse.BodyHandlers.ofString()).body().equals("日本語 test"),"request works after cancellation");
 
-            webSocket(client,echo.port);
+            webSocket(client,echo.port,args.length>0&&args[0].equals("shadow"));
             System.out.println("PASS: Java HTTP "+pairs+" publisher/handler pairs, builders, headers, redirects, errors, timeouts, streaming, credential stripping, invalid input, cancellation, WebSocket echo");
         }finally{
             server.stop(0);echo.close();
@@ -203,11 +205,15 @@ public final class TestJavaHttpContracts {
         }
     }
 
-    static void webSocket(HttpClient client,int port)throws Exception{
-        BlockingQueue<String> events=new LinkedBlockingQueue<>();
+    static void webSocket(HttpClient client,int port,boolean shadow)throws Exception{
+        BlockingQueue<String> events=new LinkedBlockingQueue<>();String[] openedBy={""};
         WebSocket.Listener listener=new WebSocket.Listener(){
             final StringBuilder text=new StringBuilder();final ByteArrayOutputStream binary=new ByteArrayOutputStream();
-            public void onOpen(WebSocket socket){events.add("open");socket.request(1);}
+            public void onOpen(WebSocket socket){
+                // The transport's open callback is on the stack: tells okhttp from the socket fallback.
+                for(StackTraceElement frame:new Throwable().getStackTrace())if(frame.getClassName().startsWith("net.runelite.mp.http.OkHttpWebSocketTransport"))openedBy[0]="okhttp";
+                events.add("open");socket.request(1);
+            }
             public CompletionStage<?> onText(WebSocket socket,CharSequence data,boolean last){
                 text.append(data);if(last){events.add("text:"+text);text.setLength(0);}socket.request(1);return null;
             }
@@ -224,6 +230,7 @@ public final class TestJavaHttpContracts {
             .buildAsync(URI.create("ws://127.0.0.1:"+port+"/socket"),listener).get(5,TimeUnit.SECONDS);
         check(socket.getSubprotocol().equals("echo"),"negotiated subprotocol "+socket.getSubprotocol());
         expect(events,"open");
+        if(shadow)check(openedBy[0].equals("okhttp"),"shadow WebSocket did not run over OkHttpWebSocketTransport");
         expect(events,"ping:server hello");
         socket.sendText("hello 日本語",true).get(3,TimeUnit.SECONDS);
         expect(events,"text:hello 日本語");
@@ -234,6 +241,9 @@ public final class TestJavaHttpContracts {
         expect(events,"binary:"+Arrays.hashCode(payload)+":"+payload.length);
         socket.sendPing(ByteBuffer.wrap("probe".getBytes(StandardCharsets.UTF_8))).get(3,TimeUnit.SECONDS);
         expect(events,"pong:probe");
+        socket.sendPong(ByteBuffer.wrap("unsolicited".getBytes(StandardCharsets.UTF_8))).get(3,TimeUnit.SECONDS);
+        socket.sendText("after pong",true).get(3,TimeUnit.SECONDS);
+        expect(events,"text:after pong");
         socket.sendClose(WebSocket.NORMAL_CLOSURE,"bye").get(3,TimeUnit.SECONDS);
         check(socket.isOutputClosed(),"output closed after sendClose");
         expect(events,"close:1000:bye");

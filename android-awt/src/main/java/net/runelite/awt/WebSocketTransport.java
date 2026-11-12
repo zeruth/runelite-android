@@ -42,7 +42,8 @@ import javax.net.ssl.SSLSocketFactory;
  * The wire under {@code java.net.http.WebSocket}. The shadow keeps the JDK semantics (demand,
  * fragment assembly, the closing handshake, listener serialisation) in one place and asks a
  * transport only to move whole messages. The APK supplies an okhttp3-backed transport as
- * {@value #ANDROID_TRANSPORT}; without it (the host contract runs, a stripped APK) the
+ * {@value #ANDROID_TRANSPORT} (the shadow contract run puts the same class and okhttp on the
+ * class path); without it (a host JDK without okhttp, a stripped APK) the
  * RFC 6455 client in {@link SocketWebSocketTransport} is used.
  *
  * <p>Only {@code java.base} types appear here on purpose: the host contract runner compiles

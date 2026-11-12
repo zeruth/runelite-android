@@ -1,11 +1,18 @@
 package net.runelite.mp.http;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.lang.reflect.Proxy;
 import java.net.ProxySelector;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import javax.net.ssl.SSLSocketFactory;
 import net.runelite.awt.WebSocketTransport;
@@ -19,8 +26,9 @@ import okio.ByteString;
 /**
  * The okhttp3 wire under the shadow {@code java.net.http.WebSocket}; android-awt loads it by
  * name ({@link WebSocketTransport#ANDROID_TRANSPORT}, kept in proguard-rules.pro). okhttp
- * answers pings itself and exposes no ping/pong API, so {@link Connection#ping} and
- * {@link Connection#pong} report {@code false} and the shadow fails those sends.
+ * answers pings itself and has no public ping/pong API, while the JDK WebSocket sends both and
+ * reports both to its listener, so {@link Internals} reaches the frame reader and writer
+ * okhttp keeps package-private.
  */
 public final class OkHttpWebSocketTransport implements WebSocketTransport
 {
@@ -71,6 +79,9 @@ public final class OkHttpWebSocketTransport implements WebSocketTransport
 			{
 				opened = true;
 				connection.socket = webSocket;
+				// okhttp calls onOpen after creating the frame reader and before reading the
+				// first frame, on the reader thread, so no ping can slip past the hook.
+				Internals.reportControlFrames(webSocket, events);
 				events.opened(connection, response.header("Sec-WebSocket-Protocol"));
 			}
 
@@ -108,6 +119,13 @@ public final class OkHttpWebSocketTransport implements WebSocketTransport
 		return connection;
 	}
 
+	private static byte[] copy(ByteBuffer buffer)
+	{
+		byte[] bytes = new byte[buffer.remaining()];
+		buffer.get(bytes);
+		return bytes;
+	}
+
 	private static final class OkConnection implements Connection
 	{
 		volatile WebSocket socket;
@@ -124,24 +142,22 @@ public final class OkHttpWebSocketTransport implements WebSocketTransport
 		@Override
 		public void binary(ByteBuffer message) throws IOException
 		{
-			byte[] bytes = new byte[message.remaining()];
-			message.get(bytes);
-			if (!socket.send(ByteString.of(bytes)))
+			if (!socket.send(ByteString.of(copy(message))))
 			{
 				throw new IOException("WebSocket closing or its send queue is full");
 			}
 		}
 
 		@Override
-		public boolean ping(ByteBuffer payload)
+		public boolean ping(ByteBuffer payload) throws IOException
 		{
-			return false;
+			return Internals.ping(socket, ByteString.of(copy(payload)));
 		}
 
 		@Override
-		public boolean pong(ByteBuffer payload)
+		public boolean pong(ByteBuffer payload) throws IOException
 		{
-			return false;
+			return Internals.pong(socket, ByteString.of(copy(payload)));
 		}
 
 		@Override
@@ -158,6 +174,196 @@ public final class OkHttpWebSocketTransport implements WebSocketTransport
 			{
 				current.cancel();
 			}
+		}
+	}
+
+	/**
+	 * The okhttp3.internal.ws members behind ping and pong: {@code RealWebSocket.pong(ByteString)},
+	 * its frame writer and the single-thread executor every frame write runs on, and the frame
+	 * reader's callback. okhttp3.** is kept with its members in proguard-rules.pro; fields are
+	 * found by type so a rename inside okhttp does not break them. When any is missing the
+	 * transport reports ping and pong unsupported and the shadow fails those sends.
+	 */
+	private static final class Internals
+	{
+		private static final Internals INSTANCE = resolve();
+
+		final Class<?> callbackType;
+		final Field reader;
+		final Field callback;
+		final Field writer;
+		final Field executor;
+		final Method pong;
+		final Method writePing;
+
+		private Internals(Class<?> realWebSocket, Class<?> frameReader, Class<?> frameWriter, Class<?> callbackType)
+			throws ReflectiveOperationException
+		{
+			this.callbackType = callbackType;
+			reader = field(realWebSocket, frameReader);
+			writer = field(realWebSocket, frameWriter);
+			executor = field(realWebSocket, Executor.class);
+			callback = field(frameReader, callbackType);
+			pong = realWebSocket.getDeclaredMethod("pong", ByteString.class);
+			pong.setAccessible(true);
+			writePing = frameWriter.getDeclaredMethod("writePing", ByteString.class);
+			writePing.setAccessible(true);
+		}
+
+		private static Internals resolve()
+		{
+			try
+			{
+				String ws = "okhttp3.internal.ws.";
+				return new Internals(Class.forName(ws + "RealWebSocket"), Class.forName(ws + "WebSocketReader"),
+					Class.forName(ws + "WebSocketWriter"), Class.forName(ws + "WebSocketReader$FrameCallback"));
+			}
+			catch (ReflectiveOperationException | RuntimeException | LinkageError missing)
+			{
+				return null;
+			}
+		}
+
+		private static Field field(Class<?> owner, Class<?> type) throws NoSuchFieldException
+		{
+			for (Field field : owner.getDeclaredFields())
+			{
+				if (!Modifier.isStatic(field.getModifiers()) && type.isAssignableFrom(field.getType()))
+				{
+					field.setAccessible(true);
+					return field;
+				}
+			}
+			throw new NoSuchFieldException(owner.getName() + " has no " + type.getName() + " field");
+		}
+
+		/**
+		 * Puts a proxy in front of okhttp's own frame callback so received pings and pongs reach
+		 * the listener too; okhttp still answers the ping before it is reported, as the
+		 * {@link Events#ping} contract asks.
+		 */
+		static void reportControlFrames(WebSocket socket, Events events)
+		{
+			Internals in = INSTANCE;
+			if (in == null)
+			{
+				return;
+			}
+			try
+			{
+				Object frameReader = in.reader.get(socket);
+				if (frameReader == null)
+				{
+					return;
+				}
+				Object original = in.callback.get(frameReader);
+				Object hook = Proxy.newProxyInstance(in.callbackType.getClassLoader(), new Class<?>[]{in.callbackType},
+					(proxy, method, args) ->
+					{
+						Object result;
+						try
+						{
+							method.setAccessible(true);
+							result = method.invoke(original, args);
+						}
+						catch (InvocationTargetException thrown)
+						{
+							throw thrown.getCause();
+						}
+						if (args != null && args.length == 1 && args[0] instanceof ByteString)
+						{
+							ByteBuffer payload = ByteBuffer.wrap(((ByteString) args[0]).toByteArray());
+							if ("onReadPing".equals(method.getName()))
+							{
+								events.ping(payload);
+							}
+							else if ("onReadPong".equals(method.getName()))
+							{
+								events.pong(payload);
+							}
+						}
+						return result;
+					});
+				in.callback.set(frameReader, hook);
+			}
+			catch (ReflectiveOperationException | RuntimeException failed)
+			{
+				// okhttp keeps answering pings itself; the listener only misses onPing/onPong.
+			}
+		}
+
+		static boolean ping(WebSocket socket, ByteString payload) throws IOException
+		{
+			Internals in = INSTANCE;
+			if (in == null)
+			{
+				return false;
+			}
+			Object frameWriter;
+			Executor writes;
+			try
+			{
+				frameWriter = in.writer.get(socket);
+				writes = (Executor) in.executor.get(socket);
+			}
+			catch (IllegalAccessException | RuntimeException failed)
+			{
+				return false;
+			}
+			if (frameWriter == null || writes == null)
+			{
+				throw new IOException("WebSocket is not open");
+			}
+			try
+			{
+				// okhttp writes every frame from this executor; writing here keeps the ping
+				// from interleaving with a data frame, as okhttp's own interval pings do.
+				writes.execute(() ->
+				{
+					try
+					{
+						in.writePing.invoke(frameWriter, payload);
+					}
+					catch (ReflectiveOperationException failed)
+					{
+						// A broken writer means a broken socket: cancel it so the reader
+						// fails and the listener gets onError, as okhttp does for its pings.
+						socket.cancel();
+					}
+				});
+			}
+			catch (RejectedExecutionException closed)
+			{
+				throw new IOException("WebSocket closed", closed);
+			}
+			return true;
+		}
+
+		static boolean pong(WebSocket socket, ByteString payload) throws IOException
+		{
+			Internals in = INSTANCE;
+			if (in == null)
+			{
+				return false;
+			}
+			Object queued;
+			try
+			{
+				queued = in.pong.invoke(socket, payload);
+			}
+			catch (IllegalAccessException failed)
+			{
+				return false;
+			}
+			catch (InvocationTargetException failed)
+			{
+				throw new IOException("WebSocket pong failed", failed.getCause());
+			}
+			if (!Boolean.TRUE.equals(queued))
+			{
+				throw new IOException("WebSocket closing or failed");
+			}
+			return true;
 		}
 	}
 }
