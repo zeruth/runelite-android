@@ -412,6 +412,24 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
         return new java.awt.image.ProducerImage(producer);
     }
 
+    // Unscaled images only: the JDK's -1/-1 request is the image's own size, which is the only
+    // size a produced image has here. MediaTracker goes through these.
+    public boolean prepareImage(Image image, java.awt.image.ImageObserver observer) {
+        return prepareImage(image, -1, -1, observer);
+    }
+
+    public boolean prepareImage(Image image, int width, int height, java.awt.image.ImageObserver observer) {
+        return Toolkit.getDefaultToolkit().prepareImage(image, width, height, observer);
+    }
+
+    public int checkImage(Image image, java.awt.image.ImageObserver observer) {
+        return checkImage(image, -1, -1, observer);
+    }
+
+    public int checkImage(Image image, int width, int height, java.awt.image.ImageObserver observer) {
+        return Toolkit.getDefaultToolkit().checkImage(image, width, height, observer);
+    }
+
     public boolean imageUpdate(Image img, int infoflags, int x, int y, int w, int h) {
         if ((infoflags & (SOMEBITS | FRAMEBITS | ALLBITS)) != 0) repaint();
         return (infoflags & (ALLBITS | ABORT)) == 0;
