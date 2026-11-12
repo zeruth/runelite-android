@@ -36,11 +36,16 @@ import javax.swing.plaf.*;
 public class BasicButtonUI extends ButtonUI {
     protected int defaultTextIconGap=4;
     protected int defaultTextShiftOffset;
+    private int shiftOffset;
     protected String getPropertyPrefix(){return "Button.";}
+    // 8u: the pressed-state text nudge a subclass applies while painting.
+    protected void clearTextShiftOffset(){shiftOffset=0;}
+    protected void setTextShiftOffset(){shiftOffset=defaultTextShiftOffset;}
+    protected int getTextShiftOffset(){return shiftOffset;}
     public static ComponentUI createUI(JComponent c){return new BasicButtonUI();}
     public void installUI(JComponent c){if(c instanceof AbstractButton)installDefaults((AbstractButton)c);}
     public void uninstallUI(JComponent c){if(c instanceof AbstractButton)uninstallDefaults((AbstractButton)c);}
-    protected void installDefaults(AbstractButton button){String prefix=getPropertyPrefix();LookAndFeel.installColorsAndFont(button,prefix+"background",prefix+"foreground",prefix+"font");LookAndFeel.installBorder(button,prefix+"border");}
+    protected void installDefaults(AbstractButton button){String prefix=getPropertyPrefix();LookAndFeel.installColorsAndFont(button,prefix+"background",prefix+"foreground",prefix+"font");LookAndFeel.installBorder(button,prefix+"border");defaultTextShiftOffset=UIManager.getInt(prefix+"textShiftOffset");}
     protected void uninstallDefaults(AbstractButton button){LookAndFeel.uninstallBorder(button);}
     public void paint(Graphics g,JComponent c){c.hostPaintDefaultComponent(g);}
     public Dimension getPreferredSize(JComponent c){return c.hostDefaultPreferredSize();}
