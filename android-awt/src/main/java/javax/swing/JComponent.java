@@ -141,8 +141,77 @@ public class JComponent extends Container {
 
     public void updateUI() { javax.swing.plaf.ComponentUI delegate=UIManager.getUI(this);if(delegate!=null)setUI(delegate); }
 
+    /**
+     * Adds the specified region to the dirty region list if the component is showing. The
+     * component will be repainted after all of the currently pending events have been
+     * dispatched.
+     *
+     * @param tm  this parameter is not used
+     * @param x  the x value of the dirty region
+     * @param y  the y value of the dirty region
+     * @param width  the width of the dirty region
+     * @param height  the height of the dirty region
+     * @see RepaintManager#addDirtyRegion
+     */
+    @Override
+    public void repaint(long tm, int x, int y, int width, int height) {
+        RepaintManager.currentManager(this).addDirtyRegion(this, x, y, width, height);
+    }
+
     public void repaint(java.awt.Rectangle r) {
         repaint(0, r.x, r.y, r.width, r.height);
+    }
+
+    /**
+     * Supports deferred automatic layout: invalidates this component and its ancestors, and
+     * queues the nearest validate root with the RepaintManager. Unlike the JDK, the
+     * invalidation happens on the calling thread too, because the Android hosts validate
+     * their trees on their own frame and must see the change on the next one.
+     *
+     * @see RepaintManager#addInvalidComponent
+     */
+    @Override
+    public void revalidate() {
+        invalidate();
+        RepaintManager.currentManager(this).addInvalidComponent(this);
+    }
+
+    /**
+     * If this method returns true, revalidate calls by descendants of this component will
+     * cause the entire tree beginning with this root to be validated. Returns false by
+     * default; JScrollPane and JRootPane override it to return true.
+     *
+     * @return whether this component is a validate root
+     */
+    @Override
+    public boolean isValidateRoot() {
+        return false;
+    }
+
+    /**
+     * Paints the specified region in this component and all of its descendants that overlap
+     * the region, immediately. There is no screen to paint to: the region is handed to the
+     * host that rasterizes this tree, which paints it on its next frame, and the dirty region
+     * pending for this component is folded in with it.
+     *
+     * @param x  the x value of the region to be painted
+     * @param y  the y value of the region to be painted
+     * @param w  the width of the region to be painted
+     * @param h  the height of the region to be painted
+     */
+    public void paintImmediately(int x, int y, int w, int h) {
+        RepaintManager manager = RepaintManager.currentManager(this);
+        manager.addDirtyRegion(this, x, y, w, h);
+        manager.paintDirtyRegions();
+    }
+
+    /**
+     * Paints the specified region now.
+     *
+     * @param r a <code>Rectangle</code> containing the region to be painted
+     */
+    public void paintImmediately(java.awt.Rectangle r) {
+        paintImmediately(r.x, r.y, r.width, r.height);
     }
 
     private ActionMap actionMap;

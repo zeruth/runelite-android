@@ -36,6 +36,10 @@ import java.awt.Container;
 public class JRootPane extends JComponent {
     private static final long serialVersionUID = 1L;
 
+    /** A revalidate below the root pane lays out from here, not from the frame. */
+    @Override
+    public boolean isValidateRoot() { return true; }
+
     public static final int NONE = 0;
     public static final int FRAME = 1;
     public static final int PLAIN_DIALOG = 2;

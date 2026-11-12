@@ -130,6 +130,21 @@ public class Container extends Component {
         invalidate();
     }
 
+    /**
+     * Adds the specified component to this container at the specified index. The public
+     * {@code add} overloads here do the work themselves rather than funnelling through this
+     * method, so it exists for subclasses that call {@code super.addImpl} the way JDK Swing
+     * classes do (CellRendererPane); overriding it does not intercept {@code add}.
+     *
+     * @param comp the component to be added
+     * @param constraints an object expressing layout constraints for this component
+     * @param index the position in the container's list at which to insert the component,
+     *        where {@code -1} means append to the end
+     */
+    protected void addImpl(Component comp, Object constraints, int index) {
+        add(comp, constraints, index);
+    }
+
     public void remove(int index) {
         Component c = children.remove(index);
         if (c != null) {
@@ -209,6 +224,17 @@ public class Container extends Component {
     public Object getFocusTraversalPolicy() { return null; }
 
     public Insets getInsets() { return new Insets(0, 0, 0, 0); }
+
+    /**
+     * Indicates if this container is a validate root: {@code revalidate()} of a descendant
+     * lays out from the nearest validate root rather than from the top of the tree.
+     *
+     * @return whether this container is a validate root
+     * @since 1.7
+     */
+    public boolean isValidateRoot() {
+        return false;
+    }
 
     @Override
     public void doLayout() {
