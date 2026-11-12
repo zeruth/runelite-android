@@ -1484,6 +1484,14 @@ public class SwingUtilities implements SwingConstants {
      * processing the key bindings associated with JComponents.
      */
     static boolean isValidKeyEventForKeyBindings(KeyEvent e) {
+        if (e.getID() == KeyEvent.KEY_TYPED) {
+            int mod = e.getModifiers();
+            if (((mod & java.awt.event.ActionEvent.ALT_MASK) != 0)
+                    && ((mod & java.awt.event.ActionEvent.CTRL_MASK) == 0)) {
+                // filter out ALT-KEY_TYPED events
+                return false;
+            }
+        }
         return true;
     }
 

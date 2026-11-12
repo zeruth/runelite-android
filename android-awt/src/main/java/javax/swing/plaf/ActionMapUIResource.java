@@ -22,11 +22,9 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
-
 package javax.swing.plaf;
 
 import javax.swing.ActionMap;
-
 
 /**
  * A subclass of javax.swing.ActionMap that implements UIResource.
