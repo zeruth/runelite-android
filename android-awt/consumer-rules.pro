@@ -47,6 +47,11 @@
 -keep class net.runelite.awt.AwtNative { *; }
 -keep class net.runelite.awt.AwtCompat { *; }
 
+# FontBackend loads the Android font backend by name so java.awt.Font names nothing
+# from android.* (the host contracts run Font over the JDK's); keep that name and
+# its no-arg constructor or every Font metric throws after R8.
+-keep class net.runelite.awt.impl.AndroidFontBackend { <init>(); }
+
 # ----------------------------------------------------------------------------
 # rlawt shim. Published with a stable FQN that the injected runelite-client jar
 # references by string from its AWTContext factory path. Small surface, kept
