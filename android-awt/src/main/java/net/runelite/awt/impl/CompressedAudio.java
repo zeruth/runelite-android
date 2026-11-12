@@ -255,8 +255,11 @@ public final class CompressedAudio {
         int window = afterTag ? Math.min(SYNC_WINDOW, len - 4) : 0;
         for (int i = 0; i <= window && i + 4 <= len; i++) {
             if ((b[i] & 0xFF) != 0xFF) continue;
-            AudioFileFormat format = adts(b, len, i);
-            if (format == null) format = mpeg(b, len, i);
+            // A sync found by scanning past the tag must be confirmed by the frame after it: an
+            // ADTS header's 13-bit length otherwise lets noise point past the sniffed bytes.
+            boolean confirm = i > 0;
+            AudioFileFormat format = adts(b, len, i, confirm);
+            if (format == null) format = mpeg(b, len, i, confirm);
             if (format != null) return format;
         }
         return null;
@@ -272,7 +275,7 @@ public final class CompressedAudio {
     private static final int[] MPEG_RATES = {44100, 48000, 32000};
 
     /** An MPEG audio frame header at {@code i}, confirmed by the next frame when it is in the buffer. */
-    private static AudioFileFormat mpeg(byte[] b, int len, int i) {
+    private static AudioFileFormat mpeg(byte[] b, int len, int i, boolean confirm) {
         int h = be32(b, i);
         if ((h >>> 21) != 0x7FF) return null;
         int version = (h >>> 19) & 3;  // 0 = 2.5, 2 = 2, 3 = 1
@@ -289,7 +292,7 @@ public final class CompressedAudio {
         int padding = (h >>> 9) & 1;
         int length = layer == 1 ? (12 * kbps * 1000 / rate + padding) * 4 : samples / 8 * kbps * 1000 / rate + padding;
         int next = i + length;
-        if (next + 4 <= len && (be32(b, next) & 0xFFFE0C00) != (h & 0xFFFE0C00)) return null;
+        if (next + 4 > len ? confirm : (be32(b, next) & 0xFFFE0C00) != (h & 0xFFFE0C00)) return null;
         String name = "MPEG" + (version == 3 ? "1" : version == 2 ? "2" : "2DOT5") + "L" + layer;
         int channels = ((h >>> 6) & 3) == 3 ? 1 : 2;
         Map<String, Object> properties = new HashMap<String, Object>();
@@ -303,7 +306,7 @@ public final class CompressedAudio {
         12000, 11025, 8000, 7350};
 
     /** An ADTS frame header at {@code i}: MPEG's sync with the layer bits MPEG audio reserves. */
-    private static AudioFileFormat adts(byte[] b, int len, int i) {
+    private static AudioFileFormat adts(byte[] b, int len, int i, boolean confirm) {
         if (i + 7 > len || (b[i] & 0xFF) != 0xFF || (b[i + 1] & 0xF6) != 0xF0) return null;
         int rateIndex = (b[i + 2] >> 2) & 15;
         if (rateIndex >= AAC_RATES.length) return null;
@@ -311,7 +314,7 @@ public final class CompressedAudio {
         int length = ((b[i + 3] & 3) << 11) | ((b[i + 4] & 0xFF) << 3) | ((b[i + 5] & 0xFF) >> 5);
         if (length < 7) return null;
         int next = i + length;
-        if (next + 2 <= len && ((b[next] & 0xFF) != 0xFF || (b[next + 1] & 0xF6) != 0xF0)) return null;
+        if (next + 2 > len ? confirm : (b[next] & 0xFF) != 0xFF || (b[next + 1] & 0xF6) != 0xF0) return null;
         int rate = AAC_RATES[rateIndex];
         AudioFormat format = new AudioFormat(AAC, rate, AudioSystem.NOT_SPECIFIED,
             channels == 0 ? AudioSystem.NOT_SPECIFIED : channels, AudioSystem.NOT_SPECIFIED, rate / 1024f, true);
