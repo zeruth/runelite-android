@@ -30,7 +30,12 @@
  */
 package java.awt;
 
+import java.awt.image.AreaAveragingScaleFilter;
+import java.awt.image.FilteredImageSource;
+import java.awt.image.ImageFilter;
 import java.awt.image.ImageObserver;
+import java.awt.image.ImageProducer;
+import java.awt.image.ReplicateScaleFilter;
 
 public abstract class Image {
     public static final int SCALE_DEFAULT      = 1;
@@ -49,13 +54,25 @@ public abstract class Image {
         return UndefinedProperty;
     }
 
-    public java.awt.image.ImageProducer getSource(){throw net.runelite.awt.AwtUnsupported.fail("java.awt.Image.getSource()", "only BufferedImage produces pixels");}
+    public abstract ImageProducer getSource();
 
+    /**
+     * Creates a scaled version of this image, the JDK's way: an
+     * {@link AreaAveragingScaleFilter} for SCALE_SMOOTH and SCALE_AREA_AVERAGING, a
+     * {@link ReplicateScaleFilter} otherwise, over {@link #getSource()}, handed to
+     * {@link Toolkit#createImage(ImageProducer)}. A negative width or height keeps the
+     * aspect ratio with the filter's integer arithmetic.
+     */
     public Image getScaledInstance(int width, int height, int hints) {
-        java.awt.image.ProducerImage image=new java.awt.image.ProducerImage(getSource());
-        java.awt.image.BufferedImage buffered=image.getBufferedImage();
-        if(buffered==null)throw new IllegalStateException("Image is not loaded");
-        return buffered.getScaledInstance(width,height,hints);
+        ImageFilter filter;
+        if ((hints & (SCALE_SMOOTH | SCALE_AREA_AVERAGING)) != 0) {
+            filter = new AreaAveragingScaleFilter(width, height);
+        } else {
+            filter = new ReplicateScaleFilter(width, height);
+        }
+        ImageProducer prod;
+        prod = new FilteredImageSource(getSource(), filter);
+        return Toolkit.getDefaultToolkit().createImage(prod);
     }
 
     public void flush() {

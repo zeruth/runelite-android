@@ -1,5 +1,9 @@
 /*
+<<<<<<< HEAD
  * Copyright (c) 1999, Oracle and/or its affiliates. All rights reserved.
+=======
+ * Copyright (c) 1999, 2001, Oracle and/or its affiliates. All rights reserved.
+>>>>>>> up
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -22,13 +26,19 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
+<<<<<<< HEAD
 
+=======
+>>>>>>> up
 package javax.swing.plaf;
 
 import javax.swing.ComponentInputMap;
 import javax.swing.JComponent;
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> up
 /**
  * A subclass of javax.swing.ComponentInputMap that implements UIResource.
  * UI classes which provide a ComponentInputMap should use this class.

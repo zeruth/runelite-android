@@ -53,5 +53,8 @@ public abstract class VolatileImage extends Image implements Transparency {
     @Override public int getWidth(ImageObserver observer) { return getWidth(); }
     @Override public int getHeight(ImageObserver observer) { return getHeight(); }
 
+    /** As the JDK: the pixels of a snapshot taken now. */
+    @Override public ImageProducer getSource() { return getSnapshot().getSource(); }
+
     @Override public int getTransparency() { return transparency; }
 }

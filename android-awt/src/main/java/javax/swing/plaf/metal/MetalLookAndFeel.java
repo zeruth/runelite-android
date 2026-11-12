@@ -28,43 +28,41 @@
  * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-package java.awt.geom;
+package javax.swing.plaf.metal;
 
-import java.awt.Shape;
-import sun.awt.geom.Curve;
+import javax.swing.plaf.basic.BasicLookAndFeel;
 
 /**
- * Shared winding and intersection tests over a path's exact segments, the
- * way OpenJDK's {@code Path2D} does them: the crossing counts come from
- * {@link Curve}, so curved segments are tested analytically rather than
- * through a flattened approximation.
+ * The cross-platform look and feel UIManager installs by default. Until the
+ * Metal themes and delegates are ported it carries Metal's identity over the
+ * Basic defaults table, so startup code that installs the cross-platform look
+ * and feel (RuneLite's splash screen) gets a supported look and feel.
  */
-final class PathGeometry {
-    static boolean contains(PathIterator it, double x, double y) {
-        if (x * 0.0 + y * 0.0 != 0.0) {
-            // NaN or infinite coordinates are outside every path.
-            return false;
-        }
-        int mask = (it.getWindingRule() == PathIterator.WIND_NON_ZERO ? -1 : 1);
-        return (Curve.pointCrossingsForPath(it, x, y) & mask) != 0;
+public class MetalLookAndFeel extends BasicLookAndFeel {
+    public MetalLookAndFeel() {
     }
 
-    static boolean rectangle(Shape shape, double x, double y, double w, double h, boolean containing) {
-        return rectangle(shape.getPathIterator(null), x, y, w, h, containing);
+    public String getName() {
+        return "Metal";
     }
 
-    static boolean rectangle(PathIterator it, double x, double y, double w, double h, boolean containing) {
-        if (java.lang.Double.isNaN(x + w) || java.lang.Double.isNaN(y + h)) {
-            return false;
-        }
-        if (w <= 0 || h <= 0) {
-            return false;
-        }
-        int mask = (it.getWindingRule() == PathIterator.WIND_NON_ZERO ? -1 : 2);
-        int crossings = Curve.rectCrossingsForPath(it, x, y, x + w, y + h);
-        if (containing) {
-            return crossings != Curve.RECT_INTERSECTS && (crossings & mask) != 0;
-        }
-        return crossings == Curve.RECT_INTERSECTS || (crossings & mask) != 0;
+    public String getID() {
+        return "Metal";
+    }
+
+    public String getDescription() {
+        return "The Java(tm) Look and Feel";
+    }
+
+    public boolean isNativeLookAndFeel() {
+        return false;
+    }
+
+    public boolean isSupportedLookAndFeel() {
+        return true;
+    }
+
+    public boolean getSupportsWindowDecorations() {
+        return true;
     }
 }
