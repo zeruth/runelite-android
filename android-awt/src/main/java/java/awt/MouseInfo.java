@@ -30,11 +30,46 @@
  */
 package java.awt;
 
+/**
+ * The pointer is the last host pointer event: every touch or mouse event the Android host
+ * dispatches into a component tree goes through {@link Component#dispatchMouseEvent}, which
+ * records its screen position (the {@link Component#getLocationOnScreen} space of that tree)
+ * and the tree's root. Before the first event the pointer is at (0, 0) over no tree.
+ *
+ * The JDK throws HeadlessException here when the toolkit is headless; the shadow reports
+ * itself headless (no native windows) yet always has a pointer, so it answers instead.
+ */
 public class MouseInfo {
     private MouseInfo() {}
 
-    public static PointerInfo getPointerInfo() {
-        return new PointerInfo(null, new Point(0, 0));
+    private static final class Pointer {
+        // Weak: a closed panel's tree must not stay reachable through the last pointer event.
+        final java.lang.ref.WeakReference<Component> root;
+        final int x, y;
+        Pointer(Component root, int x, int y) {
+            this.root = new java.lang.ref.WeakReference<Component>(root);
+            this.x = x;
+            this.y = y;
+        }
+    }
+
+    private static volatile Pointer pointer = new Pointer(null, 0, 0);
+
+    /** Records a host pointer position, in the screen space of the tree rooted at {@code root}. */
+    static void pointerAt(Component root, int x, int y) {
+        Pointer last = pointer;
+        if (last.root.get() != root || last.x != x || last.y != y) pointer = new Pointer(root, x, y);
+    }
+
+    /** Whether the last pointer event went into the tree rooted at {@code root}. */
+    static boolean isUnderPointer(Component root) {
+        return root != null && pointer.root.get() == root;
+    }
+
+    public static PointerInfo getPointerInfo() throws HeadlessException {
+        Pointer last = pointer;
+        GraphicsDevice device = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice();
+        return new PointerInfo(device, new Point(last.x, last.y));
     }
 
     public static int getNumberOfButtons() {
