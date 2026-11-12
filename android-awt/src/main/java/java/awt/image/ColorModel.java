@@ -198,6 +198,11 @@ public abstract class ColorModel implements Transparency {
     public SampleModel createCompatibleSampleModel(int w, int h) {
         throw AwtUnsupported.fail("java.awt.image.ColorModel.createCompatibleSampleModel(int, int)", "only subclasses answer");
     }
+
+    public boolean isCompatibleSampleModel(SampleModel sm) {
+        // OpenJDK 8u: the abstract base has no layout to compare against.
+        throw new UnsupportedOperationException("This method is not supported by this color model");
+    }
     public ColorModel coerceData(WritableRaster raster, boolean premultiplied) {
         if (!hasAlpha() || isAlphaPremultiplied() == premultiplied) return this;
         ColorModel target;

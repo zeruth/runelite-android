@@ -126,4 +126,9 @@ public class IndexColorModel extends ColorModel {
     }
     @Override public SampleModel createCompatibleSampleModel(int w, int h) { return new PixelInterleavedSampleModel(transferType, w, h, 1, w, new int[]{0}); }
     @Override public boolean isCompatibleRaster(Raster raster) { return raster.getTransferType() == transferType && raster.getNumBands() == 1 && raster.getSampleModel().getSampleSize(0) >= pixel_bits; }
+    // OpenJDK 8u: one band of indices, packed or component, in this model's transfer type.
+    @Override public boolean isCompatibleSampleModel(SampleModel sm) {
+        if (!(sm instanceof ComponentSampleModel) && !(sm instanceof MultiPixelPackedSampleModel)) return false;
+        return sm.getTransferType() == transferType && sm.getNumBands() == 1;
+    }
 }

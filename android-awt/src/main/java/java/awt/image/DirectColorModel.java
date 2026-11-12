@@ -188,6 +188,15 @@ public class DirectColorModel extends ColorModel {
         int[] expected = alphaMask == 0 ? new int[]{redMask, greenMask, blueMask} : new int[]{redMask, greenMask, blueMask, alphaMask};
         return java.util.Arrays.equals(masks, expected);
     }
+
+    // OpenJDK 8u PackedColorModel.isCompatibleSampleModel: same packing, band count and masks.
+    @Override public boolean isCompatibleSampleModel(SampleModel sm) {
+        if (!(sm instanceof SinglePixelPackedSampleModel)) return false;
+        if (sm.getNumBands() != getNumComponents() || sm.getTransferType() != transferType) return false;
+        int[] masks = ((SinglePixelPackedSampleModel)sm).getBitMasks();
+        int[] expected = alphaMask == 0 ? new int[]{redMask, greenMask, blueMask} : new int[]{redMask, greenMask, blueMask, alphaMask};
+        return java.util.Arrays.equals(masks, expected);
+    }
     private static int trailingZeros(int mask) {
         if (mask == 0) return 0;
         int n = 0;

@@ -86,6 +86,10 @@ public class ComponentColorModel extends ColorModel {
         return new PixelInterleavedSampleModel(transferType, width, height, offsets.length, width * offsets.length, offsets);
     }
     @Override public boolean isCompatibleRaster(Raster raster) { return raster.getTransferType() == transferType && raster.getNumBands() == getNumComponents(); }
+    // OpenJDK 8u: any ComponentSampleModel with one band per component and the same transfer type.
+    @Override public boolean isCompatibleSampleModel(SampleModel sm) {
+        return sm instanceof ComponentSampleModel && sm.getNumBands() == getNumComponents() && sm.getTransferType() == transferType;
+    }
 
     @Override public int[] getComponents(int pixel, int[] components, int offset) {
         if (getNumComponents() > 1) throw new IllegalArgumentException("More than one component per pixel");

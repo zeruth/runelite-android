@@ -39,6 +39,16 @@ public abstract class DataBuffer {
     public static final int TYPE_DOUBLE    = 5;
     public static final int TYPE_UNDEFINED = 32;
 
+    private static final int[] dataTypeSize = {8, 16, 16, 32, 32, 64};
+
+    /** Size in bits of one element of {@code type}, as OpenJDK 8u answers it. */
+    public static int getDataTypeSize(int type) {
+        if (type < TYPE_BYTE || type > TYPE_DOUBLE) {
+            throw new IllegalArgumentException("Unknown data type " + type);
+        }
+        return dataTypeSize[type];
+    }
+
     protected int dataType;
     protected int banks;
     protected int size;
