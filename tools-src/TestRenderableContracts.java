@@ -316,6 +316,9 @@ public final class TestRenderableContracts {
         check("ImagingOpException keeps its message", "bad op".equals(new ImagingOpException("bad op").getMessage()));
 
         System.out.println(total - failures + "/" + total + " passed");
-        if (failures != 0) System.exit(1);
+        // Thrown rather than System.exit: the swing-ui-probe "canvas" command runs main()
+        // in-process on the device, where the plain path draws through android-awt's own
+        // Graphics2D; on the host an uncaught error still exits non-zero.
+        if (failures != 0) throw new AssertionError(failures + " renderable contract(s) failed");
     }
 }
