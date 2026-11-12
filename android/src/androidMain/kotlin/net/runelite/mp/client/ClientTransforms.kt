@@ -7,6 +7,7 @@
 
 package net.runelite.mp.client
 
+import net.runelite.mp.compat.JdkRetargeter
 import org.objectweb.asm.ClassReader
 import org.objectweb.asm.ClassVisitor
 import org.objectweb.asm.ClassWriter
@@ -728,7 +729,7 @@ internal class DesugarLambdasTask {
         // First pass: collect every implMethod we'll need to invoke from synthetic classes
         // so we can widen its access if it's private (cross-class private calls fail at
         // verify time). Also identify methods matching the xi.cq IAE-on-NUL pattern so
-        // we can prepend a StringShim.stripNul prologue and stop login from crashing
+        // we can prepend a JdkStrings.stripNul prologue and stop login from crashing
         // with "error_game_crash" when a machine-info string picks up a NUL.
         val privatesToWiden = mutableSetOf<Triple<String, String, String>>()
         // Generated lambdas live in another package. Public methods alone are not
@@ -871,7 +872,7 @@ internal class DesugarLambdasTask {
                     syntheticName
                 }
                 // If this method's body matched the IAE-on-NUL pattern in the first pass,
-                // inject `arg1 = StringShim.stripNul(arg1)` at method entry. The method
+                // inject `arg1 = JdkStrings.stripNul(arg1)` at method entry. The method
                 // never sees a NUL, so the IAE never throws.
                 val shouldPatchNul = nulRejectMethods.contains(Triple(ownerName, name, descriptor))
                 return if (shouldPatchNul) {
@@ -881,7 +882,7 @@ internal class DesugarLambdasTask {
                             super.visitVarInsn(Opcodes.ALOAD, 1)
                             super.visitMethodInsn(
                                 Opcodes.INVOKESTATIC,
-                                "net/runelite/mp/util/StringShim",
+                                "net/runelite/mp/compat/jdk/JdkStrings",
                                 "stripNul",
                                 "(Ljava/lang/String;)Ljava/lang/String;",
                                 false,
@@ -971,12 +972,8 @@ private class LambdaRewriter(
     // on net/runelite/mp/util/UnsafeShim with the same descriptor. The shim emulates
     // off-heap memory in a userland Map<Integer, ByteBuffer> so we never depend on the
     // (Android-restricted) hidden allocateMemory / copyMemoryFromPrimitiveArray APIs.
-    //
-    // Also reroute ProcessHandle.Info.command() through ProcessHandleShim, which cuts the
-    // string at a NUL. The patched client serializes it into its login machine-info packet
-    // (xi.cq), which rejects any string containing NUL ("error_game_crash"). The shadow
-    // ProcessHandle now answers the NUL-free /proc/self/exe path; the redirect stays as the
-    // guard. Every java.lang shim rewrite is tabled in android-awt/PORTING.md, section 10.
+    // JDK member retargets (ProcessHandle.Info.command() among them) are DesugarApisTask's,
+    // through the JdkRetargets table; see android-awt/PORTING.md, section 10.
     override fun visitMethodInsn(opcode: Int, owner: String, name: String, descriptor: String, isInterface: Boolean) {
         if (opcode == Opcodes.INVOKEVIRTUAL && owner == "sun/misc/Unsafe"
             && UNSAFE_REDIRECT.contains(name + descriptor)) {
@@ -996,21 +993,6 @@ private class LambdaRewriter(
             }
             super.visitMethodInsn(Opcodes.INVOKESTATIC, "net/runelite/mp/util/UnsafeShim",
                 name, descriptor, false)
-            return
-        }
-        if (opcode == Opcodes.INVOKEINTERFACE
-            && owner == "java/lang/ProcessHandle\$Info"
-            && name == "command"
-            && descriptor == "()Ljava/util/Optional;") {
-            // Stack: [ProcessHandle$Info receiver]. The shim's parameter type is Object, so
-            // the receiver is passed as is: same single-arg static call, no cast.
-            super.visitMethodInsn(
-                Opcodes.INVOKESTATIC,
-                "net/runelite/mp/util/ProcessHandleShim",
-                "sanitizedCommand",
-                "(Ljava/lang/Object;)Ljava/util/Optional;",
-                false,
-            )
             return
         }
         super.visitMethodInsn(opcode, owner, name, descriptor, isInterface)
@@ -1049,8 +1031,10 @@ private class LambdaRewriter(
     }
 }
 
-// desugarApis: reroutes JDK APIs the client calls that Android lacks at minSdk to the
-// polyfills in net.runelite.mp.util.IndyConcat. Run by ClientPreparer.
+// desugarApis: moves the client off the JDK members Android lacks at minSdk through the
+// shared JdkRetargets table (the same pass PluginDexer runs over hub jars, minus the regex
+// relocation: the client hands JDK regex types to runelite-api). Runs after desugarLambdas,
+// so the calls the generated lambda classes make are retargeted too. Run by ClientPreparer.
 internal class DesugarApisTask {
     lateinit var inputJar: java.io.File
     lateinit var outputJar: java.io.File
@@ -1059,69 +1043,26 @@ internal class DesugarApisTask {
         val inFile = inputJar
         val outFile = outputJar
         JarFile(inFile).use { srcJar ->
-                JarOutputStream(outFile.outputStream()).use { outJar ->
-                    val entries = srcJar.entries()
-                    while (entries.hasMoreElements()) {
-                        val entry = entries.nextElement()
-                        srcJar.getInputStream(entry).use { stream ->
-                            outJar.putNextEntry(JarEntry(entry.name))
-
-                            if (entry.name.endsWith(".class")) {
-                                val bytes = stream.readBytes()
-                                val reader = org.objectweb.asm.ClassReader(bytes)
-                                val writer = org.objectweb.asm.ClassWriter(org.objectweb.asm.ClassWriter.COMPUTE_MAXS)
-
-                                // Direct ASM transformer to find and swap the method signature
-                                val transformer = object : org.objectweb.asm.ClassVisitor(org.objectweb.asm.Opcodes.ASM9, writer) {
-                                    override fun visitMethod(access: Int, name: String?, descriptor: String?, signature: String?, exceptions: Array<out String>?): org.objectweb.asm.MethodVisitor {
-                                        val mv = super.visitMethod(access, name, descriptor, signature, exceptions)
-                                        return object : org.objectweb.asm.MethodVisitor(org.objectweb.asm.Opcodes.ASM9, mv) {
-                                            override fun visitMethodInsn(opcode: Int, owner: String?, nameStr: String?, desc: String?, isInterface: Boolean) {
-                                                // Target the Java 9 Matcher.replaceAll(Function) signature
-                                                if (opcode == org.objectweb.asm.Opcodes.INVOKEVIRTUAL &&
-                                                    owner == "java/util/regex/Matcher" &&
-                                                    nameStr == "replaceAll" &&
-                                                    desc == "(Ljava/util/function/Function;)Ljava/lang/String;") {
-
-                                                    // Reroute it to your Java 8 polyfill method
-                                                    super.visitMethodInsn(
-                                                        org.objectweb.asm.Opcodes.INVOKESTATIC,
-                                                        "net/runelite/mp/util/IndyConcat",
-                                                        "replaceAllJava8",
-                                                        "(Ljava/util/regex/Matcher;Ljava/util/function/Function;)Ljava/lang/String;",
-                                                        false
-                                                    )
-                                                }
-                                                // 2. interceptor for MethodHandles.privateLookupIn
-                                                else if (opcode == org.objectweb.asm.Opcodes.INVOKESTATIC &&
-                                                    owner == "java/lang/invoke/MethodHandles" &&
-                                                    nameStr == "privateLookupIn" &&
-                                                    desc == "(Ljava/lang/Class;Ljava/lang/invoke/MethodHandles\$Lookup;)Ljava/lang/invoke/MethodHandles\$Lookup;") {
-
-                                                    super.visitMethodInsn(
-                                                        org.objectweb.asm.Opcodes.INVOKESTATIC,
-                                                        "net/runelite/mp/util/IndyConcat",
-                                                        "privateLookupInJava8", // Reroutes to your Java 8 reflection workaround
-                                                        "(Ljava/lang/Class;Ljava/lang/invoke/MethodHandles\$Lookup;)Ljava/lang/invoke/MethodHandles\$Lookup;",
-                                                        false
-                                                    )
-                                                } else {
-                                                    super.visitMethodInsn(opcode, owner, nameStr, desc, isInterface)
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-
-                                // SKIP_DEBUG eliminates the malformed tables causing D8/R8 to throw NullPointerExceptions
-                                reader.accept(transformer, org.objectweb.asm.ClassReader.SKIP_DEBUG)
-                                outJar.write(writer.toByteArray())
-                            } else {
-                                stream.copyTo(outJar)
-                            }
+            val jarClasses = srcJar.entries().asSequence()
+                .filter { it.name.endsWith(".class") }
+                .map { it.name.removeSuffix(".class") }.toSet()
+            JarOutputStream(outFile.outputStream().buffered()).use { outJar ->
+                val entries = srcJar.entries()
+                while (entries.hasMoreElements()) {
+                    val entry = entries.nextElement()
+                    srcJar.getInputStream(entry).use { stream ->
+                        outJar.putNextEntry(JarEntry(entry.name))
+                        if (entry.name.endsWith(".class")) {
+                            // SKIP_DEBUG drops the malformed debug tables that made D8 throw
+                            // NullPointerExceptions, so every class is rewritten.
+                            outJar.write(JdkRetargeter.rewrite(entry.name, stream.readBytes(), jarClasses, false,
+                                ClassReader.SKIP_DEBUG))
+                        } else {
+                            stream.copyTo(outJar)
                         }
                     }
                 }
             }
+        }
     }
 }

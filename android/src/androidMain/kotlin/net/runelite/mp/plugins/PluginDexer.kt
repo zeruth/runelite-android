@@ -28,9 +28,10 @@ private const val TAG = "PluginDexer"
  * companions, Method.isDefault() turns false, and ConfigInvocationHandler stops serving
  * @ConfigItem defaults (quest-helper NPE'd on its first enum config read).
  *
- * Before D8, every class goes through [PluginClassTransform]: desktop regex relocation and the
- * lowering of the bootstraps D8 refuses (android-awt/PORTING.md has the bootstrap matrix). FORMAT
- * did not move for the lowering: a jar that needed it failed D8 before, so none is cached.
+ * Before D8, every class goes through [PluginClassTransform]: the JdkRetargets member table with
+ * the desktop regex relocation, then the lowering of the bootstraps D8 refuses
+ * (android-awt/PORTING.md has the bootstrap matrix). FORMAT did not move for the lowering: a jar
+ * that needed it failed D8 before, so none is cached.
  */
 internal class PluginDexer(private val context: Context) : PluginHubHooks.Dexer
 {
@@ -177,8 +178,11 @@ internal class PluginDexer(private val context: Context) : PluginHubHooks.Dexer
 
     companion object
     {
-        /** Core-library types must match the APK, including Flow publisher signatures. */
-        private const val FORMAT = "v4-regex21-${RuntimeDexConfiguration.CACHE_VERSION}"
+        /**
+         * Core-library types must match the APK, including Flow publisher signatures. `jdk1` is
+         * the first JdkRetargets table; bump it whenever a row or shim name changes.
+         */
+        private const val FORMAT = "v5-jdk1-${RuntimeDexConfiguration.CACHE_VERSION}"
         private val DEX_NAME = Regex("""classes\d*\.dex""")
         private val DESKTOP_ONLY = listOf(
             "org/lwjgl/" to "LWJGL (desktop OpenGL)",

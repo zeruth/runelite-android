@@ -7,10 +7,12 @@ it runs on the host JVM, goes through PluginClassTransform (the pass PluginDexer
 runs again under -Xverify:all with the same output, and is dexed by D8 at min-api 26; the dex must
 hold no call site and no method handle, the two things ART at API 26 cannot link. The client lambda
 pass (DesugarLambdasTask's private-method lowering) gets the same treatment through
-TestClientLambdaLowering.
+TestClientLambdaLowering. The JdkRetargets fixture (card #93, TestRuntimeRetargetPlugin) goes
+through PluginClassTransform too, TestRuntimeRetarget checks no table member is left, and the
+rewritten plugin runs on the host JVM against the shims and the desktop regex engine.
 
-With --apk and --serial, it also links a desktop-compiled plugin against the exact APK using its
-compiler assets on an emulator.
+With --apk and --serial, it also links a desktop-compiled plugin and the retargeted fixture
+against the exact APK using its compiler assets on an emulator.
 """
 import argparse
 import hashlib
@@ -30,11 +32,13 @@ ROOT = TOOLS.parent
 SHADOW_SOURCES = ROOT / "android-awt" / "src" / "main" / "java"
 SHADOW_ROOTS = ("java", "javax", "sun", "com/sun")
 APP_JAVA = ROOT / "android" / "src" / "androidMain" / "java" / "net" / "runelite" / "mp"
+COMPAT = APP_JAVA / "compat"
 TRANSFORM_SOURCES = [
     APP_JAVA / "plugins" / "PluginClassTransform.java",
     APP_JAVA / "plugins" / "IndyLowering.java",
-    APP_JAVA / "plugins" / "DesktopRegexTransformer.java",
     APP_JAVA / "client" / "SyntheticLambdas.java",
+    COMPAT / "JdkRetargeter.java",
+    *sorted((COMPAT / "jdk").glob("*.java")),
 ]
 # The versions android/build.gradle.kts compiles the device transform and dexer against.
 ASM_VERSION = "9.8"
@@ -152,7 +156,8 @@ def host_fixtures(args, out):
         shutil.rmtree(tools)
     tools.mkdir(parents=True)
     run("compile transform", javac, "--release", "21", "-encoding", "UTF-8", "-cp", asm_cp, "-d", tools,
-        *TRANSFORM_SOURCES, TOOLS / "TestIndyFixtures.java", TOOLS / "TestClientLambdaLowering.java")
+        *TRANSFORM_SOURCES, TOOLS / "TestIndyFixtures.java", TOOLS / "TestClientLambdaLowering.java",
+        TOOLS / "TestRuntimeRetarget.java")
     tools_cp = os.pathsep.join([str(tools)] + [str(j) for j in asm])
     d8 = [java, "-cp", r8, "com.android.tools.r8.D8", "--release", "--min-api", "26", "--lib", lib]
 
@@ -229,7 +234,38 @@ def host_fixtures(args, out):
     dex_and_scan(name, lowered_jar, out / "dex" / name)
     matrix.append((name, ["LambdaMetafactory.metafactory (client pass)"]))
 
-    print(f"PASS: {len(matrix)} bootstrap fixtures transformed, verified on the host JVM and dexed at min-api 26")
+    # JdkRetargets fixture: a --release 11 plugin calling table members, directly and through
+    # method references, goes through PluginClassTransform; TestRuntimeRetarget checks no row,
+    # relocated type or String regex call is left, then the rewritten plugin runs under
+    # -Xverify:all against the shims, the desktop regex engine and DesktopRegexStrings compiled
+    # from the app's sources, so every retargeted call site links to a real member.
+    name = "TestRuntimeRetargetPlugin"
+    plugin_dir = out / "fixtures" / name
+    runtime_dir = out / "fixtures" / "retarget-runtime"
+    for d in (plugin_dir, runtime_dir):
+        if d.exists():
+            shutil.rmtree(d)
+        d.mkdir(parents=True)
+    run("compile " + name, javac, "--release", "11", "-encoding", "UTF-8", "-d", plugin_dir, TOOLS / (name + ".java"))
+    plugin_jar = out / "retarget-plugin.jar"
+    rewritten_jar = out / "retarget-rewritten.jar"
+    jar_directory(plugin_dir, plugin_jar)
+    retarget = run("retarget " + name, java, "-Xverify:all", "-cp", tools_cp, "TestRuntimeRetarget", plugin_jar, rewritten_jar)
+    if "PASS:" not in retarget.stdout:
+        raise SystemExit("TestRuntimeRetarget printed no PASS marker")
+    # android.jar is compile-only: Pattern names android.icu for CANON_EQ, which the fixture
+    # never sets, so nothing from it loads on the JVM.
+    run("compile retarget runtime", javac, "-encoding", "UTF-8", "-nowarn",
+        "-cp", os.pathsep.join([str(tools), str(lib)]), "-d", runtime_dir,
+        APP_JAVA / "plugins" / "DesktopRegexStrings.java", *sorted((COMPAT / "regex").glob("*.java")))
+    linked = run("run retargeted " + name, java, "-Xverify:all",
+                 "-cp", os.pathsep.join(map(str, (tools, runtime_dir, rewritten_jar))), name)
+    if "PASS:" not in linked.stdout:
+        raise SystemExit(f"{name}: the retargeted plugin printed no PASS marker")
+    dex_and_scan(name, rewritten_jar, out / "dex" / name)
+    matrix.append((name, ["JdkRetargets rows + desktop regex (PluginClassTransform)"]))
+
+    print(f"PASS: {len(matrix)} fixtures transformed, verified on the host JVM and dexed at min-api 26")
     for fixture, kinds in matrix:
         print(f"  {fixture}: {', '.join(kinds)}")
 
@@ -298,13 +334,20 @@ def emulator_link(args, out):
     run("aligned D8 conversion", *compiler, "--desugared-lib", out / "desugar.json",
         "--lib", out / "java-api.jar", "--classpath", out / "host-api.jar",
         "--output", out / "aligned.jar", out / "plugin.jar")
+    run("retarget D8 conversion", *compiler, "--desugared-lib", out / "desugar.json",
+        "--lib", out / "java-api.jar", "--classpath", out / "host-api.jar",
+        "--output", out / "retarget.jar", out / "retarget-rewritten.jar")
+
     remote = "/data/local/tmp/runtime-plugin-contracts"
     run("prepare emulator fixture", adb, "-s", args.serial, "shell", "mkdir", "-p", remote)
-    for local, name in ((args.apk, "host.apk"), (out / "old.jar", "old.jar"), (out / "aligned.jar", "aligned.jar")):
+    for local, name in ((args.apk, "host.apk"), (out / "old.jar", "old.jar"), (out / "aligned.jar", "aligned.jar"),
+                        (out / "retarget.jar", "retarget.jar")):
         run("push " + name, adb, "-s", args.serial, "push", local, remote + "/" + name)
-    for name, negative in (("old.jar", True), ("aligned.jar", False)):
+    for name, main_class, negative in (("old.jar", "TestRuntimeHttpPlugin", True),
+                                       ("aligned.jar", "TestRuntimeHttpPlugin", False),
+                                       ("retarget.jar", "TestRuntimeRetargetPlugin", False)):
         result = run("link " + name, adb, "-s", args.serial, "shell",
-                     f"CLASSPATH={remote}/host.apk:{remote}/{name}", "dalvikvm", "TestRuntimeHttpPlugin",
+                     f"CLASSPATH={remote}/host.apk:{remote}/{name}", "dalvikvm", main_class,
                      expected_failure=negative)
         if not negative and "PASS:" not in result:
             raise SystemExit("Missing fixture success marker")

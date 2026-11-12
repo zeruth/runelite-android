@@ -52,7 +52,7 @@ public class TestSailingLambdaAccess {
                     Class.forName(lambda.replace('/', '.'), true, loader);
                     linked++;
                 } catch (NoClassDefFoundError e) {
-                    // App-side shims (UnsafeShim, StringShim) are not in the client jar.
+                    // App-side shims (UnsafeShim, the compat.jdk shims) are not in the client jar.
                     unresolved.add(lambda + ": " + e.getMessage());
                 } catch (VerifyError | IllegalAccessError e) {
                     throw new AssertionError(lambda + " does not link", e);
