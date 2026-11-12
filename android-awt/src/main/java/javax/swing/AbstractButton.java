@@ -333,8 +333,9 @@ public abstract class AbstractButton extends JComponent {
         if (text != null) setText(text);
         if (icon != null) setIcon(icon);
         updateUI();
-        setAlignmentX(LEFT_ALIGNMENT);
-        setAlignmentY(CENTER_ALIGNMENT);
+        // Component.LEFT_ALIGNMENT and CENTER_ALIGNMENT; the shadow Component lacks the constants.
+        setAlignmentX(0.0f);
+        setAlignmentY(0.5f);
     }
 
     private long multiClickThreshhold;
