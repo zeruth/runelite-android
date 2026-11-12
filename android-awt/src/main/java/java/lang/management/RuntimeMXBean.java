@@ -50,5 +50,4 @@ public interface RuntimeMXBean extends PlatformManagedObject {
     long getUptime();
     long getStartTime();
     java.util.Map<String, String> getSystemProperties();
-    default java.util.Map<String, String> getKeyMap() { return getSystemProperties(); }
 }
