@@ -51,6 +51,16 @@ def default_sdk():
     return None
 
 
+def default_android_jar(sdk):
+    """The android.jar of the newest installed platform, or None."""
+    if sdk is None:
+        return None
+    def level(jar):
+        return [int(part) if part.isdigit() else 0 for part in re.split(r"[.-]", jar.parent.name)]
+    jars = sorted((sdk / "platforms").glob("android-*/android.jar"), key=level)
+    return jars[-1] if jars else None
+
+
 def default_apk():
     """The newest APK the app's debug or release assembly left behind."""
     apks = [apk for kind in ("debug", "release")
@@ -172,6 +182,26 @@ def main():
                  out / "retarget-plugin.jar", out / "retarget-rewritten.jar")
     if "PASS:" not in result:
         raise SystemExit("Missing retarget success marker")
+    # Host link run: the rewritten plugin against the shims, the desktop regex engine and
+    # DesktopRegexStrings compiled from the app's sources, so every retargeted call site resolves
+    # to a real member on the JVM before the emulator half checks it on ART.
+    # android.jar is compile-only: Pattern names android.icu for CANON_EQ, which the fixture
+    # never sets, so nothing from it loads on the JVM.
+    android_jar = default_android_jar(args.sdk or default_sdk())
+    if android_jar is None:
+        raise SystemExit("No android.jar under <sdk>/platforms; pass --sdk")
+    runtime_classes = out / "retarget-runtime"
+    runtime_classes.mkdir(exist_ok=True)
+    app_java = RETARGET_SOURCES.parent
+    run("compile retarget runtime", java / ("javac" + suffix), "-encoding", "UTF-8", "-nowarn",
+        "-cp", os.pathsep.join(map(str, (tool_classes, android_jar))), "-d", runtime_classes,
+        app_java / "plugins" / "DesktopRegexStrings.java",
+        *sorted((RETARGET_SOURCES / "regex").glob("*.java")))
+    result = run("retarget host link", java / ("java" + suffix), "-Xverify:all",
+                 "-cp", os.pathsep.join(map(str, (tool_classes, runtime_classes, out / "retarget-rewritten.jar"))),
+                 "TestRuntimeRetargetPlugin")
+    if "PASS:" not in result:
+        raise SystemExit("Missing host link success marker")
     if args.host_only:
         return
     if skip_device:

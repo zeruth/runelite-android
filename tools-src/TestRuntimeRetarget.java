@@ -24,7 +24,8 @@ import org.objectweb.asm.Opcodes;
 /**
  * Host half of the retargeting fixtures: {@code TestRuntimeRetarget <plugin.jar> <out.jar>} runs
  * JdkRetargeter over a jar the way PluginDexer does (hub mode, regex relocated), then checks the
- * result: no call or method handle still names a table row or a relocated type, the shims the
+ * result: no call or method handle still names a table row, a relocated type or one of String's
+ * regex methods (those go to DesktopRegexStrings), the shims the
  * fixture needs are called, a second pass changes nothing, and the client mode leaves regex alone.
  */
 public final class TestRuntimeRetarget {
@@ -32,11 +33,24 @@ public final class TestRuntimeRetarget {
         "JdkStrings.repeat", "JdkStrings.strip", "JdkStrings.stripLeading", "JdkStrings.stripTrailing",
         "JdkStrings.isBlank", "JdkStrings.lines", "JdkFiles.readString", "JdkFiles.writeString",
         "JdkRuntime.version", "JdkConcurrent.keySet", "DesktopRegexStrings.split",
+        "DesktopRegexStrings.matches", "DesktopRegexStrings.replaceAll", "DesktopRegexStrings.replaceFirst",
     };
+
+    /** String's regex methods, which hub mode routes to DesktopRegexStrings with the receiver first. */
+    private static final String[][] STRING_REGEX = {
+        {"split", "(Ljava/lang/String;)[Ljava/lang/String;"},
+        {"split", "(Ljava/lang/String;I)[Ljava/lang/String;"},
+        {"matches", "(Ljava/lang/String;)Z"},
+        {"splitWithDelimiters", "(Ljava/lang/String;I)[Ljava/lang/String;"},
+        {"replaceFirst", "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;"},
+        {"replaceAll", "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;"},
+    };
+    private static final String REGEX_STRINGS = "net/runelite/mp/plugins/DesktopRegexStrings";
 
     public static void main(String[] args) throws IOException {
         checkTable();
         checkClientMode();
+        checkStringRegex();
         Set<String> referenced = new TreeSet<>();
         List<String> leftovers = new ArrayList<>();
         int changed = 0;
@@ -59,7 +73,7 @@ public final class TestRuntimeRetarget {
                     throw new AssertionError("second pass changed " + entry.getName());
                 }
                 if (entry.getName().endsWith(".class")) {
-                    scan(result, referenced, leftovers);
+                    scan(result, referenced, leftovers, true);
                 }
                 output.putNextEntry(new ZipEntry(entry.getName()));
                 output.write(result);
@@ -119,7 +133,7 @@ public final class TestRuntimeRetarget {
         byte[] result = JdkRetargeter.rewrite("ClientFixture.class", writer.toByteArray(), Set.of("ClientFixture"), false);
         Set<String> referenced = new TreeSet<>();
         List<String> leftovers = new ArrayList<>();
-        scan(result, referenced, leftovers);
+        scan(result, referenced, leftovers, false);
         if (!leftovers.isEmpty() || !referenced.containsAll(List.of("JdkRegex.replaceAll", "JdkStrings.repeat"))) {
             throw new AssertionError("client mode: leftovers " + leftovers + ", shims " + referenced);
         }
@@ -129,7 +143,84 @@ public final class TestRuntimeRetarget {
         }
     }
 
-    private static void scan(byte[] bytes, Set<String> referenced, List<String> leftovers) {
+    /**
+     * Every String regex method, called with INVOKEVIRTUAL, must become INVOKESTATIC on
+     * DesktopRegexStrings with the receiver prepended in hub mode (splitWithDelimiters included,
+     * which a --release 11 fixture cannot call), and stay on String in client mode.
+     */
+    private static void checkStringRegex() {
+        ClassWriter writer = new ClassWriter(0);
+        writer.visit(Opcodes.V11, Opcodes.ACC_PUBLIC, "StringRegexFixture", null, "java/lang/Object", null);
+        MethodVisitor method = writer.visitMethod(Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC, "test",
+                "(Ljava/lang/String;)V", null, null);
+        method.visitCode();
+        for (String[] member : STRING_REGEX) {
+            method.visitVarInsn(Opcodes.ALOAD, 0);
+            // One String or int per parameter; only the descriptor matters to the rewrite.
+            for (char parameter : member[1].substring(1, member[1].indexOf(')')).replace("Ljava/lang/String;", "S").toCharArray()) {
+                if (parameter == 'S') {
+                    method.visitLdcInsn("x");
+                } else {
+                    method.visitInsn(Opcodes.ICONST_0);
+                }
+            }
+            method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/String", member[0], member[1], false);
+            method.visitInsn(Opcodes.POP);
+        }
+        method.visitInsn(Opcodes.RETURN);
+        method.visitMaxs(3, 1);
+        method.visitEnd();
+        writer.visitEnd();
+        byte[] original = writer.toByteArray();
+
+        List<String> hub = calls(JdkRetargeter.rewrite("StringRegexFixture.class", original,
+                Set.of("StringRegexFixture"), true));
+        List<String> client = calls(JdkRetargeter.rewrite("StringRegexFixture.class", original,
+                Set.of("StringRegexFixture"), false));
+        List<String> expectedHub = new ArrayList<>();
+        List<String> expectedClient = new ArrayList<>();
+        for (String[] member : STRING_REGEX) {
+            expectedHub.add(Opcodes.INVOKESTATIC + " " + REGEX_STRINGS + "." + member[0]
+                    + "(Ljava/lang/String;" + member[1].substring(1));
+            expectedClient.add(Opcodes.INVOKEVIRTUAL + " java/lang/String." + member[0] + member[1]);
+        }
+        if (!hub.equals(expectedHub)) {
+            throw new AssertionError("hub String regex calls " + hub + " expected " + expectedHub);
+        }
+        if (!client.equals(expectedClient)) {
+            throw new AssertionError("client String regex calls " + client + " expected " + expectedClient);
+        }
+    }
+
+    private static List<String> calls(byte[] bytes) {
+        List<String> calls = new ArrayList<>();
+        new ClassReader(bytes).accept(new ClassVisitor(Opcodes.ASM9) {
+            @Override
+            public MethodVisitor visitMethod(int access, String name, String descriptor, String signature, String[] exceptions) {
+                return new MethodVisitor(Opcodes.ASM9) {
+                    @Override
+                    public void visitMethodInsn(int opcode, String owner, String method, String desc, boolean itf) {
+                        calls.add(opcode + " " + owner + "." + method + desc);
+                    }
+                };
+            }
+        }, 0);
+        return calls;
+    }
+
+    private static boolean stringRegex(String owner, String method, String desc) {
+        if (!owner.equals("java/lang/String")) {
+            return false;
+        }
+        for (String[] member : STRING_REGEX) {
+            if (member[0].equals(method) && member[1].equals(desc)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static void scan(byte[] bytes, Set<String> referenced, List<String> leftovers, boolean hub) {
         new ClassReader(bytes).accept(new ClassVisitor(Opcodes.ASM9) {
             @Override
             public MethodVisitor visitMethod(int access, String name, String descriptor, String signature, String[] exceptions) {
@@ -159,6 +250,9 @@ public final class TestRuntimeRetarget {
                             if (owner.equals(type) || desc.contains("L" + type + ";")) {
                                 leftovers.add(owner + "." + method + desc);
                             }
+                        }
+                        if (hub && stringRegex(owner, method, desc)) {
+                            leftovers.add(owner + "." + method + desc);
                         }
                         int slash = owner.lastIndexOf('/');
                         if (owner.startsWith("net/runelite/mp/")) {

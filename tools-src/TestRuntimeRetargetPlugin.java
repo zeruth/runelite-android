@@ -2,6 +2,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -47,6 +48,15 @@ public final class TestRuntimeRetargetPlugin {
         Matcher matcher = Pattern.compile("(\\d+)").matcher("a1b22");
         check(matcher.replaceAll(r -> "<" + r.group(1) + ">"), "a<1>b<22>");
         check("a,b,,".split(","), 2);
+        // String's own regex methods go to DesktopRegexStrings, the same engine; splitWithDelimiters
+        // is JDK 21, so TestRuntimeRetarget covers it with a synthesized call instead.
+        check("a1b2c3".split("\\d", 2), 2);
+        check("a1b2c3".split("\\d", 2)[1], "b2c3");
+        check("abc".matches("a.c"), true);
+        check("a1b22".replaceAll("(\\d+)", "<$1>"), "a<1>b<22>");
+        check("a1b22".replaceFirst("\\d+", "#"), "a#b22");
+        BiFunction<String, String, Boolean> matches = String::matches;
+        check(matches.apply("x y", "x\\Ry"), true);
         System.out.println("PASS: runtime plugin JDK retargets");
     }
 
