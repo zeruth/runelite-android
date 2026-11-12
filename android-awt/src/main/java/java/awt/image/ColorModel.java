@@ -88,6 +88,104 @@ public abstract class ColorModel implements Transparency {
     public static ColorModel getRGBdefault(){return RGB;}
     public Object getDataElements(int rgb,Object pixel){int[] p=pixel instanceof int[]?(int[])pixel:new int[1];p[0]=rgb;return p;}
     public int getRGB(Object pixel){if(pixel instanceof int[])return getRGB(((int[])pixel)[0]);if(pixel instanceof byte[])return getRGB(((byte[])pixel)[0]&255);if(pixel instanceof short[])return getRGB(((short[])pixel)[0]&65535);throw new IllegalArgumentException("pixel data");}
+    // The component accessors below follow OpenJDK 8u ColorModel: the base class
+    // answers through the unnormalized int[] form, subclasses that know their
+    // pixel layout supply getComponents/getDataElement(s).
+
+    public int[] getComponents(int pixel, int[] components, int offset) {
+        throw new UnsupportedOperationException("This method is not supported by this color model.");
+    }
+
+    public int[] getComponents(Object pixel, int[] components, int offset) {
+        throw new UnsupportedOperationException("This method is not supported by this color model.");
+    }
+
+    public int[] getUnnormalizedComponents(float[] normComponents, int normOffset,
+                                           int[] components, int offset) {
+        if (componentSizes == null) {
+            throw new UnsupportedOperationException("This method is not supported.  "
+                + "Unable to determine #bits per component.");
+        }
+        if ((normComponents.length - normOffset) < numComponents) {
+            throw new IllegalArgumentException("Incorrect number of components.  Expecting "
+                + numComponents);
+        }
+        if (components == null) {
+            components = new int[offset + numComponents];
+        }
+        if (hasAlpha && isAlphaPremultiplied) {
+            float normAlpha = normComponents[normOffset + numColorComponents];
+            for (int i = 0; i < numColorComponents; i++) {
+                components[offset + i] = (int) (normComponents[normOffset + i]
+                    * ((1 << componentSizes[i]) - 1) * normAlpha + 0.5f);
+            }
+            components[offset + numColorComponents] = (int)
+                (normAlpha * ((1 << componentSizes[numColorComponents]) - 1) + 0.5f);
+        } else {
+            for (int i = 0; i < numComponents; i++) {
+                components[offset + i] = (int) (normComponents[normOffset + i]
+                    * ((1 << componentSizes[i]) - 1) + 0.5f);
+            }
+        }
+        return components;
+    }
+
+    public float[] getNormalizedComponents(int[] components, int offset,
+                                           float[] normComponents, int normOffset) {
+        if (componentSizes == null) {
+            throw new UnsupportedOperationException("This method is not supported.  "
+                + "Unable to determine #bits per component.");
+        }
+        if ((components.length - offset) < numComponents) {
+            throw new IllegalArgumentException("Incorrect number of components.  Expecting "
+                + numComponents);
+        }
+        if (normComponents == null) {
+            normComponents = new float[numComponents + normOffset];
+        }
+        if (hasAlpha && isAlphaPremultiplied) {
+            float normAlpha = (float) components[offset + numColorComponents];
+            normAlpha /= (float) ((1 << componentSizes[numColorComponents]) - 1);
+            for (int i = 0; i < numColorComponents; i++) {
+                normComponents[normOffset + i] = normAlpha == 0.0f ? 0.0f
+                    : ((float) components[offset + i])
+                        / (normAlpha * ((float) ((1 << componentSizes[i]) - 1)));
+            }
+            normComponents[normOffset + numColorComponents] = normAlpha;
+        } else {
+            for (int i = 0; i < numComponents; i++) {
+                normComponents[normOffset + i] = ((float) components[offset + i])
+                    / ((float) ((1 << componentSizes[i]) - 1));
+            }
+        }
+        return normComponents;
+    }
+
+    public float[] getNormalizedComponents(Object pixel, float[] normComponents,
+                                           int normOffset) {
+        int[] components = getComponents(pixel, null, 0);
+        return getNormalizedComponents(components, 0, normComponents, normOffset);
+    }
+
+    public int getDataElement(int[] components, int offset) {
+        throw new UnsupportedOperationException("This method is not supported by this color model.");
+    }
+
+    public Object getDataElements(int[] components, int offset, Object obj) {
+        throw new UnsupportedOperationException("This method has not been implemented "
+            + "for this color model.");
+    }
+
+    public int getDataElement(float[] normComponents, int normOffset) {
+        int[] components = getUnnormalizedComponents(normComponents, normOffset, null, 0);
+        return getDataElement(components, 0);
+    }
+
+    public Object getDataElements(float[] normComponents, int normOffset, Object obj) {
+        int[] components = getUnnormalizedComponents(normComponents, normOffset, null, 0);
+        return getDataElements(components, 0, obj);
+    }
+
     public boolean isCompatibleRaster(Raster raster) {
         throw AwtUnsupported.fail("java.awt.image.ColorModel.isCompatibleRaster(Raster)", "only subclasses answer");
     }

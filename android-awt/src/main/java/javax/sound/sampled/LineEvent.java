@@ -42,22 +42,29 @@ public class LineEvent extends EventObject {
         public static final Type STOP = new Type("Stop");
 
         private final String name;
-        protected Type(String name) { this.name = name; }
+        public Type(String name) { this.name = name; }
         @Override public final boolean equals(Object o) { return super.equals(o); }
         @Override public final int hashCode() { return super.hashCode(); }
-        @Override public final String toString() { return name; }
+        @Override public String toString() { return name; }
     }
 
-    private final Type type;
-    private final long framePosition;
+    private final transient Type type;
+    private final long position;
 
-    public LineEvent(Line source, Type type, long position) {
-        super(source);
+    public LineEvent(Line line, Type type, long position) {
+        super(line);
         this.type = type;
-        this.framePosition = position;
+        this.position = position;
     }
 
-    public Type getType() { return type; }
-    public long getFramePosition() { return framePosition; }
-    public Line getLine() { return (Line) source; }
+    public final Line getLine() { return (Line) getSource(); }
+    public final Type getType() { return type; }
+    public final long getFramePosition() { return position; }
+
+    @Override
+    public String toString() {
+        String sType = type == null ? "" : type + " ";
+        String sLine = getLine() == null ? "null" : getLine().toString();
+        return sType + "event from line " + sLine;
+    }
 }

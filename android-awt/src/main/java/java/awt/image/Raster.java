@@ -77,6 +77,30 @@ public class Raster {
         return createWritableRaster(sm, sm.createDataBuffer(), location);
     }
 
+    public static WritableRaster createInterleavedRaster(int dataType, int w, int h, int bands,
+                                                         Point location) {
+        int[] bandOffsets = new int[bands];
+        for (int i = 0; i < bands; i++) {
+            bandOffsets[i] = i;
+        }
+        return createInterleavedRaster(dataType, w, h, w * bands, bands, bandOffsets, location);
+    }
+
+    public static WritableRaster createInterleavedRaster(int dataType, int w, int h,
+                                                         int scanlineStride, int pixelStride,
+                                                         int[] bandOffsets, Point location) {
+        if (w <= 0 || h <= 0) {
+            throw new IllegalArgumentException("Width (" + w + ") and height (" + h
+                + ") must be > 0");
+        }
+        if (dataType != DataBuffer.TYPE_BYTE && dataType != DataBuffer.TYPE_USHORT) {
+            throw new IllegalArgumentException("Unsupported data type " + dataType);
+        }
+        SampleModel sm = new PixelInterleavedSampleModel(dataType, w, h, pixelStride,
+                                                         scanlineStride, bandOffsets);
+        return createWritableRaster(sm, location);
+    }
+
     public SampleModel getSampleModel() { return sampleModel; }
     public DataBuffer getDataBuffer()   { return dataBuffer; }
     public int getMinX()                { return minX; }
@@ -96,6 +120,11 @@ public class Raster {
     public int getSample(int x, int y, int b) {
         checkBounds(x,y);
         return sampleModel.getSample(x - sampleModelTranslateX, y - sampleModelTranslateY, b, dataBuffer);
+    }
+
+    public float getSampleFloat(int x, int y, int b) {
+        checkBounds(x,y);
+        return sampleModel.getSampleFloat(x - sampleModelTranslateX, y - sampleModelTranslateY, b, dataBuffer);
     }
 
     public int[] getPixel(int x, int y, int[] iArray) {
