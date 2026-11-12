@@ -33,6 +33,10 @@ package javax.swing;
 import java.awt.Component;
 
 public class JSplitPane extends JComponent implements javax.accessibility.Accessible {
+    private static final String uiClassID = "SplitPaneUI";
+    public javax.swing.plaf.SplitPaneUI getUI() { return (javax.swing.plaf.SplitPaneUI) ui; }
+    public void setUI(javax.swing.plaf.SplitPaneUI ui) { super.setUI(ui); }
+    public String getUIClassID() { return uiClassID; }
 
     public javax.accessibility.AccessibleContext getAccessibleContext() {
         if (accessibleContext == null) {
