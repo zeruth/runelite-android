@@ -164,6 +164,9 @@ public final class IIORegistry extends ServiceRegistry {
         "com.sun.imageio.plugins.png.PNGImageWriterSpi",
         "com.sun.imageio.plugins.jpeg.JPEGImageReaderSpi",
         "com.sun.imageio.plugins.jpeg.JPEGImageWriterSpi",
+        // Android extra: the platform codec reads and writes WebP.
+        "com.sun.imageio.plugins.webp.WebPImageReaderSpi",
+        "com.sun.imageio.plugins.webp.WebPImageWriterSpi",
     };
 
     private void registerStandardSpis() {

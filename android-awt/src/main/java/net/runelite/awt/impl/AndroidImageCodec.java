@@ -32,6 +32,8 @@ package net.runelite.awt.impl;
 
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.BitmapRegionDecoder;
+import android.graphics.Rect;
 
 import java.awt.image.BufferedImage;
 import java.awt.image.ColorModel;
@@ -56,15 +58,117 @@ public final class AndroidImageCodec {
     private AndroidImageCodec() {
     }
 
+    /**
+     * Decodes unpremultiplied: {@code getPixels} on a premultiplied bitmap divides the
+     * alpha back out and rounds, so translucent pixels would differ from the JDK's
+     * readers, which never premultiply.
+     */
+    private static BitmapFactory.Options options() {
+        BitmapFactory.Options o = new BitmapFactory.Options();
+        o.inPreferredConfig = Bitmap.Config.ARGB_8888;
+        o.inPremultiplied = false;
+        return o;
+    }
+
     public static BufferedImage decode(InputStream input) throws IOException {
-        return toBufferedImage(BitmapFactory.decodeStream(input));
+        return toBufferedImage(BitmapFactory.decodeStream(input, null, options()));
     }
 
     public static BufferedImage decode(File input) throws IOException {
         if (!input.isFile()) {
             throw new IOException("Cannot read image file: " + input);
         }
-        return toBufferedImage(BitmapFactory.decodeFile(input.getAbsolutePath()));
+        return toBufferedImage(BitmapFactory.decodeFile(input.getAbsolutePath(), options()));
+    }
+
+    /** Returns {width, height} of the encoded image, or null when no codec takes it. */
+    public static int[] decodeBounds(byte[] data) {
+        BitmapFactory.Options o = new BitmapFactory.Options();
+        o.inJustDecodeBounds = true;
+        BitmapFactory.decodeByteArray(data, 0, data.length, o);
+        if (o.outWidth <= 0 || o.outHeight <= 0) {
+            return null;
+        }
+        return new int[] {o.outWidth, o.outHeight};
+    }
+
+    /**
+     * Decodes the region (x, y, w, h) of an image of fullWidth x fullHeight into
+     * non-premultiplied ARGB, row-major with stride w, or returns null when the data
+     * does not decode. A proper sub-region goes through {@link BitmapRegionDecoder} so
+     * a crop of a large photo does not allocate the whole bitmap.
+     */
+    public static int[] decodePixels(byte[] data, int x, int y, int w, int h,
+                                     int fullWidth, int fullHeight) {
+        int[] out = new int[w * h];
+        if (x != 0 || y != 0 || w != fullWidth || h != fullHeight) {
+            Bitmap region = null;
+            try {
+                @SuppressWarnings("deprecation")
+                BitmapRegionDecoder decoder =
+                    BitmapRegionDecoder.newInstance(data, 0, data.length, false);
+                try {
+                    region = decoder.decodeRegion(new Rect(x, y, x + w, y + h), options());
+                } finally {
+                    decoder.recycle();
+                }
+            } catch (IOException | RuntimeException e) {
+                // Formats the region decoder lacks (GIF, BMP) fall back to a full decode.
+                region = null;
+            }
+            if (region != null && region.getWidth() == w && region.getHeight() == h) {
+                region.getPixels(out, 0, w, 0, 0, w, h);
+                region.recycle();
+                return out;
+            }
+            if (region != null) {
+                region.recycle();
+            }
+        }
+        Bitmap bitmap = BitmapFactory.decodeByteArray(data, 0, data.length, options());
+        if (bitmap == null) {
+            return null;
+        }
+        try {
+            if (x + w > bitmap.getWidth() || y + h > bitmap.getHeight()) {
+                return null;
+            }
+            bitmap.getPixels(out, 0, w, x, y, w, h);
+        } finally {
+            bitmap.recycle();
+        }
+        return out;
+    }
+
+    /**
+     * Encodes w x h non-premultiplied ARGB pixels. {@code format} is "png", "jpeg",
+     * "webp" (lossless) or "webp-lossy"; {@code quality} is Bitmap.compress's 0..100.
+     * Returns false when the platform encoder fails.
+     */
+    public static boolean encodePixels(int[] argb, int w, int h, String format, int quality,
+                                       OutputStream output) {
+        Bitmap.CompressFormat fmt = "webp-lossy".equals(format) ? lossyWebp() : formatFor(format);
+        if (fmt == null) {
+            throw new IllegalArgumentException("No platform encoder for " + format);
+        }
+        Bitmap bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+        // Stored as given, so a lossless encode keeps translucent pixels exact.
+        bmp.setPremultiplied(false);
+        bmp.setPixels(argb, 0, w, 0, 0, w, h);
+        try {
+            return bmp.compress(fmt, quality, output);
+        } finally {
+            bmp.recycle();
+        }
+    }
+
+    private static Bitmap.CompressFormat lossyWebp() {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            return Bitmap.CompressFormat.WEBP_LOSSY;
+        }
+        @SuppressWarnings("deprecation")
+        Bitmap.CompressFormat legacy = Bitmap.CompressFormat.WEBP;
+        return legacy;
     }
 
     /** Decodes the bytes from the stream's current position to its end. */
@@ -79,7 +183,7 @@ public final class AndroidImageCodec {
         if (data.length == 0) {
             return null;
         }
-        return toBufferedImage(BitmapFactory.decodeByteArray(data, 0, data.length));
+        return toBufferedImage(BitmapFactory.decodeByteArray(data, 0, data.length, options()));
     }
 
     public static boolean canEncode(String formatName) {
@@ -113,13 +217,7 @@ public final class AndroidImageCodec {
                 }
             }
         }
-        Bitmap bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
-        bmp.setPixels(pixels, 0, width, 0, 0, width, height);
-        try {
-            return bmp.compress(fmt, 100, output);
-        } finally {
-            bmp.recycle();
-        }
+        return encodePixels(pixels, width, height, formatName.toLowerCase(Locale.ROOT), 100, output);
     }
 
     private static BufferedImage toBufferedImage(Bitmap bitmap) {

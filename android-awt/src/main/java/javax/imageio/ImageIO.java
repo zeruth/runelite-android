@@ -1265,6 +1265,58 @@ public final class ImageIO {
     }
 
     /**
+     * Whether the convenience readers decode a PNG with the platform codec rather
+     * than the ported PNGImageReader. RuneLite loads hundreds of PNG resources at
+     * start-up through read(InputStream) with no parameters; BitmapFactory decodes
+     * them in native code into the TYPE_INT_ARGB image the renderer blits fastest,
+     * with the same 8-bit pixel values. Images still come back as TYPE_INT_ARGB
+     * instead of the reader's TYPE_4BYTE_ABGR/TYPE_3BYTE_BGR/indexed types. Set
+     * <code>-Dnet.runelite.awt.imageio.platformPng=false</code> (before ImageIO
+     * loads) to route these reads through the ported reader, which is how the two
+     * are benchmarked against each other.
+     */
+    private static final boolean PLATFORM_PNG =
+        !"false".equals(System.getProperty("net.runelite.awt.imageio.platformPng"));
+
+    private static final byte[] PNG_SIGNATURE =
+        {(byte)0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'};
+
+    /** Peeks at the first bytes of a stream that supports mark/reset. */
+    private static boolean startsWithPng(InputStream in) throws IOException {
+        byte[] b = new byte[PNG_SIGNATURE.length];
+        int n = 0;
+        in.mark(b.length);
+        try {
+            while (n < b.length) {
+                int r = in.read(b, n, b.length - n);
+                if (r < 0) {
+                    break;
+                }
+                n += r;
+            }
+        } finally {
+            in.reset();
+        }
+        return n == b.length && Arrays.equals(b, PNG_SIGNATURE);
+    }
+
+    /**
+     * The platform-codec read of a PNG stream, or null when the stream is not a PNG
+     * (or the fast path is off) and the registered readers should take it. The
+     * stream must support mark/reset.
+     */
+    private static BufferedImage readPlatformPng(InputStream in) throws IOException {
+        if (!PLATFORM_PNG || !startsWithPng(in)) {
+            return null;
+        }
+        BufferedImage bi = AndroidImageCodec.decode(in);
+        if (bi == null) {
+            throw new IIOException("Error reading PNG image data");
+        }
+        return bi;
+    }
+
+    /**
      * Returns a <code>BufferedImage</code> as the result of decoding
      * a supplied <code>File</code> with an <code>ImageReader</code>
      * chosen automatically from among those currently registered.
@@ -1302,6 +1354,22 @@ public final class ImageIO {
 
         if (!hasReaders()) {
             return AndroidImageCodec.decode(input);
+        }
+        if (PLATFORM_PNG) {
+            boolean png;
+            InputStream head = new java.io.FileInputStream(input);
+            try {
+                png = startsWithPng(new java.io.BufferedInputStream(head, 16));
+            } finally {
+                head.close();
+            }
+            if (png) {
+                BufferedImage bi = AndroidImageCodec.decode(input);
+                if (bi != null) {
+                    return bi;
+                }
+                // Undecodable: the ported reader below says what is wrong with it.
+            }
         }
 
         ImageInputStream stream = createImageInputStream(input);
@@ -1355,6 +1423,15 @@ public final class ImageIO {
 
         if (!hasReaders()) {
             return AndroidImageCodec.decode(input);
+        }
+        if (PLATFORM_PNG) {
+            if (!input.markSupported()) {
+                input = new java.io.BufferedInputStream(input);
+            }
+            BufferedImage png = readPlatformPng(input);
+            if (png != null) {
+                return png;
+            }
         }
 
         ImageInputStream stream = createImageInputStream(input);
@@ -1414,6 +1491,22 @@ public final class ImageIO {
                 return AndroidImageCodec.decode(istream);
             } finally {
                 istream.close();
+            }
+        }
+        if (PLATFORM_PNG) {
+            if (!istream.markSupported()) {
+                istream = new java.io.BufferedInputStream(istream);
+            }
+            BufferedImage png;
+            try {
+                png = readPlatformPng(istream);
+            } catch (IOException e) {
+                istream.close();
+                throw e;
+            }
+            if (png != null) {
+                istream.close();
+                return png;
             }
         }
 
