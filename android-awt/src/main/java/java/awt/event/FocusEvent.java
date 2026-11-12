@@ -42,9 +42,11 @@ public class FocusEvent extends ComponentEvent {
 
     public enum Cause { UNKNOWN, MOUSE_EVENT, TRAVERSAL, TRAVERSAL_UP, TRAVERSAL_DOWN, TRAVERSAL_FORWARD, TRAVERSAL_BACKWARD, ROLLBACK, UNEXPECTED, ACTIVATION, CLEAR_GLOBAL_FOCUS_OWNER }
     private Cause cause = Cause.UNKNOWN;
+    /** JDK 9+ (9). @throws IllegalArgumentException if cause is null */
     public FocusEvent(Component source, int id, boolean temporary, Component opposite, Cause cause) {
         this(source, id, temporary, opposite);
-        this.cause = cause == null ? Cause.UNKNOWN : cause;
+        if (cause == null) throw new IllegalArgumentException("null cause");
+        this.cause = cause;
     }
     public Cause getCause() { return cause; }
     private final boolean temporary;

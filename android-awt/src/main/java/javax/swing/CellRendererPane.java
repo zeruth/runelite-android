@@ -1,4 +1,5 @@
 /*
+<<<<<<< HEAD
  * Copyright (c) 2026, Tyler Bochard
  * All rights reserved.
  *
@@ -27,6 +28,30 @@
  * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
  * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+=======
+ * Copyright (c) 1997, 2014, Oracle and/or its affiliates. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
+ *
+ * This code is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 only, as
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
+ *
+ * This code is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ * version 2 for more details (a copy is included in the LICENSE file that
+ * accompanied this code).
+ *
+ * You should have received a copy of the GNU General Public License version
+ * 2 along with this work; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
+ *
+ * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
+ * or visit www.oracle.com if you need additional information or have any
+ * questions.
+>>>>>>> up
  */
 package javax.swing;
 
@@ -39,6 +64,7 @@ import javax.accessibility.Accessible;
 import javax.accessibility.AccessibleContext;
 
 /**
+<<<<<<< HEAD
  * This class is inserted in between cell renderers and the components that use them. It just
  * exists to thwart the repaint() and invalidate() methods which would otherwise propagate up
  * the tree when the renderer was configured. It's used by the implementations of JTable,
@@ -54,6 +80,29 @@ public class CellRendererPane extends Container implements Accessible {
     /** The accessible context of this pane, created on first request. */
     protected AccessibleContext accessibleContext = null;
 
+=======
+ * This class is inserted in between cell renderers and the components that
+ * use them.  It just exists to thwart the repaint() and invalidate() methods
+ * which would otherwise propagate up the tree when the renderer was configured.
+ * It's used by the implementations of JTable, JTree, and JList.  For example,
+ * here's how CellRendererPane is used in the code the paints each row
+ * in a JList:
+ * <pre>
+ *   cellRendererPane = new CellRendererPane();
+ *   ...
+ *   Component rendererComponent = renderer.getListCellRendererComponent();
+ *   renderer.configureListCellRenderer(dataModel.getElementAt(row), row);
+ *   cellRendererPane.paintComponent(g, rendererComponent, this, x, y, w, h);
+ * </pre>
+ * <p>
+ * A renderer component must override isShowing() and unconditionally return
+ * true to work correctly because the Swing paint does nothing for components
+ * with isShowing false.
+ *
+ * @author Hans Muller
+ */
+public class CellRendererPane extends Container implements Accessible {
+>>>>>>> up
     /**
      * Construct a CellRendererPane object.
      */
@@ -64,23 +113,35 @@ public class CellRendererPane extends Container implements Accessible {
     }
 
     /**
+<<<<<<< HEAD
      * Overridden to avoid propagating a invalidate up the tree when the cell renderer child
      * is configured.
      */
     @Override
     public void invalidate() {
     }
+=======
+     * Overridden to avoid propagating a invalidate up the tree when the
+     * cell renderer child is configured.
+     */
+    public void invalidate() { }
+>>>>>>> up
 
     /**
      * Shouldn't be called.
      */
+<<<<<<< HEAD
     @Override
     public void paint(Graphics g) {
     }
+=======
+    public void paint(Graphics g) { }
+>>>>>>> up
 
     /**
      * Shouldn't be called.
      */
+<<<<<<< HEAD
     @Override
     public void update(Graphics g) {
     }
@@ -106,10 +167,25 @@ public class CellRendererPane extends Container implements Accessible {
      * start consuming input. The Container p is the component we're actually drawing on,
      * typically it's equal to this.getParent(). If shouldValidate is true the component c
      * will be validated before painted.
+=======
+    public void update(Graphics g) { }
+
+    /**
+     * Paint a cell renderer component c on graphics object g.  Before the component
+     * is drawn it's reparented to this (if that's necessary), it's bounds
+     * are set to w,h and the graphics object is (effectively) translated to x,y.
+     * If it's a JComponent, double buffering is temporarily turned off. After
+     * the component is painted it's bounds are reset to -w, -h, 0, 0 so that, if
+     * it's the last renderer component painted, it will not start consuming input.
+     * The Container p is the component we're actually drawing on, typically it's
+     * equal to this.getParent(). If shouldValidate is true the component c will be
+     * validated before painted.
+>>>>>>> up
      *
      * @param g  the {@code Graphics} object to draw on
      * @param c  the {@code Component} to draw
      * @param p  the {@code Container} component actually drawn on
+<<<<<<< HEAD
      * @param x  an int specifying the left side of the area draw in, in pixels, measured from
      *           the left edge of the graphics context
      * @param y  an int specifying the top of the area to draw in, in pixels measured down
@@ -121,6 +197,18 @@ public class CellRendererPane extends Container implements Accessible {
      */
     public void paintComponent(Graphics g, Component c, Container p, int x, int y, int w, int h,
                                boolean shouldValidate) {
+=======
+     * @param x  an int specifying the left side of the area draw in, in pixels,
+     *           measured from the left edge of the graphics context
+     * @param y  an int specifying the top of the area to draw in, in pixels
+     *           measured down from the top edge of the graphics context
+     * @param w  an int specifying the width of the area draw in, in pixels
+     * @param h  an int specifying the height of the area draw in, in pixels
+     * @param shouldValidate  if true, component {@code c} will be validated
+     *                        before being painted
+     */
+    public void paintComponent(Graphics g, Component c, Container p, int x, int y, int w, int h, boolean shouldValidate) {
+>>>>>>> up
         if (c == null) {
             if (p != null) {
                 Color oldColor = g.getColor();
@@ -131,8 +219,15 @@ public class CellRendererPane extends Container implements Accessible {
             return;
         }
 
+<<<<<<< HEAD
         if (c.getParent() != this) {
             addImpl(c, null, -1);
+=======
+        // The shadow Container has no addImpl hook, so the JDK's "already a child"
+        // short-circuit lives here: re-adding would move c to the end of the list.
+        if (c.getParent() != this) {
+            this.add(c);
+>>>>>>> up
         }
 
         c.setBounds(x, y, w, h);
@@ -167,8 +262,15 @@ public class CellRendererPane extends Container implements Accessible {
      * @param g  the {@code Graphics} object to draw on
      * @param c  the {@code Component} to draw
      * @param p  the {@code Container} component actually drawn on
+<<<<<<< HEAD
      * @param x  an int specifying the left side of the area draw in, in pixels
      * @param y  an int specifying the top of the area to draw in, in pixels
+=======
+     * @param x  an int specifying the left side of the area draw in, in pixels,
+     *           measured from the left edge of the graphics context
+     * @param y  an int specifying the top of the area to draw in, in pixels
+     *           measured down from the top edge of the graphics context
+>>>>>>> up
      * @param w  an int specifying the width of the area draw in, in pixels
      * @param h  an int specifying the height of the area draw in, in pixels
      */
@@ -177,8 +279,12 @@ public class CellRendererPane extends Container implements Accessible {
     }
 
     /**
+<<<<<<< HEAD
      * Calls this.paintComponent(g, c, p, r.x, r.y, r.width, r.height) where r is the
      * rectangle.
+=======
+     * Calls this.paintComponent() with the rectangles x,y,width,height fields.
+>>>>>>> up
      *
      * @param g  the {@code Graphics} object to draw on
      * @param c  the {@code Component} to draw
@@ -189,6 +295,7 @@ public class CellRendererPane extends Container implements Accessible {
         paintComponent(g, c, p, r.x, r.y, r.width, r.height);
     }
 
+<<<<<<< HEAD
     /**
      * Gets the AccessibleContext associated with this CellRendererPane.
      *
@@ -198,6 +305,21 @@ public class CellRendererPane extends Container implements Accessible {
     public AccessibleContext getAccessibleContext() {
         if (accessibleContext == null) {
             accessibleContext = new AccessibleContext() {};
+=======
+    /** {@code AccessibleContext} associated with this {@code CellRendererPane} */
+    protected AccessibleContext accessibleContext = null;
+
+    /**
+     * Gets the AccessibleContext associated with this CellRendererPane.
+     * The shadow's AccessibleContext has no role model, so this is a plain context
+     * rather than the JDK's AccessibleCellRendererPane (role PANEL).
+     *
+     * @return an AccessibleContext associated with this CellRendererPane
+     */
+    public AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleContext() { };
+>>>>>>> up
         }
         return accessibleContext;
     }

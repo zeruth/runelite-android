@@ -31,6 +31,8 @@
 package java.awt;
 
 import java.awt.datatransfer.Clipboard;
+import java.awt.event.AWTEventListener;
+import java.awt.event.AWTEventListenerProxy;
 import java.awt.image.ColorModel;
 import java.awt.image.ImageObserver;
 
@@ -57,6 +59,65 @@ public abstract class Toolkit {
         return eventQueue;
     }
 
+    protected final java.util.Map<String, Object> desktopProperties = new java.util.HashMap<String, Object>();
+    protected final java.beans.PropertyChangeSupport desktopPropsSupport = new java.beans.PropertyChangeSupport(this);
+
+    /**
+     * Obtains a value for the specified desktop property. There is no native
+     * desktop behind the Android toolkit, so only values a subclass loads or
+     * sets exist; any other name returns null, as an unknown name does on the JDK.
+     */
+    public final synchronized Object getDesktopProperty(String propertyName) {
+        if (desktopProperties.isEmpty()) {
+            initializeDesktopProperties();
+        }
+        Object value = desktopProperties.get(propertyName);
+        if (value == null) {
+            value = lazilyLoadDesktopProperty(propertyName);
+            if (value != null) {
+                setDesktopProperty(propertyName, value);
+            }
+        }
+        if (value instanceof RenderingHints) {
+            value = ((RenderingHints) value).clone();
+        }
+        return value;
+    }
+
+    protected final void setDesktopProperty(String name, Object newValue) {
+        Object oldValue;
+        synchronized (this) {
+            oldValue = desktopProperties.get(name);
+            desktopProperties.put(name, newValue);
+        }
+        if (oldValue != null || newValue != null) {
+            desktopPropsSupport.firePropertyChange(name, oldValue, newValue);
+        }
+    }
+
+    protected Object lazilyLoadDesktopProperty(String name) {
+        return null;
+    }
+
+    protected void initializeDesktopProperties() {
+    }
+
+    public void addPropertyChangeListener(String name, java.beans.PropertyChangeListener pcl) {
+        desktopPropsSupport.addPropertyChangeListener(name, pcl);
+    }
+
+    public void removePropertyChangeListener(String name, java.beans.PropertyChangeListener pcl) {
+        desktopPropsSupport.removePropertyChangeListener(name, pcl);
+    }
+
+    public java.beans.PropertyChangeListener[] getPropertyChangeListeners() {
+        return desktopPropsSupport.getPropertyChangeListeners();
+    }
+
+    public java.beans.PropertyChangeListener[] getPropertyChangeListeners(String propertyName) {
+        return desktopPropsSupport.getPropertyChangeListeners(propertyName);
+    }
+
     public Dimension getScreenSize() {
         Rectangle bounds = net.runelite.awt.impl.HeadlessGraphicsConfiguration.INSTANCE.getBounds();
         return new Dimension(bounds.width, bounds.height);
@@ -72,6 +133,17 @@ public abstract class Toolkit {
 
     public String[] getFontList() {
         return new String[]{Font.DIALOG, Font.SANS_SERIF, Font.SERIF, Font.MONOSPACED};
+    }
+
+    /**
+     * The same shared, Paint-backed metrics Component and Graphics hand out, so a width
+     * measured here matches one measured on the Graphics that paints the text.
+     *
+     * @deprecated As of JDK version 1.2, replaced by the Font method getLineMetrics.
+     */
+    @Deprecated
+    public FontMetrics getFontMetrics(Font font) {
+        return net.runelite.awt.impl.BufferedImageFontMetrics.forFont(font);
     }
 
     public Image createImage(int[] pixels, int width, int height) {
@@ -119,17 +191,233 @@ public abstract class Toolkit {
         return new Cursor(Cursor.CUSTOM_CURSOR);
     }
 
+    /**
+     * Fills {@code systemColors} with the platform's colors, indexed as the
+     * {@link SystemColor} constants. Android has no native widget palette to read, so
+     * this is a deliberate no-op that leaves the OpenJDK defaults in place.
+     */
+    protected void loadSystemColors(int[] systemColors) {
+    }
+
+    /**
+     * Returns the screen insets of {@code gc}. Android's system bars are handled by
+     * the host activity around the game surface, so the AWT screen has none.
+     */
+    public Insets getScreenInsets(GraphicsConfiguration gc) {
+        return new Insets(0, 0, 0, 0);
+    }
+
+    /**
+     * Gets a {@code PrintJob} for printing on this platform. Android has no AWT print
+     * service, so the dialog is answered as cancelled: the spec's {@code null}.
+     *
+     * @throws NullPointerException if {@code frame} is null
+     */
+    public PrintJob getPrintJob(Frame frame, String jobtitle, java.util.Properties props) {
+        if (frame == null) {
+            throw new NullPointerException("frame must not be null");
+        }
+        return null;
+    }
+
+    /**
+     * Gets a {@code PrintJob} with the given job and page attributes; delegates to the
+     * {@code Properties} form, as 8u's default does.
+     */
+    public PrintJob getPrintJob(Frame frame, String jobtitle,
+                                JobAttributes jobAttributes,
+                                PageAttributes pageAttributes) {
+        if (this != Toolkit.getDefaultToolkit()) {
+            return Toolkit.getDefaultToolkit().getPrintJob(frame, jobtitle,
+                                                           jobAttributes,
+                                                           pageAttributes);
+        } else {
+            return getPrintJob(frame, jobtitle, null);
+        }
+    }
+
     public void sync() {}
     public void beep() {}
 
-    public boolean isFrameStateSupported(int state) { return state == Frame.NORMAL; }
-
-    public boolean prepareImage(Image image, int width, int height, ImageObserver observer) {
-        return true;
+    /** The states the Windows toolkit supports; a lone horizontal or vertical maximize is not one. */
+    public boolean isFrameStateSupported(int state) {
+        return state == Frame.NORMAL || state == Frame.ICONIFIED || state == Frame.MAXIMIZED_BOTH;
     }
 
+    /** Every modality is honoured: the host shows one window at a time over the game. */
+    public boolean isModalityTypeSupported(Dialog.ModalityType modalityType) { return modalityType != null; }
+    public boolean isModalExclusionTypeSupported(Dialog.ModalExclusionType modalExclusionType) {
+        return modalExclusionType != null;
+    }
+    /** Android windows are stacked by the activity; none can float above other apps. */
+    public boolean isAlwaysOnTopSupported() { return false; }
+
+    // ---- AWTEventListeners ---------------------------------------------------------------
+    // Global taps on every event dispatched to a component (RuneLite's and plugins' idle and
+    // activity trackers use them). Registration is rare and dispatch is per pointer sample, so
+    // dispatch reads a copy-on-write snapshot without locking.
+
+    private static final class SelectiveListener {
+        final AWTEventListener listener;
+        long eventMask;
+        SelectiveListener(AWTEventListener listener, long eventMask) {
+            this.listener = listener;
+            this.eventMask = eventMask;
+        }
+    }
+
+    private static final SelectiveListener[] NO_LISTENERS = new SelectiveListener[0];
+    private volatile SelectiveListener[] awtEventListeners = NO_LISTENERS;
+    private static volatile long enabledOnToolkitMask;
+
+    /**
+     * Adds a listener for every dispatched event whose type is in {@code eventMask}. Adding
+     * a listener again widens its mask; a null listener or a zero mask is ignored.
+     */
+    public void addAWTEventListener(AWTEventListener listener, long eventMask) {
+        if (listener == null || eventMask == 0) return;
+        synchronized (this) {
+            SelectiveListener[] current = awtEventListeners;
+            for (SelectiveListener selective : current) {
+                if (selective.listener == listener) {
+                    selective.eventMask |= eventMask;
+                    updateEnabledMask(current);
+                    return;
+                }
+            }
+            SelectiveListener[] next = java.util.Arrays.copyOf(current, current.length + 1);
+            next[current.length] = new SelectiveListener(listener, eventMask);
+            awtEventListeners = next;
+            updateEnabledMask(next);
+        }
+    }
+
+    /** Removes every registration of the listener, whatever masks it was added with. */
+    public void removeAWTEventListener(AWTEventListener listener) {
+        if (listener == null) return;
+        synchronized (this) {
+            SelectiveListener[] current = awtEventListeners;
+            for (int i = 0; i < current.length; i++) {
+                if (current[i].listener == listener) {
+                    SelectiveListener[] next = new SelectiveListener[current.length - 1];
+                    System.arraycopy(current, 0, next, 0, i);
+                    System.arraycopy(current, i + 1, next, i, current.length - i - 1);
+                    awtEventListeners = next.length == 0 ? NO_LISTENERS : next;
+                    updateEnabledMask(next);
+                    return;
+                }
+            }
+        }
+    }
+
+    /** Every registered listener, each wrapped in an {@link AWTEventListenerProxy} carrying its mask. */
+    public AWTEventListener[] getAWTEventListeners() {
+        SelectiveListener[] current = awtEventListeners;
+        AWTEventListener[] result = new AWTEventListener[current.length];
+        for (int i = 0; i < current.length; i++) {
+            result[i] = new AWTEventListenerProxy(current[i].eventMask, current[i].listener);
+        }
+        return result;
+    }
+
+    /** The listeners whose mask includes every bit of {@code eventMask}, as proxies. */
+    public AWTEventListener[] getAWTEventListeners(long eventMask) {
+        java.util.List<AWTEventListener> result = new java.util.ArrayList<>();
+        for (SelectiveListener selective : awtEventListeners) {
+            if ((selective.eventMask & eventMask) == eventMask) {
+                result.add(new AWTEventListenerProxy(selective.eventMask, selective.listener));
+            }
+        }
+        return result.toArray(new AWTEventListener[0]);
+    }
+
+    private static void updateEnabledMask(SelectiveListener[] listeners) {
+        long mask = 0;
+        for (SelectiveListener selective : listeners) mask |= selective.eventMask;
+        enabledOnToolkitMask = mask;
+    }
+
+    /** True when some AWTEventListener wants events of this mask (Container uses it for ContainerEvents). */
+    static boolean enabledOnToolkit(long eventMask) {
+        return (enabledOnToolkitMask & eventMask) != 0;
+    }
+
+    /** Called by {@link Component#dispatchEvent} for every event dispatched to a component. */
+    void notifyAWTEventListeners(AWTEvent event) {
+        SelectiveListener[] current = awtEventListeners;
+        if (current.length == 0) return;
+        long eventBit = maskOf(event.getID());
+        if (eventBit == 0) return;
+        for (SelectiveListener selective : current) {
+            if ((selective.eventMask & eventBit) != 0) selective.listener.eventDispatched(event);
+        }
+    }
+
+    /** The AWTEvent mask an event id belongs to, as the JDK's selective listener tests it; 0 for none. */
+    private static long maskOf(int id) {
+        if (id >= java.awt.event.ComponentEvent.COMPONENT_FIRST && id <= java.awt.event.ComponentEvent.COMPONENT_LAST)
+            return AWTEvent.COMPONENT_EVENT_MASK;
+        if (id >= java.awt.event.ContainerEvent.CONTAINER_FIRST && id <= java.awt.event.ContainerEvent.CONTAINER_LAST)
+            return AWTEvent.CONTAINER_EVENT_MASK;
+        if (id >= java.awt.event.FocusEvent.FOCUS_FIRST && id <= java.awt.event.FocusEvent.FOCUS_LAST)
+            return AWTEvent.FOCUS_EVENT_MASK;
+        if (id >= java.awt.event.KeyEvent.KEY_FIRST && id <= java.awt.event.KeyEvent.KEY_LAST)
+            return AWTEvent.KEY_EVENT_MASK;
+        if (id == java.awt.event.MouseEvent.MOUSE_WHEEL)
+            return AWTEvent.MOUSE_WHEEL_EVENT_MASK;
+        if (id == java.awt.event.MouseEvent.MOUSE_MOVED || id == java.awt.event.MouseEvent.MOUSE_DRAGGED)
+            return AWTEvent.MOUSE_MOTION_EVENT_MASK;
+        if (id >= java.awt.event.MouseEvent.MOUSE_FIRST && id <= java.awt.event.MouseEvent.MOUSE_LAST)
+            return AWTEvent.MOUSE_EVENT_MASK;
+        if (id == java.awt.event.WindowEvent.WINDOW_GAINED_FOCUS || id == java.awt.event.WindowEvent.WINDOW_LOST_FOCUS)
+            return AWTEvent.WINDOW_FOCUS_EVENT_MASK;
+        if (id == java.awt.event.WindowEvent.WINDOW_STATE_CHANGED)
+            return AWTEvent.WINDOW_STATE_EVENT_MASK;
+        if (id >= java.awt.event.WindowEvent.WINDOW_FIRST && id <= java.awt.event.WindowEvent.WINDOW_LAST)
+            return AWTEvent.WINDOW_EVENT_MASK;
+        if (id >= java.awt.event.ActionEvent.ACTION_FIRST && id <= java.awt.event.ActionEvent.ACTION_LAST)
+            return AWTEvent.ACTION_EVENT_MASK;
+        if (id >= java.awt.event.AdjustmentEvent.ADJUSTMENT_FIRST && id <= java.awt.event.AdjustmentEvent.ADJUSTMENT_LAST)
+            return AWTEvent.ADJUSTMENT_EVENT_MASK;
+        if (id >= java.awt.event.ItemEvent.ITEM_FIRST && id <= java.awt.event.ItemEvent.ITEM_LAST)
+            return AWTEvent.ITEM_EVENT_MASK;
+        if (id >= java.awt.event.TextEvent.TEXT_FIRST && id <= java.awt.event.TextEvent.TEXT_LAST)
+            return AWTEvent.TEXT_EVENT_MASK;
+        if (id >= java.awt.event.InputMethodEvent.INPUT_METHOD_FIRST && id <= java.awt.event.InputMethodEvent.INPUT_METHOD_LAST)
+            return AWTEvent.INPUT_METHOD_EVENT_MASK;
+        if (id >= java.awt.event.PaintEvent.PAINT_FIRST && id <= java.awt.event.PaintEvent.PAINT_LAST)
+            return AWTEvent.PAINT_EVENT_MASK;
+        if (id >= java.awt.event.InvocationEvent.INVOCATION_FIRST && id <= java.awt.event.InvocationEvent.INVOCATION_LAST)
+            return AWTEvent.INVOCATION_EVENT_MASK;
+        if (id == java.awt.event.HierarchyEvent.HIERARCHY_CHANGED)
+            return AWTEvent.HIERARCHY_EVENT_MASK;
+        if (id == java.awt.event.HierarchyEvent.ANCESTOR_MOVED || id == java.awt.event.HierarchyEvent.ANCESTOR_RESIZED)
+            return AWTEvent.HIERARCHY_BOUNDS_EVENT_MASK;
+        return 0;
+    }
+
+    /**
+     * As SunToolkit: a zero-sized request, or an image that is not producer-backed
+     * (BufferedImage, VolatileImage), is ready; a produced image starts production and
+     * reports ALLBITS, notifying {@code observer} of ERROR|ABORT when it failed.
+     */
+    public boolean prepareImage(Image image, int width, int height, ImageObserver observer) {
+        if (width == 0 || height == 0) {
+            return true;
+        }
+        if (!(image instanceof java.awt.image.ProducerImage)) {
+            return true;
+        }
+        return ((java.awt.image.ProducerImage) image).prepare(observer);
+    }
+
+    /** As SunToolkit: the ImageObserver flags of a produced image, ALLBITS for any other. */
     public int checkImage(Image image, int width, int height, ImageObserver observer) {
-        return ImageObserver.ALLBITS;
+        if (!(image instanceof java.awt.image.ProducerImage)) {
+            return ImageObserver.ALLBITS;
+        }
+        int flags = ((java.awt.image.ProducerImage) image).check(observer);
+        return (width == 0 || height == 0) ? flags | ImageObserver.ALLBITS : flags;
     }
 
     private static final class HeadlessToolkit extends Toolkit {

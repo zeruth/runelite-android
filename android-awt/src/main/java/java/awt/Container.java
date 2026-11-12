@@ -91,6 +91,7 @@ public class Container extends Component {
         if (layout instanceof LayoutManager2) ((LayoutManager2) layout).addLayoutComponent(comp, null);
         else if (layout != null) layout.addLayoutComponent(null, comp);
         invalidate();
+        fireContainerEvent(java.awt.event.ContainerEvent.COMPONENT_ADDED, comp);
         return comp;
     }
 
@@ -103,7 +104,8 @@ public class Container extends Component {
     public void add(Component comp, Object constraints) {
         if (comp == null) return;
         checkCycle(comp);
-        if (children.contains(comp)) {
+        boolean added = !children.contains(comp);
+        if (!added) {
             // add(comp, -1) already added; just register constraint
         } else {
             detach(comp);
@@ -116,6 +118,7 @@ public class Container extends Component {
             layout.addLayoutComponent((String) constraints, comp);
         }
         invalidate();
+        if (added) fireContainerEvent(java.awt.event.ContainerEvent.COMPONENT_ADDED, comp);
     }
 
     public void add(Component comp, Object constraints, int index) {
@@ -128,6 +131,7 @@ public class Container extends Component {
         if (layout instanceof LayoutManager2) ((LayoutManager2) layout).addLayoutComponent(comp, constraints);
         else if (layout != null && (constraints == null || constraints instanceof String)) layout.addLayoutComponent((String) constraints, comp);
         invalidate();
+        fireContainerEvent(java.awt.event.ContainerEvent.COMPONENT_ADDED, comp);
     }
 
     /**
@@ -152,6 +156,7 @@ public class Container extends Component {
             c.setParent(null);
         }
         invalidate();
+        if (c != null) fireContainerEvent(java.awt.event.ContainerEvent.COMPONENT_REMOVED, c);
     }
 
     public void remove(Component comp) {
@@ -159,17 +164,20 @@ public class Container extends Component {
             if (layout != null) layout.removeLayoutComponent(comp);
             comp.setParent(null);
             invalidate();
+            fireContainerEvent(java.awt.event.ContainerEvent.COMPONENT_REMOVED, comp);
         }
     }
 
     public void removeAll() {
         if (children.isEmpty()) return;
-        for (Component c : children) {
+        Component[] removed = children.toArray(new Component[0]);
+        for (Component c : removed) {
             if (layout != null) layout.removeLayoutComponent(c);
             c.setParent(null);
         }
         children.clear();
         invalidate();
+        for (Component c : removed) fireContainerEvent(java.awt.event.ContainerEvent.COMPONENT_REMOVED, c);
     }
 
     public int getComponentZOrder(Component comp) { return children.indexOf(comp); }
@@ -216,12 +224,122 @@ public class Container extends Component {
         return super.getMinimumSize();
     }
 
-    public void setFocusCycleRoot(boolean focusCycleRoot) {}
-    public boolean isFocusCycleRoot() { return false; }
-    public void setFocusTraversalPolicyProvider(boolean provider) {}
-    public boolean isFocusTraversalPolicyProvider() { return false; }
-    public void setFocusTraversalPolicy(Object policy) {}
-    public Object getFocusTraversalPolicy() { return null; }
+    // ---- ContainerEvents -------------------------------------------------------------------
+
+    private final List<java.awt.event.ContainerListener> containerListeners = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    public void addContainerListener(java.awt.event.ContainerListener l) { if (l != null) containerListeners.add(l); }
+    public void removeContainerListener(java.awt.event.ContainerListener l) { containerListeners.remove(l); }
+    public java.awt.event.ContainerListener[] getContainerListeners() {
+        return containerListeners.toArray(new java.awt.event.ContainerListener[0]);
+    }
+
+    /** As the JDK's addImpl/remove: built only when a listener, mask or AWTEventListener wants it. */
+    private void fireContainerEvent(int id, Component child) {
+        if (containerListeners.isEmpty() && (eventMask & AWTEvent.CONTAINER_EVENT_MASK) == 0
+                && !Toolkit.enabledOnToolkit(AWTEvent.CONTAINER_EVENT_MASK)) return;
+        dispatchEvent(new java.awt.event.ContainerEvent(this, id, child));
+    }
+
+    @Override boolean eventEnabled(AWTEvent event) {
+        int id = event.getID();
+        if (id == java.awt.event.ContainerEvent.COMPONENT_ADDED || id == java.awt.event.ContainerEvent.COMPONENT_REMOVED) {
+            return (eventMask & AWTEvent.CONTAINER_EVENT_MASK) != 0 || !containerListeners.isEmpty();
+        }
+        return super.eventEnabled(event);
+    }
+
+    @Override protected void processEvent(AWTEvent event) {
+        if (event instanceof java.awt.event.ContainerEvent) {
+            processContainerEvent((java.awt.event.ContainerEvent) event);
+            return;
+        }
+        super.processEvent(event);
+    }
+
+    protected void processContainerEvent(java.awt.event.ContainerEvent e) {
+        for (java.awt.event.ContainerListener l : containerListeners) {
+            switch (e.getID()) {
+                case java.awt.event.ContainerEvent.COMPONENT_ADDED: l.componentAdded(e); break;
+                case java.awt.event.ContainerEvent.COMPONENT_REMOVED: l.componentRemoved(e); break;
+            }
+        }
+    }
+
+    // --- focus (after OpenJDK 8u Container) ---
+
+    private boolean focusCycleRoot, focusTraversalPolicyProvider;
+    private transient FocusTraversalPolicy focusTraversalPolicy;
+
+    public void setFocusCycleRoot(boolean focusCycleRoot) {
+        boolean old;
+        synchronized (this) {
+            old = this.focusCycleRoot;
+            this.focusCycleRoot = focusCycleRoot;
+        }
+        firePropertyChange("focusCycleRoot", old, focusCycleRoot);
+    }
+    /** True when set, and for the root of a tree the Android host mounts (see {@link Component#isHostMountedRoot}). */
+    public boolean isFocusCycleRoot() { return focusCycleRoot || isHostMountedRoot(); }
+    public boolean isFocusCycleRoot(Container container) {
+        if (isFocusCycleRoot() && container == this) return true;
+        return super.isFocusCycleRoot(container);
+    }
+    public final void setFocusTraversalPolicyProvider(boolean provider) {
+        boolean old;
+        synchronized (this) {
+            old = focusTraversalPolicyProvider;
+            focusTraversalPolicyProvider = provider;
+        }
+        firePropertyChange("focusTraversalPolicyProvider", old, provider);
+    }
+    public final boolean isFocusTraversalPolicyProvider() { return focusTraversalPolicyProvider; }
+    public void setFocusTraversalPolicy(FocusTraversalPolicy policy) {
+        FocusTraversalPolicy old;
+        synchronized (this) {
+            old = focusTraversalPolicy;
+            focusTraversalPolicy = policy;
+        }
+        firePropertyChange("focusTraversalPolicy", old, policy);
+    }
+    /**
+     * Returns this container's policy, the cycle root's, or the manager's default;
+     * null unless this is a focus cycle root or policy provider.
+     */
+    public FocusTraversalPolicy getFocusTraversalPolicy() {
+        if (!isFocusTraversalPolicyProvider() && !isFocusCycleRoot()) return null;
+        FocusTraversalPolicy policy = focusTraversalPolicy;
+        if (policy != null) return policy;
+        Container rootAncestor = getFocusCycleRootAncestor();
+        return rootAncestor != null ? rootAncestor.getFocusTraversalPolicy()
+            : KeyboardFocusManager.getCurrentKeyboardFocusManager().getDefaultFocusTraversalPolicy();
+    }
+    public boolean isFocusTraversalPolicySet() { return focusTraversalPolicy != null; }
+    /** Moves focus down one cycle, to this root's default component. */
+    public void transferFocusDownCycle() {
+        if (isFocusCycleRoot()) {
+            KeyboardFocusManager.getCurrentKeyboardFocusManager().setGlobalCurrentFocusCycleRootPriv(this);
+            Component toFocus = getFocusTraversalPolicy().getDefaultComponent(this);
+            if (toFocus != null) toFocus.requestFocus(java.awt.event.FocusEvent.Cause.TRAVERSAL_DOWN);
+        }
+    }
+    @Override
+    Container getTraversalRoot() {
+        if (!isFocusCycleRoot()) return super.getTraversalRoot();
+        KeyboardFocusManager manager = KeyboardFocusManager.getCurrentKeyboardFocusManager();
+        Container currentFocusCycleRoot = manager.getCurrentFocusCycleRoot();
+        Container root;
+        if (currentFocusCycleRoot == this) {
+            root = this;
+        } else {
+            root = getFocusCycleRootAncestor();
+            if (root == null) root = this;
+        }
+        if (root != currentFocusCycleRoot) manager.setGlobalCurrentFocusCycleRootPriv(root);
+        return root;
+    }
+    @Override
+    int focusTraversalKeyLength() { return KeyboardFocusManager.TRAVERSAL_KEY_LENGTH; }
 
     public Insets getInsets() { return new Insets(0, 0, 0, 0); }
 
