@@ -45,7 +45,7 @@ import java.awt.Window;
  * {@link JRootPane}, and while root pane checking is enabled children, layout
  * and removal are forwarded to the content pane, as with {@code JFrame}.
  */
-public class JWindow extends Window implements RootPaneContainer {
+public class JWindow extends Window implements javax.accessibility.Accessible, RootPaneContainer {
     private static final long serialVersionUID = 1L;
 
     /**
@@ -291,5 +291,16 @@ public class JWindow extends Window implements RootPaneContainer {
     protected String paramString() {
         return super.paramString() + ",rootPaneCheckingEnabled="
                 + (rootPaneCheckingEnabled ? "true" : "false");
+    }
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJWindow();
+        }
+        return accessibleContext;
+    }
+
+    /** Accessibility support for Swing windows: the AWT WINDOW context. */
+    protected class AccessibleJWindow extends AccessibleAWTWindow {
     }
 }

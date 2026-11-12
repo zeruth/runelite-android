@@ -34,8 +34,7 @@ import java.util.EventListener;
  * @author Alan Chung
  * @see TableColumnModelEvent
  */
-
-public interface TableColumnModelListener extends java.util.EventListener
+public interface TableColumnModelListener extends EventListener
 {
     /** Tells listeners that a column was added to the model. */
     public void columnAdded(TableColumnModelEvent e);

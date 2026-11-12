@@ -32,13 +32,19 @@ package sun.swing;
 
 import java.awt.Component;
 import java.awt.Container;
+import java.awt.Dimension;
 import java.awt.FocusTraversalPolicy;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.event.MouseEvent;
+import java.lang.reflect.Modifier;
 import javax.swing.JComponent;
+import javax.swing.JTable;
+import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
 import javax.swing.event.TreeModelEvent;
+import javax.swing.table.TableCellRenderer;
+import javax.swing.table.TableColumnModel;
 import javax.swing.text.JTextComponent;
 import javax.swing.tree.TreeModel;
 import javax.swing.tree.TreePath;
@@ -212,5 +218,90 @@ public class SwingUtilities2 {
             return component;
         }
         return null;
+    }
+
+    /**
+     * Whether {@code p} lies outside the preferred size of the renderer of
+     * the cell at {@code row} (column 0 in the model only); a file-list
+     * table uses it to ignore presses beside the file name.
+     */
+    public static boolean pointOutsidePrefSize(JTable table, int row, int column, Point p) {
+        if (table.convertColumnIndexToModel(column) != 0 || row == -1) {
+            return true;
+        }
+        TableCellRenderer tcr = table.getCellRenderer(row, column);
+        Object value = table.getValueAt(row, column);
+        Component cell = tcr.getTableCellRendererComponent(table, value, false,
+                false, row, column);
+        Dimension itemSize = cell.getPreferredSize();
+        Rectangle cellBounds = table.getCellRect(row, column, false);
+        cellBounds.width = itemSize.width;
+        cellBounds.height = itemSize.height;
+
+        return p.x > cellBounds.x + cellBounds.width ||
+                p.y > cellBounds.y + cellBounds.height;
+    }
+
+    /**
+     * Sets the lead and anchor of {@code model} without changing which
+     * indices are selected.
+     */
+    public static void setLeadAnchorWithoutSelection(ListSelectionModel model,
+                                                     int lead, int anchor) {
+        if (anchor == -1) {
+            anchor = lead;
+        }
+        if (lead == -1) {
+            model.setAnchorSelectionIndex(-1);
+            model.setLeadSelectionIndex(-1);
+        } else {
+            if (model.isSelectedIndex(lead)) {
+                model.addSelectionInterval(lead, lead);
+            } else {
+                model.removeSelectionInterval(lead, lead);
+            }
+            model.setAnchorSelectionIndex(anchor);
+        }
+    }
+
+    /**
+     * Throws {@code SecurityException} when a security manager is installed
+     * and {@code modifiers} are not public.
+     */
+    public static void checkAccess(int modifiers) {
+        if (System.getSecurityManager() != null
+                && !Modifier.isPublic(modifiers)) {
+            throw new SecurityException("Resource is not accessible");
+        }
+    }
+
+    /**
+     * The model index of the column at {@code viewColumnIndex} of
+     * {@code cm}, or {@code viewColumnIndex} when it is negative.
+     */
+    public static int convertColumnIndexToModel(TableColumnModel cm,
+                                                int viewColumnIndex) {
+        if (viewColumnIndex < 0) {
+            return viewColumnIndex;
+        }
+        return cm.getColumn(viewColumnIndex).getModelIndex();
+    }
+
+    /**
+     * The view index in {@code cm} of the column with model index
+     * {@code modelColumnIndex}, -1 when it is not shown, or
+     * {@code modelColumnIndex} when it is negative.
+     */
+    public static int convertColumnIndexToView(TableColumnModel cm,
+                                               int modelColumnIndex) {
+        if (modelColumnIndex < 0) {
+            return modelColumnIndex;
+        }
+        for (int column = 0; column < cm.getColumnCount(); column++) {
+            if (cm.getColumn(column).getModelIndex() == modelColumnIndex) {
+                return column;
+            }
+        }
+        return -1;
     }
 }

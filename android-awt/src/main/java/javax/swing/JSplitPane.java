@@ -32,7 +32,21 @@ package javax.swing;
 
 import java.awt.Component;
 
-public class JSplitPane extends JComponent {
+public class JSplitPane extends JComponent implements javax.accessibility.Accessible {
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJSplitPane();
+        }
+        return accessibleContext;
+    }
+
+    /** Accessibility support for split panes: role SPLIT_PANE. */
+    protected class AccessibleJSplitPane extends AccessibleJComponent {
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.SPLIT_PANE;
+        }
+    }
     private static final long serialVersionUID = 1L;
     public static final int VERTICAL_SPLIT = 0;
     public static final int HORIZONTAL_SPLIT = 1;

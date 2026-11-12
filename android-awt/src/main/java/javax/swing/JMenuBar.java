@@ -34,8 +34,23 @@ import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
 
-public class JMenuBar extends JComponent implements MenuElement {
+public class JMenuBar extends JComponent implements javax.accessibility.Accessible, MenuElement {
     private static final long serialVersionUID = 1L;
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJMenuBar();
+        }
+        return accessibleContext;
+    }
+
+    /** Accessibility support for menu bars: role MENU_BAR. */
+    protected class AccessibleJMenuBar extends AccessibleJComponent {
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.MENU_BAR;
+        }
+    }
+
     private static final int DEFAULT_HEIGHT = 28;
     private SingleSelectionModel selectionModel = new DefaultSingleSelectionModel();
     private boolean borderPainted = true;

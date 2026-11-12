@@ -35,8 +35,22 @@ import java.util.Hashtable;
  * layer, position 0 is the topmost and -1 the bottommost. Index 0 of the child list is the
  * frontmost child, which is what hit testing and painting order follow.
  */
-public class JLayeredPane extends JComponent {
+public class JLayeredPane extends JComponent implements javax.accessibility.Accessible {
     private static final long serialVersionUID = 1L;
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJLayeredPane();
+        }
+        return accessibleContext;
+    }
+
+    /** Accessibility support for layered panes: role LAYERED_PANE. */
+    protected class AccessibleJLayeredPane extends AccessibleJComponent {
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.LAYERED_PANE;
+        }
+    }
 
     /** Convenience object defining the Default layer. Equivalent to new Integer(0).*/
     public static final Integer DEFAULT_LAYER = 0;

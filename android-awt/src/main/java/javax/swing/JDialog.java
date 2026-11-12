@@ -36,7 +36,25 @@ import java.awt.Dialog;
 import java.awt.Frame;
 import java.awt.Window;
 
-public class JDialog extends Dialog implements RootPaneContainer {
+public class JDialog extends Dialog implements javax.accessibility.Accessible, RootPaneContainer {
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJDialog();
+        }
+        return accessibleContext;
+    }
+
+    /** Accessibility support for Swing dialogs: a DIALOG context named by the title. */
+    protected class AccessibleJDialog extends AccessibleAWTDialog {
+        public String getAccessibleName() {
+            if (accessibleName != null) {
+                return accessibleName;
+            }
+            String title = getTitle();
+            return title == null ? super.getAccessibleName() : title;
+        }
+    }
     private static final long serialVersionUID = 1L;
 
     public static final int DO_NOTHING_ON_CLOSE = 0;

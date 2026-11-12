@@ -33,6 +33,20 @@ package javax.swing;
 import javax.swing.text.Document;
 
 public class JPasswordField extends JTextField {
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJPasswordField();
+        }
+        return accessibleContext;
+    }
+
+    /** Accessibility support for password fields: role PASSWORD_TEXT. */
+    protected class AccessibleJPasswordField extends AccessibleJTextField {
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.PASSWORD_TEXT;
+        }
+    }
     private static final long serialVersionUID = 1L;
     private char echoChar = '*';
 

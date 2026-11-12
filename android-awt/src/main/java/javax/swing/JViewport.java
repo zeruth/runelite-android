@@ -36,7 +36,21 @@ import java.awt.Point;
 import java.awt.Rectangle;
 import javax.swing.event.ChangeListener;
 
-public class JViewport extends JComponent {
+public class JViewport extends JComponent implements javax.accessibility.Accessible {
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJViewport();
+        }
+        return accessibleContext;
+    }
+
+    /** Accessibility support for viewports: role VIEWPORT. */
+    protected class AccessibleJViewport extends AccessibleJComponent {
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.VIEWPORT;
+        }
+    }
     private static final long serialVersionUID = 1L;
 
     public static final int BLIT_SCROLL_MODE = 1;

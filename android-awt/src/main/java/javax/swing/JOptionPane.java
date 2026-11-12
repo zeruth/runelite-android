@@ -68,7 +68,22 @@ import javax.swing.plaf.OptionPaneUI;
  * @author James Gosling
  * @author Scott Violet
  */
-public class JOptionPane extends JComponent {
+public class JOptionPane extends JComponent implements javax.accessibility.Accessible {
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJOptionPane();
+        }
+        return accessibleContext;
+    }
+
+    /** Accessibility support for option panes: role OPTION_PANE. */
+    protected class AccessibleJOptionPane extends AccessibleJComponent {
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.OPTION_PANE;
+        }
+    }
+
     private static final long serialVersionUID = 1L;
 
     /**
