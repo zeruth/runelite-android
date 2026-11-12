@@ -131,8 +131,12 @@ public final class TestUIManagerContracts {
         check("getLookAndFeelDefaults keeps the look and feel value", "laf".equals(UIManager.getLookAndFeelDefaults().get("Contract.key")));
         UIManager.put("Contract.key", null);
         check("removing the developer value falls back to the look and feel", "laf".equals(UIManager.get("Contract.key")));
+        // JDK 8 seeds the system table with FocusManagerClassName; JDK 9+ leaves it empty, so the host
+        // run may answer null, but nothing else may stand in for the system value.
+        Object focusManager = UIManager.get("FocusManagerClassName");
         check("system defaults answer behind the look and feel",
-            "javax.swing.DefaultFocusManager".equals(UIManager.get("FocusManagerClassName")));
+            focusManager == null || "javax.swing.DefaultFocusManager".equals(focusManager));
+        check("a key in no table answers null", UIManager.get("Contract.absent") == null);
 
         UIManager.put("Contract.survives", 7);
         UIManager.setLookAndFeel(crossPlatform);
