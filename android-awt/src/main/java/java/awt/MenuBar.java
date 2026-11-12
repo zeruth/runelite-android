@@ -1,257 +1,164 @@
 /*
- * Copyright (c) 1995, 2013, Oracle and/or its affiliates. All rights reserved.
- * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
+ * Copyright (c) 2026, Tyler Bochard
+ * All rights reserved.
  *
- * This code is free software; you can redistribute it and/or modify it
- * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.  Oracle designates this
- * particular file as subject to the "Classpath" exception as provided
- * by Oracle in the LICENSE file that accompanied this code.
+ * Part of android-awt, the Android shadow of the desktop JDK surface used by
+ * runelite-android. Original work of this project, not derived from OpenJDK;
+ * licensed under the BSD 2-Clause License (see the LICENSE file at the
+ * repository root). Files ported from OpenJDK carry the OpenJDK header instead;
+ * see android-awt/LICENSE.
  *
- * This code is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
- * version 2 for more details (a copy is included in the LICENSE file that
- * accompanied this code).
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
  *
- * You should have received a copy of the GNU General Public License version
- * 2 along with this work; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ *    list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
  *
- * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
- * or visit www.oracle.com if you need additional information or have any
- * questions.
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 package java.awt;
 
-import java.util.Enumeration;
-import java.util.Vector;
-
 /**
- * The <code>MenuBar</code> class encapsulates the platform's
- * concept of a menu bar bound to a frame.
- * <p>
- * There is no native menu bar on Android: the bar keeps its menus, help menu
- * and shortcut lookup as on the JDK, so code that builds and queries one runs
- * unchanged, but nothing draws it. Its menus can still be shown through
- * {@link PopupMenu}-style Swing popups.
- *
- * @author Sami Shaio
- * @see        java.awt.Frame
- * @see        java.awt.Menu
- * @see        java.awt.MenuItem
- * @see        java.awt.MenuShortcut
- * @since      JDK1.0
+ * The AWT menu bar of a {@link Frame}. The Android host has no native menu bar, so a
+ * bar set on a frame keeps its menus and shortcuts for callers to query but is not drawn;
+ * Swing's {@code JMenuBar} is the rendered equivalent.
  */
 public class MenuBar extends MenuComponent implements MenuContainer {
-
-    /**
-     * This field represents a vector of the
-     * actual menus that will be part of the MenuBar.
-     *
-     * @serial
-     * @see #countMenus()
-     */
-    Vector<Menu> menus = new Vector<>();
-
-    /**
-     * This menu is a special menu dedicated to
-     * help.  The one thing to note about this menu
-     * is that on some platforms it appears at the
-     * right edge of the menubar.
-     *
-     * @serial
-     * @see #getHelpMenu()
-     * @see #setHelpMenu(Menu)
-     */
-    Menu helpMenu;
-
-    private static final String base = "menubar";
-    private static int nameCounter = 0;
-
-    /*
-     * JDK 1.1 serialVersionUID
-     */
     private static final long serialVersionUID = -4930327919388951260L;
 
-    /**
-     * Creates a new menu bar.
-     */
+    private final java.util.Vector<Menu> menus = new java.util.Vector<>();
+    private Menu helpMenu;
+
+    private static int nameCounter = 0;
+
     public MenuBar() {
     }
 
-    /**
-     * Construct a name for this MenuComponent.  Called by getName() when
-     * the name is null.
-     */
+    /** The JDK's generated name of an unnamed bar: "menubar0", "menubar1", ... */
+    @Override
     String constructComponentName() {
         synchronized (MenuBar.class) {
-            return base + nameCounter++;
+            return "menubar" + nameCounter++;
         }
     }
 
-    /**
-     * Creates the menu bar's peer; there is none on Android.
-     */
+    /** Deliberate no-op: there is no native menu bar peer to create. */
     public void addNotify() {
     }
 
-    /**
-     * Gets the help menu on the menu bar.
-     * @return    the help menu on this menu bar.
-     */
+    @Override
+    public void removeNotify() {
+    }
+
     public Menu getHelpMenu() {
         return helpMenu;
     }
 
-    /**
-     * Sets the specified menu to be this menu bar's help menu.
-     * If this menu bar has an existing help menu, the old help menu is
-     * removed from the menu bar, and replaced with the specified menu.
-     * @param m    the menu to be set as the help menu
-     */
-    public void setHelpMenu(final Menu m) {
-        synchronized (this) {
-            if (helpMenu == m) {
-                return;
-            }
-            if (helpMenu != null) {
-                remove(helpMenu);
-            }
+    public void setHelpMenu(Menu m) {
+        synchronized (menus) {
+            if (helpMenu == m) return;
+            if (helpMenu != null) remove(helpMenu);
             helpMenu = m;
             if (m != null) {
-                if (m.parent != this) {
-                    add(m);
-                }
+                if (m.parent != this) add(m);
             }
         }
     }
 
-    /**
-     * Adds the specified menu to the menu bar.
-     * If the menu has been part of another menu bar,
-     * removes it from that menu bar.
-     *
-     * @param        m   the menu to be added
-     * @return       the menu added
-     * @see          java.awt.MenuBar#remove(int)
-     * @see          java.awt.MenuBar#remove(java.awt.MenuComponent)
-     */
     public Menu add(Menu m) {
-        synchronized (this) {
-            if (m.parent != null) {
-                m.parent.remove(m);
-            }
+        synchronized (menus) {
+            if (m.parent != null) m.parent.remove(m);
             m.parent = this;
             menus.addElement(m);
             return m;
         }
     }
 
-    /**
-     * Removes the menu located at the specified
-     * index from this menu bar.
-     * @param        index   the position of the menu to be removed.
-     * @see          java.awt.MenuBar#add(java.awt.Menu)
-     */
-    public void remove(final int index) {
-        synchronized (this) {
-            Menu m = getMenu(index);
+    public void remove(int index) {
+        synchronized (menus) {
+            Menu m = menus.elementAt(index);
             menus.removeElementAt(index);
             m.parent = null;
-            if (helpMenu == m) {
-                helpMenu = null;
-            }
+            if (helpMenu == m) helpMenu = null;
         }
     }
 
-    /**
-     * Removes the specified menu component from this menu bar.
-     * @param        m the menu component to be removed.
-     * @see          java.awt.MenuBar#add(java.awt.Menu)
-     */
+    @Override
     public void remove(MenuComponent m) {
-        synchronized (this) {
+        synchronized (menus) {
             int index = menus.indexOf(m);
-            if (index >= 0) {
-                remove(index);
-            }
+            if (index >= 0) remove(index);
         }
     }
 
-    /**
-     * Gets the number of menus on the menu bar.
-     * @return     the number of menus on the menu bar.
-     * @since      JDK1.1
-     */
     public int getMenuCount() {
-        return countMenus();
-    }
-
-    /**
-     * @deprecated As of JDK version 1.1,
-     * replaced by <code>getMenuCount()</code>.
-     */
-    @Deprecated
-    public int countMenus() {
         return menus.size();
     }
 
-    /**
-     * Gets the specified menu.
-     * @param      i the index position of the menu to be returned.
-     * @return     the menu at the specified index of this menu bar.
-     */
+    /** @deprecated As of JDK 1.1, replaced by {@link #getMenuCount}. */
+    @Deprecated
+    public int countMenus() {
+        return getMenuCount();
+    }
+
     public Menu getMenu(int i) {
         return menus.elementAt(i);
     }
 
-    /**
-     * Gets an enumeration of all menu shortcuts this menu bar
-     * is managing.
-     * @return      an enumeration of menu shortcuts that this
-     *                      menu bar is managing.
-     * @see         java.awt.MenuShortcut
-     * @since       JDK1.1
-     */
-    public synchronized Enumeration<MenuShortcut> shortcuts() {
-        Vector<MenuShortcut> shortcuts = new Vector<>();
-        for (Menu menu : menus) {
-            menu.collectShortcuts(shortcuts);
-        }
+    /** The shortcuts of every enabled item, in menu order, as the JDK enumerates them. */
+    public synchronized java.util.Enumeration<MenuShortcut> shortcuts() {
+        java.util.Vector<MenuShortcut> shortcuts = new java.util.Vector<>();
+        for (Menu menu : new java.util.ArrayList<>(menus)) collectShortcuts(menu, shortcuts);
         return shortcuts.elements();
     }
 
-    /**
-     * Gets the instance of <code>MenuItem</code> associated
-     * with the specified <code>MenuShortcut</code> object,
-     * or <code>null</code> if none of the menu items being managed
-     * by this menu bar is associated with the specified menu
-     * shortcut.
-     * @param        s the specified menu shortcut.
-     * @return       the menu item for the shortcut, or <code>null</code>
-     * @see          java.awt.MenuItem
-     * @see          java.awt.MenuShortcut
-     * @since        JDK1.1
-     */
+    private static void collectShortcuts(Menu menu, java.util.Vector<MenuShortcut> out) {
+        for (int i = 0; i < menu.getItemCount(); i++) {
+            MenuItem item = menu.getItem(i);
+            if (item instanceof Menu) {
+                collectShortcuts((Menu) item, out);
+            } else if (item.isEnabled() && item.getShortcut() != null) {
+                out.addElement(item.getShortcut());
+            }
+        }
+    }
+
     public MenuItem getShortcutMenuItem(MenuShortcut s) {
-        for (Menu menu : menus) {
-            MenuItem item = menu.getShortcutMenuItem(s);
-            if (item != null) {
+        for (Menu menu : new java.util.ArrayList<>(menus)) {
+            MenuItem found = shortcutItem(menu, s);
+            if (found != null) return found;
+        }
+        return null;
+    }
+
+    private static MenuItem shortcutItem(Menu menu, MenuShortcut s) {
+        if (!menu.isEnabled()) return null;
+        for (int i = 0; i < menu.getItemCount(); i++) {
+            MenuItem item = menu.getItem(i);
+            if (item instanceof Menu) {
+                MenuItem found = shortcutItem((Menu) item, s);
+                if (found != null) return found;
+            } else if (item.isEnabled() && s != null && s.equals(item.getShortcut())) {
                 return item;
             }
         }
         return null;
     }
 
-    /**
-     * Deletes the specified menu shortcut.
-     * @param     s the menu shortcut to delete.
-     * @since     JDK1.1
-     */
     public void deleteShortcut(MenuShortcut s) {
-        for (Menu menu : menus) {
-            menu.deleteShortcut(s);
-        }
+        MenuItem item = getShortcutMenuItem(s);
+        if (item != null) item.deleteShortcut();
     }
 }
