@@ -1038,6 +1038,52 @@ public class JComponent extends Container {
     }
 
     /**
+     * Sets a property on behalf of a look and feel ({@link LookAndFeel#installProperty}).
+     * As in the JDK, focus traversal keys go in only when the application has not set its
+     * own, and do not count as set by the client.  The JDK's subclasses override this for
+     * their own primitive properties; the shadow's mostly do not, so any other property
+     * goes to its public setter, without the JDK's "set by the client" bookkeeping.
+     */
+    @SuppressWarnings("unchecked")
+    void setUIProperty(String propertyName, Object value) {
+        int id = "focusTraversalKeysForward".equals(propertyName)
+            ? java.awt.KeyboardFocusManager.FORWARD_TRAVERSAL_KEYS
+            : "focusTraversalKeysBackward".equals(propertyName)
+            ? java.awt.KeyboardFocusManager.BACKWARD_TRAVERSAL_KEYS : -1;
+        if (id != -1) {
+            if (!isFocusTraversalKeysSetByClient(id)) {
+                super.setFocusTraversalKeys(id, (java.util.Set<java.awt.AWTKeyStroke>) value);
+            }
+            return;
+        }
+        String setter = "set" + Character.toUpperCase(propertyName.charAt(0)) + propertyName.substring(1);
+        try {
+            for (java.lang.reflect.Method method : getClass().getMethods()) {
+                Class<?>[] parameters = method.getParameterTypes();
+                if (method.getName().equals(setter) && parameters.length == 1) {
+                    if (parameters[0].isPrimitive() && value == null) {
+                        throw new NullPointerException(propertyName);
+                    }
+                    method.invoke(this, value);
+                    return;
+                }
+            }
+        } catch (IllegalAccessException e) {
+            throw new IllegalArgumentException("property \"" + propertyName + "\" cannot be set using this method", e);
+        } catch (java.lang.reflect.InvocationTargetException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof RuntimeException) {
+                throw (RuntimeException) cause;
+            }
+            throw new IllegalArgumentException("property \"" + propertyName + "\" cannot be set using this method", cause);
+        } catch (IllegalArgumentException e) {
+            // Method.invoke reports a value of the wrong type this way.
+            throw new ClassCastException(e.getMessage());
+        }
+        throw new IllegalArgumentException("property \"" + propertyName + "\" cannot be set using this method");
+    }
+
+    /**
      * In release 1.4, the focus subsystem was rearchitected.
      * Changes this <code>JComponent</code>'s focus traversal keys to
      * CTRL+TAB and CTRL+SHIFT+TAB in the JDK; the shadow keeps the answer only.

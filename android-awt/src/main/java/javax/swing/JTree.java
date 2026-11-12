@@ -3975,9 +3975,7 @@ public class JTree extends JComponent implements Scrollable, Accessible
                 showsRootHandlesSet = false;
             }
         } else {
-            // JDK: super.setUIProperty; the shadow JComponent has none, and
-            // LookAndFeel.installProperty applies the public setter in its place.
-            LookAndFeel.installProperty(this, propertyName, value);
+            super.setUIProperty(propertyName, value);
         }
     }
 

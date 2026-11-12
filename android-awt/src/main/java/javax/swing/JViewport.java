@@ -62,7 +62,39 @@ public class JViewport extends JComponent implements javax.accessibility.Accessi
     private int scrollMode = BLIT_SCROLL_MODE;
     private final Point viewPosition = new Point();
 
-    public JViewport() {}
+    public JViewport() {
+        setLayout(createLayoutManager());
+    }
+
+    /**
+     * Subclassers can override this to install a different layout manager (or
+     * <code>null</code>) in the constructor.
+     *
+     * @return a new <code>LayoutManager</code> object
+     */
+    protected java.awt.LayoutManager createLayoutManager() {
+        return ViewportLayout.SHARED_INSTANCE;
+    }
+
+    /**
+     * Converts a size in pixel coordinates to view coordinates.
+     *
+     * @param size a <code>Dimension</code> object using pixel coordinates
+     * @return a <code>Dimension</code> object converted to view coordinates
+     */
+    public Dimension toViewCoordinates(Dimension size) {
+        return new Dimension(size);
+    }
+
+    /**
+     * Converts a point in pixel coordinates to view coordinates.
+     *
+     * @param p a <code>Point</code> object using pixel coordinates
+     * @return a <code>Point</code> object converted to view coordinates
+     */
+    public Point toViewCoordinates(Point p) {
+        return new Point(p);
+    }
 
     public Component getView() { return view; }
     public void setView(Component view) {
@@ -129,8 +161,12 @@ public class JViewport extends JComponent implements javax.accessibility.Accessi
         for (ChangeListener listener : new java.util.ArrayList<>(changeListeners)) listener.stateChanged(event);
     }
 
-    @Override
-    public void doLayout() {
+    /**
+     * The host sizing the shared {@link ViewportLayout} applies: the view tracks the
+     * viewport width unless it is a Scrollable that says otherwise, so sidebar panels
+     * wrap instead of scrolling sideways.
+     */
+    void layoutHostView() {
         if (view != null && getWidth() > 0 && getHeight() > 0) {
             // Size the view to its preferred height (or at least viewport height) so
             // scrollable content can grow; horizontal stays clamped to viewport.
@@ -147,26 +183,6 @@ public class JViewport extends JComponent implements javax.accessibility.Accessi
             applyScroll(true);
         }
     }
-    /**
-     * ViewportLayout's sizing: the view's preferred size (its Scrollable viewport size when it
-     * has one). Without a layout manager this fell through to Component's "current size", so
-     * a viewport kept whatever height it was last given — quest-helper's assist picker, laid
-     * out at the quest list's height, reported that back as preferred and never shrank.
-     */
-    @Override
-    public Dimension getPreferredSize() {
-        if (isPreferredSizeSet()) return super.getPreferredSize();
-        if (view == null) return new Dimension();
-        if (view instanceof Scrollable) return ((Scrollable) view).getPreferredScrollableViewportSize();
-        return view.getPreferredSize();
-    }
-
-    @Override
-    public Dimension getMinimumSize() {
-        if (isMinimumSizeSet()) return super.getMinimumSize();
-        return new Dimension(4, 4);
-    }
-
     public void setExtentSize(Dimension newExtent) { if(newExtent==null)throw new NullPointerException("extent");if(!newExtent.equals(getSize())){setSize(newExtent);fireStateChanged();} }
     public int getScrollMode() { return scrollMode; }
     public void setScrollMode(int mode) { this.scrollMode = mode; }
