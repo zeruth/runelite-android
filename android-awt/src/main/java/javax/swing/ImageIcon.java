@@ -33,7 +33,9 @@ package javax.swing;
 import java.awt.Component;
 import java.awt.Graphics;
 import java.awt.Image;
+import java.awt.MediaTracker;
 import java.awt.image.BufferedImage;
+import java.awt.image.ImageObserver;
 import java.io.Serializable;
 import java.net.URL;
 
@@ -42,16 +44,55 @@ public class ImageIcon implements Icon, Serializable {
 
     private Image image;
     private String description;
+    private int loadStatus = 0;
+    private ImageObserver imageObserver;
 
     public ImageIcon() {}
-    public ImageIcon(Image image) { this.image = image; }
-    public ImageIcon(Image image, String description) { this.image = image; this.description = description; }
-    public ImageIcon(String filename) { this.image = loadFile(filename); }
-    public ImageIcon(String filename, String description) { this.image = loadFile(filename); this.description = description; }
-    public ImageIcon(URL location) { this.image = loadUrl(location); }
-    public ImageIcon(URL location, String description) { this.image = loadUrl(location); this.description = description; }
-    public ImageIcon(byte[] imageData) { this.image = loadBytes(imageData); }
-    public ImageIcon(byte[] imageData, String description) { this.image = loadBytes(imageData); this.description = description; }
+    public ImageIcon(Image image) { loadImage(image); }
+    public ImageIcon(Image image, String description) { loadImage(image); this.description = description; }
+    public ImageIcon(String filename) { loadImage(loadFile(filename)); this.description = filename; }
+    public ImageIcon(String filename, String description) { loadImage(loadFile(filename)); this.description = description; }
+    public ImageIcon(URL location) { loadImage(loadUrl(location)); this.description = location == null ? null : location.toExternalForm(); }
+    public ImageIcon(URL location, String description) { loadImage(loadUrl(location)); this.description = description; }
+    public ImageIcon(byte[] imageData) { loadImage(loadBytes(imageData)); }
+    public ImageIcon(byte[] imageData, String description) { loadImage(loadBytes(imageData)); this.description = description; }
+
+    /**
+     * Records the image and its load status. Every image this class holds is decoded
+     * synchronously (ImageIO, or a caller's already-built image), so there is no
+     * MediaTracker wait: a present image is COMPLETE, a failed decode is ERRORED with
+     * a null image, which getIconWidth/Height report as -1 like a broken JDK icon.
+     */
+    protected void loadImage(Image image) {
+        this.image = image;
+        if (image == null) {
+            loadStatus = MediaTracker.ERRORED;
+        } else {
+            loadStatus = (image.getWidth(null) < 0 || image.getHeight(null) < 0)
+                ? MediaTracker.ERRORED : MediaTracker.COMPLETE;
+        }
+    }
+
+    /**
+     * Returns the status of the image loading operation.
+     * @return the loading status as defined by java.awt.MediaTracker
+     */
+    public int getImageLoadStatus() {
+        return loadStatus;
+    }
+
+    /**
+     * Sets the image observer for the image, used by {@link #paintIcon} in place of
+     * the component it paints on.
+     */
+    public void setImageObserver(ImageObserver observer) {
+        imageObserver = observer;
+    }
+
+    /** Returns the image observer for the image. */
+    public ImageObserver getImageObserver() {
+        return imageObserver;
+    }
 
     /** Path / URL / byte-array decodes go through ImageIO. Real Swing also
      *  tolerates a missing file (returns an Icon whose dims are -1); we keep
@@ -78,7 +119,7 @@ public class ImageIcon implements Icon, Serializable {
     }
 
     public Image getImage() { return image; }
-    public void setImage(Image image) { this.image = image; }
+    public void setImage(Image image) { loadImage(image); }
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }
 
@@ -94,6 +135,11 @@ public class ImageIcon implements Icon, Serializable {
 
     @Override
     public void paintIcon(Component c, Graphics g, int x, int y) {
-        if (image != null) g.drawImage(image, x, y, c);
+        if (image != null) g.drawImage(image, x, y, imageObserver == null ? c : imageObserver);
+    }
+
+    @Override
+    public String toString() {
+        return description != null ? description : super.toString();
     }
 }

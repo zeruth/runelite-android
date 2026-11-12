@@ -301,6 +301,7 @@ public abstract class ColorModel implements Transparency {
     }
 
     public boolean isCompatibleSampleModel(SampleModel sm) {
+        // OpenJDK 8u: the abstract base has no layout to compare against.
         throw new UnsupportedOperationException("This method is not supported by this color model");
     }
 
