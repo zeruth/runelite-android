@@ -32,8 +32,8 @@ package java.beans;
 
 /**
  * A VetoableChange event gets fired whenever a bean changes a "constrained"
- * property. A listener may veto the change by throwing a
- * {@code PropertyVetoException}.
+ * property. Registering a VetoableChangeListener lets a listener refuse the
+ * change by throwing {@link PropertyVetoException}.
  */
 public interface VetoableChangeListener extends java.util.EventListener {
     /**

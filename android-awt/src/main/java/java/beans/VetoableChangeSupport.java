@@ -37,23 +37,23 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * This is a utility class that can be used by beans that support constrained
- * properties. It manages a list of listeners and dispatches
- * {@link PropertyChangeEvent}s to them. If a listener vetoes, every listener
- * already notified receives a reverting event and the veto is rethrown,
- * as on desktop.
+ * A utility class for beans that support constrained properties: it keeps the
+ * listeners, unnamed and per property, and fires {@code PropertyChangeEvent}s
+ * to them. When a listener vetoes a change, every listener notified before it
+ * is told about the reversion (old and new value swapped) and the veto is
+ * rethrown, as the desktop class does.
  */
 public class VetoableChangeSupport implements Serializable {
     private static final long serialVersionUID = -5090210921595982017L;
 
     private final Object source;
-    private final List<VetoableChangeListener> all = new ArrayList<>();
-    private final Map<String, List<VetoableChangeListener>> named = new LinkedHashMap<>();
+    // Key null holds the listeners registered for every property.
+    private final Map<String, List<VetoableChangeListener>> map = new LinkedHashMap<>();
 
     /**
      * Constructs a {@code VetoableChangeSupport} object.
      *
-     * @param sourceBean  The bean to be given as the source for any events.
+     * @param sourceBean the bean to be given as the source for any events
      */
     public VetoableChangeSupport(Object sourceBean) {
         if (sourceBean == null) {
@@ -62,14 +62,6 @@ public class VetoableChangeSupport implements Serializable {
         source = sourceBean;
     }
 
-    /**
-     * Add a VetoableChangeListener to the listener list.
-     * The listener is registered for all properties.
-     * If {@code listener} is null, no exception is thrown and no action
-     * is taken.
-     *
-     * @param listener  The VetoableChangeListener to be added
-     */
     public void addVetoableChangeListener(VetoableChangeListener listener) {
         if (listener == null) {
             return;
@@ -78,19 +70,10 @@ public class VetoableChangeSupport implements Serializable {
             VetoableChangeListenerProxy proxy = (VetoableChangeListenerProxy) listener;
             addVetoableChangeListener(proxy.getPropertyName(), proxy.getListener());
         } else {
-            synchronized (this) {
-                all.add(listener);
-            }
+            add(null, listener);
         }
     }
 
-    /**
-     * Remove a VetoableChangeListener from the listener list.
-     * This removes a VetoableChangeListener that was registered
-     * for all properties.
-     *
-     * @param listener  The VetoableChangeListener to be removed
-     */
     public void removeVetoableChangeListener(VetoableChangeListener listener) {
         if (listener == null) {
             return;
@@ -99,111 +82,54 @@ public class VetoableChangeSupport implements Serializable {
             VetoableChangeListenerProxy proxy = (VetoableChangeListenerProxy) listener;
             removeVetoableChangeListener(proxy.getPropertyName(), proxy.getListener());
         } else {
-            synchronized (this) {
-                all.remove(listener);
-            }
+            remove(null, listener);
         }
     }
 
     /**
-     * Returns an array of all the listeners that were added to the
-     * VetoableChangeSupport object with addVetoableChangeListener().
-     * Listeners added for a named property are returned wrapped in a
-     * {@code VetoableChangeListenerProxy}.
-     *
-     * @return all of the {@code VetoableChangeListeners} added or an
-     *         empty array if no listeners have been added
-     * @since 1.4
+     * Returns all listeners; the ones registered for a single property come
+     * back wrapped in a {@link VetoableChangeListenerProxy}.
      */
     public synchronized VetoableChangeListener[] getVetoableChangeListeners() {
-        List<VetoableChangeListener> result = new ArrayList<>(all);
-        for (Map.Entry<String, List<VetoableChangeListener>> e : named.entrySet()) {
-            for (VetoableChangeListener l : e.getValue()) {
-                result.add(new VetoableChangeListenerProxy(e.getKey(), l));
+        List<VetoableChangeListener> out = new ArrayList<>();
+        for (Map.Entry<String, List<VetoableChangeListener>> entry : map.entrySet()) {
+            for (VetoableChangeListener listener : entry.getValue()) {
+                out.add(entry.getKey() == null ? listener
+                        : new VetoableChangeListenerProxy(entry.getKey(), listener));
             }
         }
-        return result.toArray(new VetoableChangeListener[0]);
+        return out.toArray(new VetoableChangeListener[0]);
     }
 
-    /**
-     * Add a VetoableChangeListener for a specific property. The listener
-     * will be invoked only when a call on fireVetoableChange names that
-     * specific property. If {@code propertyName} or {@code listener} is
-     * null, no exception is thrown and no action is taken.
-     *
-     * @param propertyName  The name of the property to listen on.
-     * @param listener  The VetoableChangeListener to be added
-     * @since 1.2
-     */
     public void addVetoableChangeListener(String propertyName, VetoableChangeListener listener) {
         if (listener == null || propertyName == null) {
             return;
         }
-        while (listener instanceof VetoableChangeListenerProxy) {
-            listener = ((VetoableChangeListenerProxy) listener).getListener();
-        }
-        synchronized (this) {
-            List<VetoableChangeListener> list = named.get(propertyName);
-            if (list == null) {
-                list = new ArrayList<>();
-                named.put(propertyName, list);
-            }
-            list.add(listener);
-        }
+        add(propertyName, unwrap(listener));
     }
 
-    /**
-     * Remove a VetoableChangeListener for a specific property.
-     *
-     * @param propertyName  The name of the property that was listened on.
-     * @param listener  The VetoableChangeListener to be removed
-     * @since 1.2
-     */
     public void removeVetoableChangeListener(String propertyName, VetoableChangeListener listener) {
         if (listener == null || propertyName == null) {
             return;
         }
+        remove(propertyName, unwrap(listener));
+    }
+
+    // A proxy handed to the named overloads would otherwise be stored wrapped and
+    // come back double-wrapped from getVetoableChangeListeners().
+    private static VetoableChangeListener unwrap(VetoableChangeListener listener) {
         while (listener instanceof VetoableChangeListenerProxy) {
             listener = ((VetoableChangeListenerProxy) listener).getListener();
         }
-        synchronized (this) {
-            List<VetoableChangeListener> list = named.get(propertyName);
-            if (list != null) {
-                list.remove(listener);
-                if (list.isEmpty()) {
-                    named.remove(propertyName);
-                }
-            }
-        }
+        return listener;
     }
 
-    /**
-     * Returns an array of all the listeners which have been associated
-     * with the named property.
-     *
-     * @param propertyName  The name of the property being listened to
-     * @return all the {@code VetoableChangeListeners} associated with
-     *         the named property; if no such listeners have been added,
-     *         or if {@code propertyName} is null, an empty array is
-     *         returned.
-     * @since 1.4
-     */
     public synchronized VetoableChangeListener[] getVetoableChangeListeners(String propertyName) {
-        List<VetoableChangeListener> list = propertyName == null ? null : named.get(propertyName);
-        return list == null ? new VetoableChangeListener[0] : list.toArray(new VetoableChangeListener[0]);
+        List<VetoableChangeListener> listeners = propertyName == null ? null : map.get(propertyName);
+        return listeners == null ? new VetoableChangeListener[0]
+                : listeners.toArray(new VetoableChangeListener[0]);
     }
 
-    /**
-     * Reports a constrained property update to listeners
-     * that have been registered to track updates of
-     * all properties or a property with the specified name.
-     * No event is fired if old and new values are equal and non-null.
-     *
-     * @param propertyName  the programmatic name of the property that is about to change
-     * @param oldValue      the old value of the property
-     * @param newValue      the new value of the property
-     * @throws PropertyVetoException if one of listeners vetoes the property update
-     */
     public void fireVetoableChange(String propertyName, Object oldValue, Object newValue)
             throws PropertyVetoException {
         if (oldValue == null || newValue == null || !oldValue.equals(newValue)) {
@@ -211,14 +137,6 @@ public class VetoableChangeSupport implements Serializable {
         }
     }
 
-    /**
-     * Reports an integer constrained property update to listeners.
-     *
-     * @param propertyName  the programmatic name of the property that is about to change
-     * @param oldValue      the old value of the property
-     * @param newValue      the new value of the property
-     * @throws PropertyVetoException if one of listeners vetoes the property update
-     */
     public void fireVetoableChange(String propertyName, int oldValue, int newValue)
             throws PropertyVetoException {
         if (oldValue != newValue) {
@@ -226,14 +144,6 @@ public class VetoableChangeSupport implements Serializable {
         }
     }
 
-    /**
-     * Reports a boolean constrained property update to listeners.
-     *
-     * @param propertyName  the programmatic name of the property that is about to change
-     * @param oldValue      the old value of the property
-     * @param newValue      the new value of the property
-     * @throws PropertyVetoException if one of listeners vetoes the property update
-     */
     public void fireVetoableChange(String propertyName, boolean oldValue, boolean newValue)
             throws PropertyVetoException {
         if (oldValue != newValue) {
@@ -241,16 +151,6 @@ public class VetoableChangeSupport implements Serializable {
         }
     }
 
-    /**
-     * Fires a property change event to listeners that have been registered
-     * to track updates of all properties or a property with the specified
-     * name. Any listener can throw a {@code PropertyVetoException}; if one
-     * does, a new event reverting this change is fired to all listeners
-     * that already confirmed it and the exception is rethrown.
-     *
-     * @param event  the {@code PropertyChangeEvent} to be fired
-     * @throws PropertyVetoException if one of listeners vetoes the property update
-     */
     public void fireVetoableChange(PropertyChangeEvent event) throws PropertyVetoException {
         Object oldValue = event.getOldValue();
         Object newValue = event.getNewValue();
@@ -258,47 +158,52 @@ public class VetoableChangeSupport implements Serializable {
             return;
         }
         String name = event.getPropertyName();
-        VetoableChangeListener[] listeners;
+        List<VetoableChangeListener> listeners = new ArrayList<>();
         synchronized (this) {
-            List<VetoableChangeListener> list = new ArrayList<>(all);
-            List<VetoableChangeListener> forName = name == null ? null : named.get(name);
-            if (forName != null) {
-                list.addAll(forName);
-            }
-            listeners = list.toArray(new VetoableChangeListener[0]);
+            List<VetoableChangeListener> common = map.get(null);
+            if (common != null) listeners.addAll(common);
+            List<VetoableChangeListener> named = name != null ? map.get(name) : null;
+            if (named != null) listeners.addAll(named);
         }
         int current = 0;
         try {
-            while (current < listeners.length) {
-                listeners[current].vetoableChange(event);
+            while (current < listeners.size()) {
+                listeners.get(current).vetoableChange(event);
                 current++;
             }
         } catch (PropertyVetoException veto) {
-            event = new PropertyChangeEvent(this.source, name, newValue, oldValue);
+            PropertyChangeEvent revert = new PropertyChangeEvent(this.source, name, newValue, oldValue);
             for (int i = 0; i < current; i++) {
                 try {
-                    listeners[i].vetoableChange(event);
-                } catch (PropertyVetoException exception) {
-                    // ignore exceptions that occur during rolling back
+                    listeners.get(i).vetoableChange(revert);
+                } catch (PropertyVetoException ignored) {
+                    // A listener cannot veto the reversion.
                 }
             }
             throw veto;
         }
     }
 
-    /**
-     * Check if there are any listeners for a specific property, including
-     * those registered on all properties. If {@code propertyName}
-     * is null, only check for listeners registered on all properties.
-     *
-     * @param propertyName  the property name.
-     * @return true if there are one or more listeners for the given property
-     */
     public synchronized boolean hasListeners(String propertyName) {
-        if (!all.isEmpty()) {
+        if (map.containsKey(null)) {
             return true;
         }
-        List<VetoableChangeListener> list = propertyName == null ? null : named.get(propertyName);
-        return list != null && !list.isEmpty();
+        return propertyName != null && map.containsKey(propertyName);
+    }
+
+    private synchronized void add(String name, VetoableChangeListener listener) {
+        List<VetoableChangeListener> list = map.get(name);
+        if (list == null) {
+            list = new ArrayList<>();
+            map.put(name, list);
+        }
+        list.add(listener);
+    }
+
+    private synchronized void remove(String name, VetoableChangeListener listener) {
+        List<VetoableChangeListener> list = map.get(name);
+        if (list != null && list.remove(listener) && list.isEmpty()) {
+            map.remove(name);
+        }
     }
 }

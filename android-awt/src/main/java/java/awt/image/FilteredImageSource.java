@@ -1,44 +1,177 @@
 /*
- * Copyright (c) 2026, Tyler Bochard
- * All rights reserved.
+ * Copyright (c) 1995, 2013, Oracle and/or its affiliates. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
- * Part of android-awt, the Android shadow of the desktop JDK surface used by
- * runelite-android. Original work of this project, not derived from OpenJDK;
- * licensed under the BSD 2-Clause License (see the LICENSE file at the
- * repository root). Files ported from OpenJDK carry the OpenJDK header instead;
- * see android-awt/LICENSE.
+ * This code is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 only, as
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
+ * This code is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ * version 2 for more details (a copy is included in the LICENSE file that
+ * accompanied this code).
  *
- * 1. Redistributions of source code must retain the above copyright notice, this
- *    list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright notice,
- *    this list of conditions and the following disclaimer in the documentation
- *    and/or other materials provided with the distribution.
+ * You should have received a copy of the GNU General Public License version
+ * 2 along with this work; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
- * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
+ * or visit www.oracle.com if you need additional information or have any
+ * questions.
  */
+
 package java.awt.image;
 
+import java.util.Hashtable;
+
+/**
+ * This class is an implementation of the ImageProducer interface which
+ * takes an existing image and a filter object and uses them to produce
+ * image data for a new filtered version of the original image.
+ * Here is an example which filters an image by swapping the red and
+ * blue compents:
+ * <pre>
+ *
+ *      Image src = getImage("doc:///demo/images/duke/T1.gif");
+ *      ImageFilter colorfilter = new RedBlueSwapFilter();
+ *      Image img = createImage(new FilteredImageSource(src.getSource(),
+ *                                                      colorfilter));
+ *
+ * </pre>
+ *
+ * @see ImageProducer
+ *
+ * @author      Jim Graham
+ */
 public class FilteredImageSource implements ImageProducer {
-    private final ImageProducer source;
-    private final ImageFilter filter;
-    private final java.util.Map<ImageConsumer, ImageFilter> filters = new java.util.HashMap<>();
-    public FilteredImageSource(ImageProducer source, ImageFilter filter) { this.source = java.util.Objects.requireNonNull(source); this.filter = java.util.Objects.requireNonNull(filter); }
-    private ImageFilter instance(ImageConsumer consumer) { ImageFilter result = filters.get(consumer); if (result == null) { result = filter.getFilterInstance(consumer); filters.put(consumer, result); } return result; }
-    public synchronized void addConsumer(ImageConsumer consumer) { source.addConsumer(instance(consumer)); }
-    public synchronized boolean isConsumer(ImageConsumer consumer) { return filters.containsKey(consumer); }
-    public synchronized void removeConsumer(ImageConsumer consumer) { ImageFilter instance = filters.remove(consumer); if (instance != null) source.removeConsumer(instance); }
-    public synchronized void startProduction(ImageConsumer consumer) { source.startProduction(instance(consumer)); }
-    public synchronized void requestTopDownLeftRightResend(ImageConsumer consumer) { ImageFilter instance = filters.get(consumer); if (instance != null) instance.resendTopDownLeftRight(source); }
+    ImageProducer src;
+    ImageFilter filter;
+
+    /**
+     * Constructs an ImageProducer object from an existing ImageProducer
+     * and a filter object.
+     * @param orig the specified <code>ImageProducer</code>
+     * @param imgf the specified <code>ImageFilter</code>
+     * @see ImageFilter
+     * @see java.awt.Component#createImage
+     */
+    public FilteredImageSource(ImageProducer orig, ImageFilter imgf) {
+        src = orig;
+        filter = imgf;
+    }
+
+    private Hashtable<ImageConsumer, ImageFilter> proxies;
+
+    /**
+     * Adds the specified <code>ImageConsumer</code>
+     * to the list of consumers interested in data for the filtered image.
+     * An instance of the original <code>ImageFilter</code>
+     * is created
+     * (using the filter's <code>getFilterInstance</code> method)
+     * to manipulate the image data
+     * for the specified <code>ImageConsumer</code>.
+     * The newly created filter instance
+     * is then passed to the <code>addConsumer</code> method
+     * of the original <code>ImageProducer</code>.
+     *
+     * @param ic  the consumer for the filtered image
+     * @see ImageConsumer
+     */
+    public synchronized void addConsumer(ImageConsumer ic) {
+        if (proxies == null) {
+            proxies = new Hashtable<>();
+        }
+        if (!proxies.containsKey(ic)) {
+            ImageFilter imgf = filter.getFilterInstance(ic);
+            proxies.put(ic, imgf);
+            src.addConsumer(imgf);
+        }
+    }
+
+    /**
+     * Determines whether an ImageConsumer is on the list of consumers
+     * currently interested in data for this image.
+     *
+     * @param ic the specified <code>ImageConsumer</code>
+     * @return true if the ImageConsumer is on the list; false otherwise
+     * @see ImageConsumer
+     */
+    public synchronized boolean isConsumer(ImageConsumer ic) {
+        return (proxies != null && proxies.containsKey(ic));
+    }
+
+    /**
+     * Removes an ImageConsumer from the list of consumers interested in
+     * data for this image.
+     *
+     * @see ImageConsumer
+     */
+    public synchronized void removeConsumer(ImageConsumer ic) {
+        if (proxies != null) {
+            ImageFilter imgf = proxies.get(ic);
+            if (imgf != null) {
+                src.removeConsumer(imgf);
+                proxies.remove(ic);
+                if (proxies.isEmpty()) {
+                    proxies = null;
+                }
+            }
+        }
+    }
+
+    /**
+     * Starts production of the filtered image.
+     * If the specified <code>ImageConsumer</code>
+     * isn't already a consumer of the filtered image,
+     * an instance of the original <code>ImageFilter</code>
+     * is created
+     * (using the filter's <code>getFilterInstance</code> method)
+     * to manipulate the image data
+     * for the <code>ImageConsumer</code>.
+     * The filter instance for the <code>ImageConsumer</code>
+     * is then passed to the <code>startProduction</code> method
+     * of the original <code>ImageProducer</code>.
+     *
+     * @param ic  the consumer for the filtered image
+     * @see ImageConsumer
+     */
+    public void startProduction(ImageConsumer ic) {
+        ImageFilter imgf;
+        synchronized (this) {
+            if (proxies == null) {
+                proxies = new Hashtable<>();
+            }
+            imgf = proxies.get(ic);
+            if (imgf == null) {
+                imgf = filter.getFilterInstance(ic);
+                proxies.put(ic, imgf);
+            }
+        }
+        // Produced outside the lock: a synchronous source calls back into the consumer, which
+        // may call removeConsumer here from another thread's monitor.
+        src.startProduction(imgf);
+    }
+
+    /**
+     * Requests that a given ImageConsumer have the image data delivered
+     * one more time in top-down, left-right order.  The request is
+     * handed to the ImageFilter for further processing, since the
+     * ability to preserve the pixel ordering depends on the filter.
+     *
+     * @see ImageConsumer
+     */
+    public void requestTopDownLeftRightResend(ImageConsumer ic) {
+        ImageFilter imgf = null;
+        synchronized (this) {
+            if (proxies != null) {
+                imgf = proxies.get(ic);
+            }
+        }
+        if (imgf != null) {
+            imgf.resendTopDownLeftRight(src);
+        }
+    }
 }

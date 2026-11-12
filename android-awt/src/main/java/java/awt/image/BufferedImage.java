@@ -135,40 +135,6 @@ public class BufferedImage extends Image implements RenderedImage {
     @Override public int getWidth(ImageObserver observer)  { return getWidth(); }
     @Override public int getHeight(ImageObserver observer) { return getHeight(); }
 
-    /**
-     * Real scaling — without this, the shadow {@link Image#getScaledInstance}
-     * returned the original image, which meant {@code ImageUtil.resizeImage}
-     * and any plugin that scales an icon via {@code img.getScaledInstance(w, h,
-     * SCALE_SMOOTH)} silently produced an unscaled image.
-     * Accepts -1 for either dimension to preserve aspect ratio (matches the
-     * JDK contract); scales via Android Bitmap.
-     */
-    @Override
-    public Image getScaledInstance(int width, int height, int hints) {
-        int srcW = getWidth();
-        int srcH = getHeight();
-        if (srcW <= 0 || srcH <= 0) return this;
-        if (width < 0 && height < 0) return this;
-        if (width < 0) width = (int) Math.round((double) srcW * height / srcH);
-        else if (height < 0) height = (int) Math.round((double) srcH * width / srcW);
-        if (width <= 0 || height <= 0) return this;
-        if (width == srcW && height == srcH) return this;
-
-        int[] src = getRGB(0,0,srcW,srcH,null,0,srcW);
-        if (src == null) return this; // unsupported image type — bail
-        boolean smooth = (hints & (SCALE_SMOOTH | SCALE_AREA_AVERAGING)) != 0;
-        android.graphics.Bitmap bmp = android.graphics.Bitmap.createBitmap(
-            srcW, srcH, android.graphics.Bitmap.Config.ARGB_8888);
-        bmp.setPixels(src, 0, srcW, 0, 0, srcW, srcH);
-        android.graphics.Bitmap scaled = android.graphics.Bitmap.createScaledBitmap(bmp, width, height, smooth);
-        bmp.recycle();
-
-        BufferedImage out = new BufferedImage(width, height, TYPE_INT_ARGB);
-        scaled.getPixels(out.backingArray(), 0, width, 0, 0, width, height);
-        if (scaled != bmp) scaled.recycle();
-        return out;
-    }
-
     /** Direct pixel buffer (TYPE_INT_* images only). Mutating it mutates the image. */
     public int[] backingArray() {
         return pixels;
@@ -256,13 +222,9 @@ public class BufferedImage extends Image implements RenderedImage {
     public Raster getData(){return copyData(null);}
     public Raster getData(java.awt.Rectangle rect){WritableRaster copy=raster.createCompatibleWritableRaster(rect.width,rect.height);for(int y=0;y<rect.height;y++)for(int x=0;x<rect.width;x++)copy.setDataElements(x,y,raster.getDataElements(rect.x+x,rect.y+y,null));return copy.createWritableTranslatedChild(rect.x,rect.y);}
     public WritableRaster copyData(WritableRaster out){if(out==null)out=raster.createCompatibleWritableRaster();int minX=Math.max(0,out.getMinX()),minY=Math.max(0,out.getMinY()),maxX=Math.min(getWidth(),out.getMinX()+out.getWidth()),maxY=Math.min(getHeight(),out.getMinY()+out.getHeight());for(int y=minY;y<maxY;y++)for(int x=minX;x<maxX;x++)out.setDataElements(x,y,raster.getDataElements(x,y,null));return out;}
+    /** As the JDK: an {@link sun.awt.image.OffScreenImageSource} over this image and its properties. */
     @Override public ImageProducer getSource(){
-        return new ImageProducer(){
-            private final java.util.Set<ImageConsumer> consumers=new java.util.concurrent.CopyOnWriteArraySet<>();
-            public void addConsumer(ImageConsumer c){consumers.add(c);}public boolean isConsumer(ImageConsumer c){return consumers.contains(c);}public void removeConsumer(ImageConsumer c){consumers.remove(c);}
-            public void startProduction(ImageConsumer c){addConsumer(c);c.setDimensions(getWidth(),getHeight());c.setColorModel(ColorModel.getRGBdefault());c.setHints(ImageConsumer.TOPDOWNLEFTRIGHT|ImageConsumer.COMPLETESCANLINES|ImageConsumer.SINGLEPASS|ImageConsumer.SINGLEFRAME);c.setPixels(0,0,getWidth(),getHeight(),ColorModel.getRGBdefault(),getRGB(0,0,getWidth(),getHeight(),null,0,getWidth()),0,getWidth());c.imageComplete(ImageConsumer.STATICIMAGEDONE);}
-            public void requestTopDownLeftRightResend(ImageConsumer c){startProduction(c);}
-        };
+        return new sun.awt.image.OffScreenImageSource(this, properties);
     }
 
     // ColorModel is immutable and depends only on the image type, so one instance per

@@ -28,43 +28,23 @@
  * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-package java.awt.geom;
+package javax.sound.sampled;
 
-import java.awt.Shape;
-import sun.awt.geom.Curve;
+import java.security.BasicPermission;
 
 /**
- * Shared winding and intersection tests over a path's exact segments, the
- * way OpenJDK's {@code Path2D} does them: the crossing counts come from
- * {@link Curve}, so curved segments are tested analytically rather than
- * through a flattened approximation.
+ * The {@code "play"} and {@code "record"} permissions. Android has no security manager to
+ * consult them; the class exists so code that builds or checks one links.
  */
-final class PathGeometry {
-    static boolean contains(PathIterator it, double x, double y) {
-        if (x * 0.0 + y * 0.0 != 0.0) {
-            // NaN or infinite coordinates are outside every path.
-            return false;
-        }
-        int mask = (it.getWindingRule() == PathIterator.WIND_NON_ZERO ? -1 : 1);
-        return (Curve.pointCrossingsForPath(it, x, y) & mask) != 0;
+public class AudioPermission extends BasicPermission {
+
+    private static final long serialVersionUID = -5518053473477801126L;
+
+    public AudioPermission(String name) {
+        super(name);
     }
 
-    static boolean rectangle(Shape shape, double x, double y, double w, double h, boolean containing) {
-        return rectangle(shape.getPathIterator(null), x, y, w, h, containing);
-    }
-
-    static boolean rectangle(PathIterator it, double x, double y, double w, double h, boolean containing) {
-        if (java.lang.Double.isNaN(x + w) || java.lang.Double.isNaN(y + h)) {
-            return false;
-        }
-        if (w <= 0 || h <= 0) {
-            return false;
-        }
-        int mask = (it.getWindingRule() == PathIterator.WIND_NON_ZERO ? -1 : 2);
-        int crossings = Curve.rectCrossingsForPath(it, x, y, x + w, y + h);
-        if (containing) {
-            return crossings != Curve.RECT_INTERSECTS && (crossings & mask) != 0;
-        }
-        return crossings == Curve.RECT_INTERSECTS || (crossings & mask) != 0;
+    public AudioPermission(String name, String actions) {
+        super(name, actions);
     }
 }

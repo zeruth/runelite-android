@@ -38,18 +38,56 @@ public class Clipboard {
     private Transferable contents;
     private ClipboardOwner owner;
     private final List<FlavorListener> flavorListeners = new ArrayList<>();
-    public interface Bridge { String readText(); void writeText(String text); }
+    /**
+     * The host (Android) clipboard behind the system clipboard. A text-only bridge implements
+     * {@code readText}/{@code writeText}; a bridge carrying more flavours (HTML, images, file
+     * lists) overrides the three defaults. Reads may throw {@code IllegalStateException} or
+     * {@code SecurityException} while the host refuses access (Android 10+ when unfocused); the
+     * in-process contents are kept then.
+     */
+    public interface Bridge {
+        String readText();
+        void writeText(String text);
+
+        /**
+         * A value equal to the one {@link #writeContents} returned while the host still holds
+         * what was written, and changing when another app replaces it: an unchanged stamp
+         * keeps the in-process {@code Transferable} (and its owner) instead of re-importing.
+         */
+        default Object readStamp() { return readText(); }
+
+        default Transferable readContents() {
+            String text = readText();
+            return text == null ? null : new StringSelection(text);
+        }
+
+        /** Publishes {@code contents}; returns its stamp, or {@code null} when no flavour could be carried. */
+        default Object writeContents(Transferable contents) throws java.io.IOException, UnsupportedFlavorException {
+            if (!contents.isDataFlavorSupported(DataFlavor.stringFlavor)) return null;
+            String text = (String) contents.getTransferData(DataFlavor.stringFlavor);
+            writeText(text);
+            return text;
+        }
+    }
     private volatile Bridge bridge;
-    private String mirroredText;
+    private Object mirroredStamp;
     public void setBridge(Bridge bridge) { synchronized (this) { this.bridge = bridge; } refreshFromBridge(); }
     public synchronized void clearBridge(Bridge expected) { if (bridge == expected) bridge = null; }
+    /** Imports the host clipboard when another app changed it; fires lostOwnership and FlavorEvents like a desktop clipboard change. */
     public void refreshFromBridge() {
         Bridge adapter = bridge;
         if (adapter == null) return;
-        String text;
-        try { text = adapter.readText(); } catch (IllegalStateException | SecurityException unavailable) { return; }
-        synchronized (this) { if (adapter != bridge || java.util.Objects.equals(text, mirroredText)) return; mirroredText = text; }
-        updateContents(text == null ? null : new StringSelection(text), null);
+        Object stamp;
+        Transferable value;
+        try {
+            stamp = adapter.readStamp();
+            synchronized (this) { if (adapter != bridge || java.util.Objects.equals(stamp, mirroredStamp)) return; }
+            value = adapter.readContents();
+        } catch (IllegalStateException | SecurityException unavailable) {
+            return;
+        }
+        synchronized (this) { if (adapter != bridge) return; mirroredStamp = stamp; }
+        updateContents(value, null);
     }
 
     public Clipboard(String name) {
@@ -61,9 +99,15 @@ public class Clipboard {
     public void setContents(Transferable contents, ClipboardOwner owner) {
         updateContents(contents, owner);
         Bridge adapter = bridge;
-        if (adapter != null && contents != null && contents.isDataFlavorSupported(DataFlavor.stringFlavor)) {
-            try { String text = (String) contents.getTransferData(DataFlavor.stringFlavor); synchronized (this) { mirroredText = text; } adapter.writeText(text); }
-            catch (java.io.IOException | UnsupportedFlavorException e) { throw new IllegalStateException("Cannot read clipboard text", e); }
+        if (adapter != null && contents != null) {
+            // Held across the write so a host change notification that races it waits for the
+            // new stamp and does not re-import (and disown) what was just exported.
+            synchronized (this) {
+                Object stamp;
+                try { stamp = adapter.writeContents(contents); }
+                catch (java.io.IOException | UnsupportedFlavorException e) { throw new IllegalStateException("Cannot export clipboard contents", e); }
+                if (stamp != null) mirroredStamp = stamp;
+            }
         }
     }
     private void updateContents(Transferable value, ClipboardOwner newOwner) {

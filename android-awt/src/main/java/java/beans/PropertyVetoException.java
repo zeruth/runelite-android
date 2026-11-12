@@ -31,8 +31,8 @@
 package java.beans;
 
 /**
- * A PropertyVetoException is thrown when a proposed change to a
- * property represents an unacceptable value.
+ * A PropertyVetoException is thrown when a proposed change to a property
+ * represents an unacceptable value.
  */
 public class PropertyVetoException extends Exception {
     private static final long serialVersionUID = 129596057694162164L;
@@ -44,8 +44,7 @@ public class PropertyVetoException extends Exception {
     private PropertyChangeEvent evt;
 
     /**
-     * Constructs a {@code PropertyVetoException} with a
-     * detailed message.
+     * Constructs a {@code PropertyVetoException} with a detailed message.
      *
      * @param mess Descriptive message
      * @param evt A PropertyChangeEvent describing the vetoed change.

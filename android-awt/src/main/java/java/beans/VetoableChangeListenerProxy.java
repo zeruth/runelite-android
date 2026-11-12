@@ -35,21 +35,17 @@ import java.util.EventListenerProxy;
 /**
  * A class which extends the {@code EventListenerProxy} specifically for
  * associating a {@code VetoableChangeListener} with a "constrained" property.
- *
- * @since 1.4
  */
-public class VetoableChangeListenerProxy
-        extends EventListenerProxy<VetoableChangeListener>
+public class VetoableChangeListenerProxy extends EventListenerProxy<VetoableChangeListener>
         implements VetoableChangeListener {
 
     private final String propertyName;
 
     /**
-     * Constructor which binds the {@code VetoableChangeListener}
-     * to a specific property.
+     * Constructor which binds the {@code VetoableChangeListener} to a specific property.
      *
-     * @param propertyName  the name of the property to listen on
-     * @param listener      the listener object
+     * @param propertyName the name of the property to listen on
+     * @param listener the listener object
      */
     public VetoableChangeListenerProxy(String propertyName, VetoableChangeListener listener) {
         super(listener);
@@ -59,7 +55,7 @@ public class VetoableChangeListenerProxy
     /**
      * Forwards the property change event to the listener delegate.
      *
-     * @param event  the property change event
+     * @param event the property change event
      * @exception PropertyVetoException if the recipient wishes the property
      *            change to be rolled back
      */
