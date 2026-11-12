@@ -59,12 +59,14 @@ import java.util.List;
  * finds them with {@code ServiceLoader} over {@code java.desktop}'s {@code provides} clauses; a
  * dexed APK has no such registration for the shadow classes, so the lists are spelled out here, in
  * the JDK's declaration order (the order decides which reader claims a stream first). The MIDI
- * file reader the JDK lists between the AU and WAVE readers is not offered.
+ * file reader the JDK lists between the AU and WAVE readers is not offered. The compressed-audio
+ * reader and decoder come last, where a desktop classpath's mp3spi/vorbisspi providers land.
  */
 public final class SampledProviders {
     private static final List<AudioFileReader> READERS = Collections.unmodifiableList(Arrays.<AudioFileReader>asList(
         new AiffFileReader(), new AuFileReader(),
-        new WaveFileReader(), new WaveFloatFileReader(), new WaveExtensibleFileReader()));
+        new WaveFileReader(), new WaveFloatFileReader(), new WaveExtensibleFileReader(),
+        new CompressedAudioFileReader()));
 
     /** The WAVE readers alone, for {@link WavDecoder}'s fast path; disjoint by WAVE format tag. */
     private static final List<AudioFileReader> WAVE_READERS = Collections.unmodifiableList(Arrays.<AudioFileReader>asList(
@@ -75,7 +77,8 @@ public final class SampledProviders {
 
     private static final List<FormatConversionProvider> CONVERTERS = Collections.unmodifiableList(
         Arrays.<FormatConversionProvider>asList(
-            new AlawCodec(), new AudioFloatFormatConverter(), new PCMtoPCMCodec(), new UlawCodec()));
+            new AlawCodec(), new AudioFloatFormatConverter(), new PCMtoPCMCodec(), new UlawCodec(),
+            new CompressedAudioCodec()));
 
     private static final List<MixerProvider> MIXERS = Collections.<MixerProvider>singletonList(new AndroidMixerProvider());
 
