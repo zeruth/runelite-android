@@ -126,6 +126,12 @@ public final class TestJavaHttpContracts {
         server.createContext("/error",exchange->{byte[] body="error response".getBytes(StandardCharsets.UTF_8);exchange.sendResponseHeaders(409,body.length);exchange.getResponseBody().write(body);exchange.close();});
         server.createContext("/credentials",exchange->{byte[] body=String.valueOf(exchange.getRequestHeaders().getFirst("Authorization")).getBytes(StandardCharsets.UTF_8);exchange.sendResponseHeaders(200,body.length);exchange.getResponseBody().write(body);exchange.close();});
         server.createContext("/cross",exchange->{exchange.getResponseHeaders().set("Location","http://localhost:"+server.getAddress().getPort()+"/credentials");exchange.sendResponseHeaders(302,-1);exchange.close();});
+        String basic="Basic "+Base64.getEncoder().encodeToString("user:secret".getBytes(StandardCharsets.ISO_8859_1));
+        server.createContext("/protected",exchange->{
+            if(basic.equals(exchange.getRequestHeaders().getFirst("Authorization"))){byte[] body="ok".getBytes(StandardCharsets.UTF_8);exchange.sendResponseHeaders(200,body.length);exchange.getResponseBody().write(body);}
+            else{exchange.getResponseHeaders().set("WWW-Authenticate","Basic realm=\"contract\"");exchange.sendResponseHeaders(401,-1);}
+            exchange.close();
+        });
         server.createContext("/slow",exchange->{try{Thread.sleep(600);}catch(InterruptedException ignored){}exchange.sendResponseHeaders(200,-1);exchange.close();});
         server.setExecutor(Executors.newCachedThreadPool(r->{Thread t=new Thread(r);t.setDaemon(true);return t;}));server.start();
         WebSocketEcho echo=new WebSocketEcho();
@@ -188,6 +194,7 @@ public final class TestJavaHttpContracts {
             check(TestHttpServerContracts.read(stream).equals("日本語 test"),"streaming body");stream.close();
             response=client.send(HttpRequest.newBuilder(URI.create(base+"/cross")).header("Authorization","Bearer local-test").build(),HttpResponse.BodyHandlers.ofString());
             check(response.body().equals("null"),"cross-origin authorization stripped");
+            authenticator(base,server.getAddress().getPort());
             try{HttpRequest.newBuilder(URI.create(base)).header("X-Test","bad\r\nInjected: yes");throw new AssertionError("header injection accepted");}catch(IllegalArgumentException expected){}
             if(args.length>0&&args[0].equals("shadow")){try{HttpRequest.newBuilder(URI.create("http://user:pass@localhost/"));throw new AssertionError("userinfo accepted");}catch(IllegalArgumentException expected){}}
             try{HttpRequest.BodyPublishers.fromPublisher(HttpRequest.BodyPublishers.noBody(),0);throw new AssertionError("nonpositive publisher length accepted");}catch(IllegalArgumentException expected){}
@@ -203,6 +210,24 @@ public final class TestJavaHttpContracts {
             server.stop(0);echo.close();
             try(Stream<Path> files=Files.walk(temp)){files.sorted(Comparator.reverseOrder()).forEach(path->path.toFile().delete());}
         }
+    }
+
+    /** A Basic 401 challenge is answered through the Authenticator, which sees the requesting host, port, realm, scheme and type. */
+    static void authenticator(String base,int port)throws Exception{
+        List<String> asked=new CopyOnWriteArrayList<>();
+        Authenticator authenticator=new Authenticator(){
+            protected PasswordAuthentication getPasswordAuthentication(){
+                asked.add(getRequestingHost()+"|"+getRequestingPort()+"|"+getRequestingPrompt()+"|"+getRequestingScheme()+"|"+getRequestorType()+"|"+getRequestingURL());
+                return new PasswordAuthentication("user","secret".toCharArray());
+            }
+        };
+        HttpClient client=HttpClient.newBuilder().authenticator(authenticator).version(HttpClient.Version.HTTP_1_1).build();
+        check(client.authenticator().get()==authenticator,"authenticator getter");
+        HttpResponse<String> response=client.send(HttpRequest.newBuilder(URI.create(base+"/protected")).build(),HttpResponse.BodyHandlers.ofString());
+        check(response.statusCode()==200&&response.body().equals("ok"),"Basic challenge answered: "+response.statusCode());
+        check(!asked.isEmpty()&&asked.get(0).equals("127.0.0.1|"+port+"|contract|basic|SERVER|"+base+"/protected"),"authenticator requesting fields "+asked);
+        response=HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build().send(HttpRequest.newBuilder(URI.create(base+"/protected")).build(),HttpResponse.BodyHandlers.ofString());
+        check(response.statusCode()==401,"no authenticator leaves the 401: "+response.statusCode());
     }
 
     static void webSocket(HttpClient client,int port,boolean shadow)throws Exception{

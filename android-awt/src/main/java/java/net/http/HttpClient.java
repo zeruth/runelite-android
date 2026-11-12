@@ -222,13 +222,39 @@ public abstract class HttpClient {
             Authenticator.RequestorType type=forProxy?Authenticator.RequestorType.PROXY:Authenticator.RequestorType.SERVER;
             try{
                 // JDK 9+ instance entry point fills the requesting host/port/realm the authenticator reads.
+                // The JDK client names the scheme in lower case ("basic"), unlike HttpURLConnection.
                 java.lang.reflect.Method instance=Authenticator.class.getMethod("requestPasswordAuthenticationInstance",String.class,InetAddress.class,int.class,String.class,String.class,String.class,URL.class,Authenticator.RequestorType.class);
-                return (PasswordAuthentication)instance.invoke(authenticator,host,null,port,uri.getScheme(),realm,"Basic",uri.toURL(),type);
+                return (PasswordAuthentication)instance.invoke(authenticator,host,null,port,uri.getScheme(),realm,"basic",uri.toURL(),type);
             }catch(NoSuchMethodException older){
-                // Android's Authenticator predates it: ask the protected hook directly, without the requesting fields.
-                try{java.lang.reflect.Method hook=Authenticator.class.getDeclaredMethod("getPasswordAuthentication");hook.setAccessible(true);return (PasswordAuthentication)hook.invoke(authenticator);}
-                catch(ReflectiveOperationException e){throw new IOException("Authenticator unavailable",e);}
+                return legacyCredentials(authenticator,host,port,uri,realm,type);
             }catch(ReflectiveOperationException e){throw new IOException("Authenticator failed",e.getCause()==null?e:e.getCause());}
+        }
+        /**
+         * Android's Authenticator is the JDK 8 one, without requestPasswordAuthenticationInstance: do what
+         * that JDK 9 method does, under the same lock, by filling the private requesting* fields the
+         * protected getters read (libcore keeps OpenJDK 8's names) before calling getPasswordAuthentication.
+         * Those fields are non-SDK; where hidden-API policy denies one, its getter keeps the value from
+         * the last request, and the authenticator is still asked rather than the 401/407 returned.
+         */
+        private static PasswordAuthentication legacyCredentials(Authenticator authenticator,String host,int port,URI uri,String realm,Authenticator.RequestorType type)throws IOException{
+            URL url=uri.toURL();
+            synchronized(authenticator){
+                requesting(authenticator,"requestingHost",host);requesting(authenticator,"requestingSite",null);
+                requesting(authenticator,"requestingPort",port);requesting(authenticator,"requestingProtocol",uri.getScheme());
+                requesting(authenticator,"requestingPrompt",realm);requesting(authenticator,"requestingScheme","basic");
+                requesting(authenticator,"requestingURL",url);requesting(authenticator,"requestingAuthType",type);
+                try{
+                    java.lang.reflect.Method hook=Authenticator.class.getDeclaredMethod("getPasswordAuthentication");hook.setAccessible(true);
+                    return (PasswordAuthentication)hook.invoke(authenticator);
+                }catch(java.lang.reflect.InvocationTargetException e){throw new IOException("Authenticator failed",e.getCause());}
+                catch(ReflectiveOperationException|RuntimeException e){throw new IOException("Authenticator unavailable",e);}
+            }
+        }
+        private static void requesting(Authenticator authenticator,String name,Object value){
+            try{java.lang.reflect.Field field=Authenticator.class.getDeclaredField(name);field.setAccessible(true);field.set(authenticator,value);}
+            catch(ReflectiveOperationException|RuntimeException denied){
+                // Hidden-API policy or a renamed libcore field: see legacyCredentials.
+            }
         }
         private static void drain(HttpURLConnection connection){
             try(InputStream stream=connection.getErrorStream()){if(stream!=null){byte[] skip=new byte[4096];while(stream.read(skip)>=0){}}}catch(IOException ignored){}
