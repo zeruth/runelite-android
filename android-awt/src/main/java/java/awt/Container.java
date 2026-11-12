@@ -160,21 +160,6 @@ public class Container extends Component {
         if (added) fireContainerEvent(java.awt.event.ContainerEvent.COMPONENT_ADDED, comp);
     }
 
-    /**
-     * Adds the specified component to this container at the specified index. The public
-     * {@code add} overloads here do the work themselves rather than funnelling through this
-     * method, so it exists for subclasses that call {@code super.addImpl} the way JDK Swing
-     * classes do (CellRendererPane); overriding it does not intercept {@code add}.
-     *
-     * @param comp the component to be added
-     * @param constraints an object expressing layout constraints for this component
-     * @param index the position in the container's list at which to insert the component,
-     *        where {@code -1} means append to the end
-     */
-    protected void addImpl(Component comp, Object constraints, int index) {
-        add(comp, constraints, index);
-    }
-
     public void remove(int index) {
         Component c = children.remove(index);
         if (c != null) {
