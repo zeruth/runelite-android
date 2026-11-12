@@ -30,31 +30,168 @@
  */
 package java.awt;
 
+/**
+ * The {@code Taskbar} class allows a Java application to interact with the
+ * system task area (taskbar, Dock, etc.).
+ *
+ * <p>Android has no taskbar a single app can drive: the launcher owns icons,
+ * badges come from posted notifications and attention is requested with a
+ * notification too. {@link #isTaskbarSupported()} is therefore always
+ * {@code false}, {@link #getTaskbar()} throws, and every feature reports
+ * unsupported, as on a JDK desktop without a taskbar peer.
+ *
+ * @since 9
+ */
+// JDK 9+ (9)
 public class Taskbar {
-    public enum Feature {
-        ICON_BADGE_NUMBER, ICON_BADGE_TEXT, ICON_BADGE_IMAGE_WINDOW, ICON_IMAGE,
-        MENU, PROGRESS_STATE_WINDOW, PROGRESS_VALUE, PROGRESS_VALUE_WINDOW,
-        USER_ATTENTION, USER_ATTENTION_WINDOW
+
+    /** List of provided features. */
+    public static enum Feature {
+        /** Represents a textual icon badge feature. */
+        ICON_BADGE_TEXT,
+        /** Represents a numerical icon badge feature. */
+        ICON_BADGE_NUMBER,
+        /** Represents a graphical icon badge feature for a window. */
+        ICON_BADGE_IMAGE_WINDOW,
+        /** Represents an icon feature. */
+        ICON_IMAGE,
+        /** Represents a menu feature. */
+        MENU,
+        /** Represents a progress state feature for a specified window. */
+        PROGRESS_STATE_WINDOW,
+        /** Represents a progress value feature. */
+        PROGRESS_VALUE,
+        /** Represents a progress value feature for a specified window. */
+        PROGRESS_VALUE_WINDOW,
+        /** Represents a user attention request feature. */
+        USER_ATTENTION,
+        /** Represents a user attention request feature for a specified window. */
+        USER_ATTENTION_WINDOW
     }
 
-    public enum State {
-        OFF, NORMAL, PAUSED, ERROR, INDETERMINATE
+    /** Kinds of available window progress states. */
+    public static enum State {
+        /** Stops displaying the progress. */
+        OFF,
+        /** The progress indicator displays with normal color and determinate mode. */
+        NORMAL,
+        /** Shows progress as paused. */
+        PAUSED,
+        /** The progress indicator displays activity without specifying what proportion is done. */
+        INDETERMINATE,
+        /** Shows that an error has occurred. */
+        ERROR
     }
 
     private static final Taskbar INSTANCE = new Taskbar();
 
-    private Taskbar() {}
-
-    public static boolean isTaskbarSupported() { return false; }
-    public static Taskbar getTaskbar() {
-        throw net.runelite.awt.AwtUnsupported.fail("java.awt.Taskbar.getTaskbar()");
+    private Taskbar() {
     }
 
-    public boolean isSupported(Feature feature) { return false; }
-    public Image getIconImage() { return null; }
-    public void setIconImage(Image image) {}
-    public void setIconBadge(String badge) {}
-    public void setProgressValue(int value) {}
-    public void setProgressState(State state) {}
-    public void requestUserAttention(boolean enabled, boolean critical) {}
+    private void checkFeatureSupport(Feature featureType) {
+        if (!isSupported(featureType)) {
+            throw new UnsupportedOperationException("The " + featureType.name()
+                    + " feature is not supported on the current platform!");
+        }
+    }
+
+    /**
+     * Returns the {@code Taskbar} instance of the current context.
+     *
+     * @throws UnsupportedOperationException always: Android has no taskbar
+     */
+    public static synchronized Taskbar getTaskbar() {
+        if (!isTaskbarSupported()) {
+            throw new UnsupportedOperationException("Taskbar API is not supported on the current platform");
+        }
+        return INSTANCE;
+    }
+
+    /** Tests whether a {@code Taskbar} is supported: never on Android. */
+    public static boolean isTaskbarSupported() {
+        return false;
+    }
+
+    /** Tests whether a feature is supported: none is on Android. */
+    public boolean isSupported(Feature feature) {
+        return false;
+    }
+
+    /**
+     * Requests user attention to this application. Android's counterpart is a
+     * heads-up notification, which {@link TrayIcon#displayMessage} already
+     * posts, so there is no separate request.
+     *
+     * @throws UnsupportedOperationException always ({@code USER_ATTENTION})
+     */
+    public void requestUserAttention(final boolean enabled, final boolean critical) {
+        checkFeatureSupport(Feature.USER_ATTENTION);
+    }
+
+    /** @throws UnsupportedOperationException always ({@code USER_ATTENTION_WINDOW}) */
+    public void requestWindowUserAttention(Window w) {
+        checkFeatureSupport(Feature.USER_ATTENTION_WINDOW);
+    }
+
+    /** @throws UnsupportedOperationException always ({@code MENU}) */
+    public void setMenu(final PopupMenu menu) {
+        checkFeatureSupport(Feature.MENU);
+    }
+
+    /** @throws UnsupportedOperationException always ({@code MENU}) */
+    public PopupMenu getMenu() {
+        checkFeatureSupport(Feature.MENU);
+        return null;
+    }
+
+    /** @throws UnsupportedOperationException always ({@code ICON_IMAGE}): the launcher owns the icon */
+    public void setIconImage(final Image image) {
+        checkFeatureSupport(Feature.ICON_IMAGE);
+    }
+
+    /** @throws UnsupportedOperationException always ({@code ICON_IMAGE}) */
+    public Image getIconImage() {
+        checkFeatureSupport(Feature.ICON_IMAGE);
+        return null;
+    }
+
+    /**
+     * Affixes a small system-provided badge to this application's icon. On
+     * Android the launcher derives badges from the app's posted notifications;
+     * an app cannot set a number or text on its icon directly.
+     *
+     * @throws UnsupportedOperationException always ({@code ICON_BADGE_NUMBER} / {@code ICON_BADGE_TEXT})
+     */
+    public void setIconBadge(final String badge) {
+        if (badge != null) {
+            try {
+                Integer.parseInt(badge);
+                checkFeatureSupport(Feature.ICON_BADGE_NUMBER);
+                return;
+            } catch (NumberFormatException ignored) {
+                // a non-numeric badge is a text badge
+            }
+        }
+        checkFeatureSupport(Feature.ICON_BADGE_TEXT);
+    }
+
+    /** @throws UnsupportedOperationException always ({@code ICON_BADGE_IMAGE_WINDOW}) */
+    public void setWindowIconBadge(Window w, final Image badge) {
+        checkFeatureSupport(Feature.ICON_BADGE_IMAGE_WINDOW);
+    }
+
+    /** @throws UnsupportedOperationException always ({@code PROGRESS_VALUE}) */
+    public void setProgressValue(int value) {
+        checkFeatureSupport(Feature.PROGRESS_VALUE);
+    }
+
+    /** @throws UnsupportedOperationException always ({@code PROGRESS_VALUE_WINDOW}) */
+    public void setWindowProgressValue(Window w, int value) {
+        checkFeatureSupport(Feature.PROGRESS_VALUE_WINDOW);
+    }
+
+    /** @throws UnsupportedOperationException always ({@code PROGRESS_STATE_WINDOW}) */
+    public void setWindowProgressState(Window w, State state) {
+        checkFeatureSupport(Feature.PROGRESS_STATE_WINDOW);
+    }
 }

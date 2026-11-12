@@ -35,6 +35,17 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/update_paths" />
         </provider>
+        <!-- java.awt.Desktop open/edit/print: a FileProvider subclass, since two entries for
+             the same provider class collide in the merged manifest. -->
+        <provider
+            android:name=".ui.bridge.DesktopFileProvider"
+            android:authorities="${applicationId}.desktop"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/desktop_paths" />
+        </provider>
         <!-- PackageInstaller session results for the watch auto-update (UpdateChecker.installSession). -->
         <receiver
             android:name=".update.UpdateInstallReceiver"

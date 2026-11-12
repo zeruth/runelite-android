@@ -31,11 +31,13 @@ class MainActivity : ComponentActivity() {
     }
     private lateinit var swingDialogs: net.runelite.mp.ui.bridge.SwingDialogs
     private lateinit var swingClipboard: net.runelite.mp.ui.bridge.SwingClipboard
+    private lateinit var swingDesktop: net.runelite.mp.ui.bridge.SwingDesktop
 
     override fun onDestroy() {
         net.runelite.client.plugins.mobile.MobileDisplaySettings.detach()
         if (::swingDialogs.isInitialized) swingDialogs.close()
         if (::swingClipboard.isInitialized) swingClipboard.close()
+        if (::swingDesktop.isInitialized) swingDesktop.close()
         super.onDestroy()
     }
 
@@ -102,22 +104,7 @@ class MainActivity : ComponentActivity() {
             )
         }
 
-        // Use the real browser for RuneLite/Google sign-in; credentials stay in the browser.
-        val browserContext = applicationContext
-        java.awt.Desktop.setBrowseHandler { uri ->
-            try {
-                val target = android.net.Uri.parse(uri.toString())
-                if (net.runelite.mp.account.RuneLiteLoginService.isRuneLiteLogin(target)) {
-                    browserContext.startForegroundService(android.content.Intent(
-                        browserContext, net.runelite.mp.account.RuneLiteLoginService::class.java
-                    ).setData(target))
-                } else browserContext.startActivity(android.content.Intent(
-                    android.content.Intent.ACTION_VIEW, android.net.Uri.parse(uri.toString())
-                ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
-            } catch (e: android.content.ActivityNotFoundException) {
-                throw java.io.IOException("No web browser is installed", e)
-            }
-        }
+        swingDesktop = net.runelite.mp.ui.bridge.SwingDesktop(this)
         swingDialogs = net.runelite.mp.ui.bridge.SwingDialogs(this)
         swingClipboard = net.runelite.mp.ui.bridge.SwingClipboard(this)
         setContent { AndroidApp() }
