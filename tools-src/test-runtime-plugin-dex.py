@@ -9,8 +9,22 @@ import subprocess
 import zipfile
 
 
-SHADOW_SOURCES = Path(__file__).resolve().parent.parent / "android-awt" / "src" / "main" / "java"
+REPO = Path(__file__).resolve().parent.parent
+SHADOW_SOURCES = REPO / "android-awt" / "src" / "main" / "java"
 SHADOW_ROOTS = ("java", "javax", "sun", "com/sun")
+RETARGET_SOURCES = REPO / "android" / "src" / "androidMain" / "java" / "net" / "runelite" / "mp" / "compat"
+
+
+def gradle_jar(group, artifact):
+    """The newest cached Gradle jar of an artifact (no sources/javadoc), as the app resolved it."""
+    root = Path.home() / ".gradle" / "caches" / "modules-2" / "files-2.1" / group / artifact
+    def version_key(path):
+        return [int(part) if part.isdigit() else 0 for part in re.split(r"[.-]", path.parent.parent.name)]
+    jars = sorted((jar for jar in root.glob(f"*/*/{artifact}-*.jar")
+                   if not jar.name.endswith(("-sources.jar", "-javadoc.jar"))), key=version_key)
+    if not jars:
+        raise SystemExit(f"{group}:{artifact} is not in the Gradle cache; pass --{artifact} or build the app once")
+    return jars[-1]
 
 
 def check_host_api(host_api):
@@ -38,7 +52,11 @@ def main():
     for name in ("java-home", "sdk", "r8", "apk", "output"):
         parser.add_argument("--" + name, type=Path, required=True)
     parser.add_argument("--serial", required=True)
+    parser.add_argument("--asm", type=Path, help="ASM jar for the host retargeter (default: Gradle cache)")
+    parser.add_argument("--asm-commons", type=Path, help="ASM commons jar (default: Gradle cache)")
     args = parser.parse_args()
+    asm = args.asm or gradle_jar("org.ow2.asm", "asm")
+    asm_commons = args.asm_commons or gradle_jar("org.ow2.asm", "asm-commons")
     if not re.fullmatch(r"emulator-\d+", args.serial):
         raise SystemExit("This probe only targets an emulator.")
     out = args.output.resolve()
@@ -83,13 +101,40 @@ def main():
     run("aligned D8 conversion", *compiler, "--desugared-lib", out / "desugar.json",
         "--lib", out / "java-api.jar", "--classpath", out / "host-api.jar",
         "--output", out / "aligned.jar", out / "plugin.jar")
+
+    # Retargeting fixtures: the app's own JdkRetargeter, compiled on the host, rewrites a
+    # desktop-compiled plugin the way PluginDexer does before D8; the driver checks the bytecode,
+    # the emulator runs it against the APK's shims.
+    tool_classes = out / "retarget-tool"
+    fixture_classes = out / "retarget-classes"
+    tool_classes.mkdir(exist_ok=True)
+    fixture_classes.mkdir(exist_ok=True)
+    classpath = os.pathsep.join(map(str, (asm, asm_commons)))
+    run("compile JdkRetargeter", java / ("javac" + suffix), "--release", "11", "-encoding", "UTF-8",
+        "-cp", classpath, "-d", tool_classes, RETARGET_SOURCES / "JdkRetargeter.java",
+        *sorted((RETARGET_SOURCES / "jdk").glob("*.java")), Path(__file__).resolve().parent / "TestRuntimeRetarget.java")
+    run("compile retarget fixture", java / ("javac" + suffix), "--release", "11", "-encoding", "UTF-8",
+        "-d", fixture_classes, Path(__file__).resolve().parent / "TestRuntimeRetargetPlugin.java")
+    run("package retarget fixture", java / ("jar" + suffix), "cf", out / "retarget-plugin.jar", "-C", fixture_classes, ".")
+    result = run("retarget fixture", java / ("java" + suffix), "-Xverify:all",
+                 "-cp", os.pathsep.join((str(tool_classes), classpath)), "TestRuntimeRetarget",
+                 out / "retarget-plugin.jar", out / "retarget-rewritten.jar")
+    if "PASS:" not in result:
+        raise SystemExit("Missing retarget success marker")
+    run("retarget D8 conversion", *compiler, "--desugared-lib", out / "desugar.json",
+        "--lib", out / "java-api.jar", "--classpath", out / "host-api.jar",
+        "--output", out / "retarget.jar", out / "retarget-rewritten.jar")
+
     remote = "/data/local/tmp/runtime-plugin-contracts"
     run("prepare emulator fixture", adb, "-s", args.serial, "shell", "mkdir", "-p", remote)
-    for local, name in ((args.apk, "host.apk"), (out / "old.jar", "old.jar"), (out / "aligned.jar", "aligned.jar")):
+    for local, name in ((args.apk, "host.apk"), (out / "old.jar", "old.jar"), (out / "aligned.jar", "aligned.jar"),
+                        (out / "retarget.jar", "retarget.jar")):
         run("push " + name, adb, "-s", args.serial, "push", local, remote + "/" + name)
-    for name, negative in (("old.jar", True), ("aligned.jar", False)):
+    for name, main_class, negative in (("old.jar", "TestRuntimeHttpPlugin", True),
+                                       ("aligned.jar", "TestRuntimeHttpPlugin", False),
+                                       ("retarget.jar", "TestRuntimeRetargetPlugin", False)):
         result = run("link " + name, adb, "-s", args.serial, "shell",
-                     f"CLASSPATH={remote}/host.apk:{remote}/{name}", "dalvikvm", "TestRuntimeHttpPlugin",
+                     f"CLASSPATH={remote}/host.apk:{remote}/{name}", "dalvikvm", main_class,
                      expected_failure=negative)
         if not negative and "PASS:" not in result:
             raise SystemExit("Missing fixture success marker")

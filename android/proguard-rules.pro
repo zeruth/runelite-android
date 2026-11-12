@@ -66,6 +66,8 @@
 # Referenced by hub bytecode rewritten on the device, outside R8's input graph.
 -keep class net.runelite.mp.plugins.DesktopRegexStrings { *; }
 -keep class net.runelite.mp.compat.regex.** { *; }
+# JdkRetargets shims: the retargeted client and hub jars call them by name and descriptor.
+-keep class net.runelite.mp.compat.jdk.** { *; }
 
 # Downloaded hub plugins reach H2 through the parent loader after APK shrinking.
 -keep class org.h2.** { *; }

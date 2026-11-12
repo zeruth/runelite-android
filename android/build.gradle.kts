@@ -382,6 +382,84 @@ if (androidSdkAvailable) {
     tasks.configureEach {
         if (name == "assembleRelease") dependsOn(checkReleaseShadowMapping)
     }
+
+    // JdkRetargeter rewrites only the downloaded client and hub jars, so android-awt and the app
+    // itself must never call a JdkRetargets member: on API 26-35 that is a NoSuchMethodError no
+    // pass would catch. The rows are read from the table's source (one onStatic/onVirtual/
+    // onInterface call per row, owner, name and descriptor first) and matched against the
+    // method references and class constants in the compiled classes' constant pools.
+    // The method references (`owner.namedescriptor`) and class constants (`class owner`) of a
+    // class file, read from its constant pool so the check needs no bytecode library.
+    fun constantPoolRefs(bytes: ByteArray): List<String> {
+        val buf = java.nio.ByteBuffer.wrap(bytes)
+        if (buf.int != 0xCAFEBABE.toInt()) return emptyList()
+        buf.int // minor and major version
+        fun u2() = buf.short.toInt() and 0xffff
+        val count = u2()
+        val utf = arrayOfNulls<String>(count)
+        val classNames = IntArray(count)
+        val natNames = IntArray(count)
+        val natDescriptors = IntArray(count)
+        val methodRefs = mutableListOf<Pair<Int, Int>>()
+        var i = 1
+        while (i < count) {
+            val tag = buf.get().toInt()
+            when (tag) {
+                1 -> { val raw = ByteArray(u2()); buf.get(raw); utf[i] = String(raw, Charsets.UTF_8) }
+                3, 4, 9, 17, 18 -> buf.position(buf.position() + 4)
+                5, 6 -> { buf.position(buf.position() + 8); i++ }
+                7 -> classNames[i] = u2()
+                8, 16, 19, 20 -> buf.position(buf.position() + 2)
+                10, 11 -> { val owner = u2(); val nat = u2(); methodRefs.add(owner to nat) }
+                12 -> { natNames[i] = u2(); natDescriptors[i] = u2() }
+                15 -> buf.position(buf.position() + 3)
+                else -> throw GradleException("unknown constant pool tag $tag")
+            }
+            i++
+        }
+        return methodRefs.map { (owner, nat) -> "${utf[classNames[owner]]}.${utf[natNames[nat]]}${utf[natDescriptors[nat]]}" } +
+            classNames.filter { it != 0 }.map { "class ${utf[it]}" }
+    }
+    val retargetTable =file("src/androidMain/java/net/runelite/mp/compat/jdk/JdkRetargets.java")
+    val appCompileTasks = tasks.matching { it.name == "compileDebugJavaWithJavac" || it.name == "compileDebugKotlin" }
+    val jdkRetargetCheck = tasks.register("jdkRetargetCheck") {
+        group = "verification"
+        description = "Fail when android-awt or the app calls a JDK member the JdkRetargets table retargets."
+        dependsOn(":android-awt:compileReleaseJavaWithJavac", appCompileTasks)
+        inputs.file(retargetTable)
+        inputs.dir(hostApi)
+        inputs.files(provider { appCompileTasks.flatMap { it.outputs.files.files } })
+        doLast {
+            val source = retargetTable.readText()
+            val rows = Regex("""on(?:Static|Virtual|Interface)\("([^"]+)", "([^"]+)", "([^"]+)"""")
+                .findAll(source).map { "${it.groupValues[1]}.${it.groupValues[2]}${it.groupValues[3]}" }.toSet()
+            val relocated = Regex("""relocate\("([^"]+)"""").findAll(source).map { "class ${it.groupValues[1]}" }.toSet()
+            if (rows.isEmpty()) throw GradleException("no rows parsed from $retargetTable; keep the one-call-per-row shape")
+            val roots = listOf(hostApi.get()) + appCompileTasks.flatMap { it.outputs.files.files }.filter { it.isDirectory }
+            val hits = sortedSetOf<String>()
+            var scanned = 0
+            for (root in roots) {
+                root.walkTopDown().filter { it.isFile && it.extension == "class" }.forEach { file ->
+                    val name = file.relativeTo(root).invariantSeparatorsPath.removeSuffix(".class")
+                    // The shims are the one place allowed to name what they stand in for.
+                    if (name.startsWith("net/runelite/mp/compat/jdk/")) return@forEach
+                    scanned++
+                    for (ref in constantPoolRefs(file.readBytes())) {
+                        if (ref in rows || ref in relocated) hits += "$name -> $ref"
+                    }
+                }
+            }
+            println("== JDK retarget check: ${rows.size} rows, ${relocated.size} relocated types, $scanned classes ==")
+            hits.forEach { println("  $it") }
+            if (hits.isNotEmpty()) {
+                throw GradleException("${hits.size} call(s) to JdkRetargets members in android-awt or the app; " +
+                    "call the net.runelite.mp.compat.jdk shim instead")
+            }
+        }
+    }
+    tasks.configureEach {
+        if (name == "assembleDebug" || name == "check") dependsOn(jdkRetargetCheck)
+    }
 }
 
 // AGP's `coreLibraryDesugaring` configuration is set up by the android plugin after the
