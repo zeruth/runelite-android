@@ -298,7 +298,13 @@ if (androidSdkAvailable) {
             // java.util.concurrent.Flow, which android.jar only has from API 30. Below that it
             // must come from the desugared library or from a shadow class; neither means
             // NoClassDefFoundError on the first HttpClient call on an API 26-29 device.
-            val flowDesugared = out.resolve("desugar.json").readText().contains("\"java.util.concurrent.Flow")
+            // desugar.json abbreviates packages through its package_map (2.1.4 maps
+            // "java.util.concurrent" to "h$"), so Flow shows up as "h$Flow" in a rewrite_type entry.
+            val desugarJson = out.resolve("desugar.json").readText()
+            val concurrentPrefix = Regex("\"java\\.util\\.concurrent\"\\s*:\\s*\"([^\"]+)\"")
+                .find(desugarJson)?.groupValues?.get(1)
+            val flowDesugared = desugarJson.contains("\"java.util.concurrent.Flow\"") ||
+                (concurrentPrefix != null && desugarJson.contains("\"" + concurrentPrefix + "Flow\""))
             val flowShadowed = hostApi.get().resolve("java/util/concurrent/Flow.class").isFile
             println("java.util.concurrent.Flow below API 30: " + when {
                 flowDesugared -> "desugar_jdk_libs $coreLibraryVersion"
