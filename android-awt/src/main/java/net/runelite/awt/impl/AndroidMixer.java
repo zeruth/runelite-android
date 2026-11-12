@@ -41,6 +41,7 @@ import javax.sound.sampled.LineListener;
 import javax.sound.sampled.LineUnavailableException;
 import javax.sound.sampled.Mixer;
 import javax.sound.sampled.SourceDataLine;
+import javax.sound.sampled.TargetDataLine;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -51,8 +52,8 @@ import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * The one mixer {@link AudioSystem} reports: AudioTrack output, offering streamed
- * {@link SourceDataLine}s (the pooled lines of {@link AndroidAudioBridge}) and static {@link Clip}s.
- * It has no target lines and no ports; capture is not part of this mixer.
+ * {@link SourceDataLine}s (the pooled lines of {@link AndroidAudioBridge}) and static {@link Clip}s,
+ * and AudioRecord capture as {@link TargetDataLine}s. It has no ports.
  */
 public final class AndroidMixer implements Mixer {
     public static final Mixer.Info INFO = new MixerInfo();
@@ -61,6 +62,7 @@ public final class AndroidMixer implements Mixer {
     private static final int DEFAULT_BUFFER = 4096;
 
     private final Line.Info[] sourceInfo = sourceInfo();
+    private final Line.Info[] targetInfo = targetInfo();
     private final Map<Line, Boolean> created = Collections.synchronizedMap(new WeakHashMap<Line, Boolean>());
     private final List<LineListener> listeners = new CopyOnWriteArrayList<LineListener>();
     private volatile boolean open;
@@ -109,6 +111,21 @@ public final class AndroidMixer implements Mixer {
         };
     }
 
+    /** AudioRecord's 16-bit and float capture; the line reorders bytes for big-endian requests. */
+    private static Line.Info[] targetInfo() {
+        List<AudioFormat> formats = new ArrayList<AudioFormat>();
+        for (int channels = 1; channels <= 2; channels++) {
+            for (boolean big : new boolean[]{false, true}) {
+                formats.add(pcm(AudioFormat.Encoding.PCM_SIGNED, 16, channels, big));
+                formats.add(pcm(AudioFormat.Encoding.PCM_FLOAT, 32, channels, big));
+            }
+        }
+        return new Line.Info[]{
+            new DataLine.Info(TargetDataLine.class, formats.toArray(new AudioFormat[0]),
+                AudioSystem.NOT_SPECIFIED, AudioSystem.NOT_SPECIFIED),
+        };
+    }
+
     private static AudioFormat pcm(AudioFormat.Encoding encoding, int bits, int channels, boolean bigEndian) {
         int frameSize = channels == AudioSystem.NOT_SPECIFIED ? AudioSystem.NOT_SPECIFIED : channels * ((bits + 7) / 8);
         return new AudioFormat(encoding, AudioSystem.NOT_SPECIFIED, bits, channels, frameSize,
@@ -119,7 +136,7 @@ public final class AndroidMixer implements Mixer {
 
     @Override public Mixer.Info getMixerInfo() { return INFO; }
     @Override public Line.Info[] getSourceLineInfo() { return sourceInfo.clone(); }
-    @Override public Line.Info[] getTargetLineInfo() { return new Line.Info[0]; }
+    @Override public Line.Info[] getTargetLineInfo() { return targetInfo.clone(); }
 
     @Override
     public Line.Info[] getSourceLineInfo(Line.Info info) {
@@ -130,7 +147,14 @@ public final class AndroidMixer implements Mixer {
         return result.toArray(new Line.Info[0]);
     }
 
-    @Override public Line.Info[] getTargetLineInfo(Line.Info info) { return new Line.Info[0]; }
+    @Override
+    public Line.Info[] getTargetLineInfo(Line.Info info) {
+        List<Line.Info> result = new ArrayList<Line.Info>();
+        for (Line.Info supported : targetInfo) {
+            if (info.matches(supported)) result.add(supported);
+        }
+        return result.toArray(new Line.Info[0]);
+    }
 
     @Override
     public boolean isLineSupported(Line.Info info) {
@@ -140,6 +164,9 @@ public final class AndroidMixer implements Mixer {
     private Line.Info supported(Line.Info info) {
         if (info == null) return null;
         for (Line.Info candidate : sourceInfo) {
+            if (info.matches(candidate)) return candidate;
+        }
+        for (Line.Info candidate : targetInfo) {
             if (info.matches(candidate)) return candidate;
         }
         return null;
@@ -152,6 +179,20 @@ public final class AndroidMixer implements Mixer {
         Line line;
         if (match.getLineClass() == Clip.class) {
             line = new AndroidClip();
+        } else if (match.getLineClass() == TargetDataLine.class) {
+            AudioFormat format = null;
+            int max = AudioSystem.NOT_SPECIFIED;
+            if (info instanceof DataLine.Info) {
+                DataLine.Info request = (DataLine.Info) info;
+                AudioFormat[] formats = request.getFormats();
+                if (formats.length > 0) format = concrete(formats[0]);
+                max = request.getMaxBufferSize();
+            }
+            if (format == null) format = new AudioFormat(44100f, 16, 2, true, false);
+            // Unspecified leaves the line its JDK default of half a second.
+            int bufferSize = max > 0
+                ? Math.max(format.getFrameSize(), max - max % format.getFrameSize()) : AudioSystem.NOT_SPECIFIED;
+            line = AndroidAudioBridge.openTargetDataLine(format, bufferSize);
         } else {
             AudioFormat format = null;
             int bufferSize = DEFAULT_BUFFER;
@@ -188,18 +229,18 @@ public final class AndroidMixer implements Mixer {
         return isLineSupported(info) ? AudioSystem.NOT_SPECIFIED : 0;
     }
 
-    @Override
-    public Line[] getSourceLines() {
+    @Override public Line[] getSourceLines() { return openLines(false); }
+    @Override public Line[] getTargetLines() { return openLines(true); }
+
+    private Line[] openLines(boolean target) {
         List<Line> lines = new ArrayList<Line>();
         synchronized (created) {
             for (Line line : created.keySet()) {
-                if (line.isOpen()) lines.add(line);
+                if (line.isOpen() && (line instanceof TargetDataLine) == target) lines.add(line);
             }
         }
         return lines.toArray(new Line[0]);
     }
-
-    @Override public Line[] getTargetLines() { return new Line[0]; }
 
     @Override
     public void synchronize(Line[] lines, boolean maintainSync) {

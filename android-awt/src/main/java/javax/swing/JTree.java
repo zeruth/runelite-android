@@ -308,6 +308,9 @@ public class JTree extends JComponent implements Scrollable, Accessible
     /** If true, mouse presses on selections initiate a drag operation. */
     private boolean dragEnabled;
 
+    /** The long-press drag gesture armed by {@code setDragEnabled}. */
+    private transient java.awt.dnd.DragGestureRecognizer dragRecognizer;
+
     /**
      * The drop mode for this component.
      */
@@ -325,30 +328,14 @@ public class JTree extends JComponent implements Scrollable, Accessible
      * @see #getDropLocation
      * @since 1.6
      */
-    // JDK: extends TransferHandler.DropLocation, which carries only the drop point;
-    // the shadow has no TransferHandler yet, so the point lives here.
-    public static final class DropLocation {
-        private final Point dropPoint;
+    public static final class DropLocation extends TransferHandler.DropLocation {
         private final TreePath path;
         private final int index;
 
         private DropLocation(Point p, TreePath path, int index) {
-            if (p == null) {
-                throw new IllegalArgumentException("Point cannot be null");
-            }
-            this.dropPoint = new Point(p);
+            super(p);
             this.path = path;
             this.index = index;
-        }
-
-        /**
-         * Returns the drop point, representing the mouse's
-         * current location within the component.
-         *
-         * @return the drop point.
-         */
-        public final Point getDropPoint() {
-            return (Point)dropPoint.clone();
         }
 
         /**
@@ -1195,11 +1182,6 @@ public class JTree extends JComponent implements Scrollable, Accessible
      * tree's {@code TransferHandler}.
      *
      * @param b whether or not to enable automatic drag handling
-     * @exception HeadlessException if
-     *            <code>b</code> is <code>true</code> and
-     *            <code>GraphicsEnvironment.isHeadless()</code>
-     *            returns <code>true</code>
-     * @see java.awt.GraphicsEnvironment#isHeadless
      * @see #getDragEnabled
      * @see #setTransferHandler
      * @see TransferHandler
@@ -1210,10 +1192,11 @@ public class JTree extends JComponent implements Scrollable, Accessible
      *        bound: false
      */
     public void setDragEnabled(boolean b) {
-        if (b && GraphicsEnvironment.isHeadless()) {
-            throw new HeadlessException();
-        }
+        // No HeadlessException: the shadow's GraphicsEnvironment always reports
+        // headless, yet trees are touch-driven. The JDK's BasicDragGestureRecognizer
+        // lives in the UI; the shadow arms the TransferHandler drag here, as JList does.
         dragEnabled = b;
+        dragRecognizer = net.runelite.awt.impl.SwingDragSupport.setDragEnabled(this, dragRecognizer, b);
     }
 
     /**
@@ -1288,10 +1271,7 @@ public class JTree extends JComponent implements Scrollable, Accessible
      * @param p the point to calculate a drop location for
      * @return the drop location, or <code>null</code>
      */
-    // JDK: dropLocationForPoint, overriding JComponent's TransferHandler.DropLocation
-    // variant. Until the shadow has TransferHandler, the JDK name would clash with the
-    // JDK JComponent the host contracts compile JTree against.
-    DropLocation treeDropLocationForPoint(Point p) {
+    DropLocation dropLocationForPoint(Point p) {
         DropLocation location = null;
 
         int row = getClosestRowForLocation(p.x, p.y);
@@ -1419,12 +1399,12 @@ public class JTree extends JComponent implements Scrollable, Accessible
      *        actual drop occurred
      * @return any saved state for this component, or <code>null</code> if none
      */
-    Object setDropLocation(DropLocation location,
+    Object setDropLocation(TransferHandler.DropLocation location,
                            Object state,
                            boolean forDrop) {
 
         Object retVal = null;
-        DropLocation treeLocation = location;
+        DropLocation treeLocation = (DropLocation)location;
 
         if (dropMode == DropMode.USE_SELECTION) {
             if (treeLocation == null) {

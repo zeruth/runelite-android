@@ -99,6 +99,14 @@ public final class AndroidClip implements Clip {
 
     @Override
     public void open(AudioInputStream stream) throws LineUnavailableException, IOException {
+        AudioFormat.Encoding encoding = stream.getFormat().getEncoding();
+        if (!AudioFormat.Encoding.PCM_SIGNED.equals(encoding) && !AudioFormat.Encoding.PCM_UNSIGNED.equals(encoding)
+                && !AudioFormat.Encoding.PCM_FLOAT.equals(encoding)
+                && AudioSystem.isConversionSupported(AudioFormat.Encoding.PCM_SIGNED, stream.getFormat())) {
+            // An encoded stream (G.711, or MP3/Vorbis straight from getAudioInputStream) is decoded
+            // here rather than refused, so a plugin that skips the explicit PCM conversion still plays.
+            stream = AudioSystem.getAudioInputStream(AudioFormat.Encoding.PCM_SIGNED, stream);
+        }
         byte[] data = WavDecoder.Bytes.readAll(stream);
         open(stream.getFormat(), data, 0, data.length);
     }
