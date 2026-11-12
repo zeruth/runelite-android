@@ -32,7 +32,8 @@ package java.awt.image;
 
 /**
  * A {@link ComponentSampleModel} with a pixel stride of one: each band is a plane,
- * normally in a bank of its own.
+ * normally in a bank of its own, as {@code javax.imageio.ImageTypeSpecifier.createBanded}
+ * needs.
  */
 public final class BandedSampleModel extends ComponentSampleModel {
 

@@ -358,6 +358,7 @@ public class IndexColorModel extends ColorModel {
         return out;
     }
 
+
     public boolean isValid(int pixel) {
         boolean validity = pixel >= 0 && pixel < map_size;
         if (validity && validBits != null) {
