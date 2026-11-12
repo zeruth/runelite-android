@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -38,6 +39,9 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -325,8 +329,14 @@ private fun PluginRowItem(
                     .size(width = 30.dp, height = 16.dp)
                     .clip(RoundedCornerShape(8.dp))
                     .background(if (enabled) RlPalette.Accent else Color(0xFF3A3A3A))
-                    .clickable(enabled = row.plugin != null || row.remoteKey != null) {
-                        val next = !enabled
+                    // A switch role + the plugin's name lets TalkBack, and uiautomator (the
+                    // hub harness reads checked= off it), tell which plugin the toggle is for.
+                    .semantics { contentDescription = row.displayName }
+                    .toggleable(
+                        value = enabled,
+                        enabled = row.plugin != null || row.remoteKey != null,
+                        role = Role.Switch,
+                    ) { next ->
                         enabled = next
                         onToggleEnabled(next)
                     },
