@@ -30,23 +30,91 @@
  */
 package javax.swing.plaf.basic;
 
+import java.awt.Color;
+import java.awt.SystemColor;
 import javax.swing.LookAndFeel;
 import javax.swing.UIDefaults;
+import javax.swing.plaf.ColorUIResource;
 
 public abstract class BasicLookAndFeel extends LookAndFeel {
     @Override
     public UIDefaults getDefaults() {
-        UIDefaults table = new UIDefaults();
+        UIDefaults table = new UIDefaults(610, 0.75f);
         initClassDefaults(table);
         initSystemColorDefaults(table);
         initComponentDefaults(table);
         return table;
     }
 
+    // The ComponentUI class table and the per-component defaults arrive with
+    // the Basic delegates; until then a subclass (FlatLaf) supplies its own.
     protected void initClassDefaults(UIDefaults table) {}
-    protected void initSystemColorDefaults(UIDefaults table) {}
+
+    /** The JDK's Basic system colors, loaded natively when the subclass is a native look and feel. */
+    protected void initSystemColorDefaults(UIDefaults table) {
+        String[] defaultSystemColors = {
+                "desktop", "#005C5C", /* Color of the desktop background */
+          "activeCaption", "#000080", /* Color for captions (title bars) when they are active. */
+      "activeCaptionText", "#FFFFFF", /* Text color for text in captions (title bars). */
+    "activeCaptionBorder", "#C0C0C0", /* Border color for caption (title bar) window borders. */
+        "inactiveCaption", "#808080", /* Color for captions (title bars) when not active. */
+    "inactiveCaptionText", "#C0C0C0", /* Text color for text in inactive captions (title bars). */
+  "inactiveCaptionBorder", "#C0C0C0", /* Border color for inactive caption (title bar) window borders. */
+                 "window", "#FFFFFF", /* Default color for the interior of windows */
+           "windowBorder", "#000000", /* ??? */
+             "windowText", "#000000", /* ??? */
+                   "menu", "#C0C0C0", /* Background color for menus */
+               "menuText", "#000000", /* Text color for menus  */
+                   "text", "#C0C0C0", /* Text background color */
+               "textText", "#000000", /* Text foreground color */
+          "textHighlight", "#000080", /* Text background color when selected */
+      "textHighlightText", "#FFFFFF", /* Text color when selected */
+       "textInactiveText", "#808080", /* Text color when disabled */
+                "control", "#C0C0C0", /* Default color for controls (buttons, sliders, etc) */
+            "controlText", "#000000", /* Default color for text in controls */
+       "controlHighlight", "#C0C0C0", /* Specular highlight (opposite of the shadow) */
+     "controlLtHighlight", "#FFFFFF", /* Highlight color for controls */
+          "controlShadow", "#808080", /* Shadow color for controls */
+        "controlDkShadow", "#000000", /* Dark shadow color for controls */
+              "scrollbar", "#E0E0E0", /* Scrollbar background (usually the "track") */
+                   "info", "#FFFFE1", /* ??? */
+               "infoText", "#000000"  /* ??? */
+        };
+
+        loadSystemColors(table, defaultSystemColors, isNativeLookAndFeel());
+    }
+
     protected void initComponentDefaults(UIDefaults table) {}
-    protected void loadSystemColors(UIDefaults table, String[] systemColors, boolean useNative) {}
+
+    /**
+     * Populates {@code table} with the {@code name-color} pairs in
+     * {@code systemColors}: with {@code useNative} the color is the
+     * {@code SystemColor} field of that name, otherwise the decoded value
+     * (black when it does not decode).
+     */
+    protected void loadSystemColors(UIDefaults table, String[] systemColors, boolean useNative) {
+        if (useNative) {
+            for (int i = 0; i < systemColors.length; i += 2) {
+                Color color = Color.black;
+                try {
+                    String name = systemColors[i];
+                    color = (Color) (SystemColor.class.getField(name).get(null));
+                } catch (Exception e) {
+                }
+                table.put(systemColors[i], new ColorUIResource(color));
+            }
+        } else {
+            for (int i = 0; i < systemColors.length; i += 2) {
+                Color color = Color.black;
+                try {
+                    color = Color.decode(systemColors[i + 1]);
+                } catch (NumberFormatException e) {
+                    e.printStackTrace();
+                }
+                table.put(systemColors[i], new ColorUIResource(color));
+            }
+        }
+    }
 
     @Override public void initialize() {}
     @Override public void uninitialize() {}
