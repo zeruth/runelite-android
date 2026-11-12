@@ -144,4 +144,108 @@ public class SwingUtilities implements SwingConstants {
                                               Rectangle viewR, Rectangle iconR, Rectangle textR, int textIconGap) {
         return text == null ? "" : text;
     }
+
+    // --- key bindings (OpenJDK 8u SwingUtilities) ---------------------------
+
+    /**
+     * Process the key bindings for the <code>Component</code> associated with
+     * <code>event</code>. This method is only useful if
+     * <code>event.getComponent()</code> does not descend from
+     * <code>JComponent</code>, or your are not invoking
+     * <code>super.processKeyEvent</code> from within your
+     * <code>JComponent</code> subclass.
+     *
+     * @return true if a binding has found and processed
+     */
+    public static boolean processKeyBindings(java.awt.event.KeyEvent event) {
+        if (event != null) {
+            if (event.isConsumed()) {
+                return false;
+            }
+
+            Component component = event.getComponent();
+            boolean pressed = (event.getID() == java.awt.event.KeyEvent.KEY_PRESSED);
+
+            if (!isValidKeyEventForKeyBindings(event)) {
+                return false;
+            }
+            // Find the first JComponent in the ancestor hierarchy, and
+            // invoke processKeyBindings on it
+            while (component != null) {
+                if (component instanceof JComponent) {
+                    return ((JComponent) component).processKeyBindings(event, pressed);
+                }
+                if ((component instanceof java.applet.Applet) || (component instanceof Window)) {
+                    // No JComponents, if Window or Applet parent, process
+                    // WHEN_IN_FOCUSED_WINDOW bindings.
+                    return JComponent.processKeyBindingsForAllComponents(event, (Container) component, pressed);
+                }
+                component = component.getParent();
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Returns true if the <code>e</code> is a valid KeyEvent to use in
+     * processing the key bindings associated with JComponents.
+     */
+    static boolean isValidKeyEventForKeyBindings(java.awt.event.KeyEvent e) {
+        if (e.getID() == java.awt.event.KeyEvent.KEY_TYPED) {
+            int mod = e.getModifiers();
+            if (((mod & java.awt.event.ActionEvent.ALT_MASK) != 0)
+                    && ((mod & java.awt.event.ActionEvent.CTRL_MASK) == 0)) {
+                // filter out ALT-KEY_TYPED events
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Invokes <code>actionPerformed</code> on <code>action</code> if
+     * <code>action</code> is enabled (and non-{@code null}). The command for the
+     * ActionEvent is determined by the action's ACTION_COMMAND_KEY, then the
+     * KeyEvent's character, except for registerKeyboardAction stand-ins.
+     *
+     * @return true if <code>action</code> is non-{@code null} and
+     *         actionPerformed is invoked on it.
+     */
+    public static boolean notifyAction(Action action, KeyStroke ks, java.awt.event.KeyEvent event,
+                                       Object sender, int modifiers) {
+        if (action == null) {
+            return false;
+        }
+        if (!action.isEnabled()) {
+            return false;
+        }
+        Object commandO;
+        boolean stayNull;
+
+        // Get the command object.
+        commandO = action.getValue(Action.ACTION_COMMAND_KEY);
+        if (commandO == null && (action instanceof JComponent.ActionStandin)) {
+            // ActionStandin is used for historical reasons to support
+            // registerKeyboardAction with a null value.
+            stayNull = true;
+        } else {
+            stayNull = false;
+        }
+
+        // Convert it to a string.
+        String command;
+
+        if (commandO != null) {
+            command = commandO.toString();
+        } else if (!stayNull && event.getKeyChar() != java.awt.event.KeyEvent.CHAR_UNDEFINED) {
+            command = String.valueOf(event.getKeyChar());
+        } else {
+            // Do null for undefined chars, or if registerKeyboardAction
+            // was called with a null.
+            command = null;
+        }
+        action.actionPerformed(new java.awt.event.ActionEvent(sender,
+            java.awt.event.ActionEvent.ACTION_PERFORMED, command, event.getWhen(), modifiers));
+        return true;
+    }
 }
