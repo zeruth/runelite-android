@@ -467,6 +467,48 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
     public boolean isFocusOwner() { return KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner() == this; }
     public float getAlignmentX() { return 0.5f; }
     public float getAlignmentY() { return 0.5f; }
+
+    /**
+     * Returns the baseline. The baseline is measured from the top of
+     * the component. The default implementation returns -1; subclasses that
+     * support baseline should override appropriately.
+     *
+     * @throws IllegalArgumentException if width or height is &lt; 0
+     * @since 1.6
+     */
+    public int getBaseline(int width, int height) {
+        if (width < 0 || height < 0) {
+            throw new IllegalArgumentException("Width and height must be >= 0");
+        }
+        return -1;
+    }
+
+    /**
+     * Returns an enum indicating how the baseline of the component
+     * changes as the size changes. The default is <code>OTHER</code>.
+     *
+     * @since 1.6
+     */
+    public BaselineResizeBehavior getBaselineResizeBehavior() {
+        return BaselineResizeBehavior.OTHER;
+    }
+
+    /**
+     * Enumeration of the common ways the baseline of a component can
+     * change as the size changes.
+     *
+     * @since 1.6
+     */
+    public enum BaselineResizeBehavior {
+        /** The baseline remains fixed relative to the y-origin (the top). */
+        CONSTANT_ASCENT,
+        /** The baseline remains fixed relative to the height and does not change as the width is varied. */
+        CONSTANT_DESCENT,
+        /** The baseline remains a fixed distance from the center of the component. */
+        CENTER_OFFSET,
+        /** The baseline resize behavior can not be expressed using any of the other constants. */
+        OTHER
+    }
     public boolean hasFocus() { return isFocusOwner(); }
 
     private static final int FOCUS_TRAVERSABLE_UNKNOWN = 0, FOCUS_TRAVERSABLE_DEFAULT = 1, FOCUS_TRAVERSABLE_SET = 2;

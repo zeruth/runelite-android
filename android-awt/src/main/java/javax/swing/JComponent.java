@@ -131,6 +131,19 @@ public class JComponent extends Container {
     public float getAlignmentY() { return alignmentY; }
     public void setAlignmentY(float f) { this.alignmentY = f; }
 
+    /** As on the JDK: the UI delegate answers, -1 without one. @since 1.6 */
+    @Override
+    public int getBaseline(int width, int height) {
+        super.getBaseline(width, height);
+        return ui != null ? ui.getBaseline(this, width, height) : -1;
+    }
+
+    /** @since 1.6 */
+    @Override
+    public BaselineResizeBehavior getBaselineResizeBehavior() {
+        return ui != null ? ui.getBaselineResizeBehavior(this) : BaselineResizeBehavior.OTHER;
+    }
+
     public void addAncestorListener(AncestorListener l) { ancestorListeners.add(AncestorListener.class, l); }
     public void removeAncestorListener(AncestorListener l) { ancestorListeners.remove(AncestorListener.class, l); }
     public AncestorListener[] getAncestorListeners() { return ancestorListeners.getListeners(AncestorListener.class); }
