@@ -31,6 +31,8 @@
 package sun.swing;
 
 import java.awt.Component;
+import java.awt.Container;
+import java.awt.FocusTraversalPolicy;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.event.MouseEvent;
@@ -177,5 +179,38 @@ public class SwingUtilities2 {
         if (!c.hasFocus()) {
             c.requestFocus();
         }
+    }
+
+    /**
+     * Requests focus for {@code component}, or for the component inside it
+     * that its focus cycle would choose when it is a container; returns the
+     * component asked, or null when none was focusable.
+     */
+    public static Component compositeRequestFocus(Component component) {
+        if (component instanceof Container) {
+            Container container = (Container) component;
+            if (container.isFocusCycleRoot()) {
+                FocusTraversalPolicy policy = container.getFocusTraversalPolicy();
+                Component comp = policy.getDefaultComponent(container);
+                if (comp != null) {
+                    comp.requestFocus();
+                    return comp;
+                }
+            }
+            Container rootAncestor = container.getFocusCycleRootAncestor();
+            if (rootAncestor != null) {
+                FocusTraversalPolicy policy = rootAncestor.getFocusTraversalPolicy();
+                Component comp = policy.getComponentAfter(rootAncestor, container);
+                if (comp != null && SwingUtilities.isDescendingFrom(comp, container)) {
+                    comp.requestFocus();
+                    return comp;
+                }
+            }
+        }
+        if (component.isFocusable()) {
+            component.requestFocus();
+            return component;
+        }
+        return null;
     }
 }

@@ -93,7 +93,8 @@ public class TestTreeContracts {
             equal(first.y + row * ROW_HEIGHT, bounds.y, "row " + row + " y");
             equal(ROW_HEIGHT, bounds.height, "row " + row + " height");
             equal(tree.getPathForRow(row), tree.getPathForLocation(bounds.x + 1, bounds.y + 1),
-                    "getPathForLocation inside row " + row);
+                    "getPathForLocation inside row " + row + " (bounds " + bounds + ", closest "
+                    + tree.getClosestPathForLocation(bounds.x + 1, bounds.y + 1) + ", insets " + tree.getInsets() + ")");
             equal(tree.getPathForRow(row), tree.getClosestPathForLocation(0, bounds.y + ROW_HEIGHT / 2),
                     "getClosestPathForLocation on row " + row);
         }

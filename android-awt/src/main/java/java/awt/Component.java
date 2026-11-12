@@ -64,6 +64,30 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
         popupMenus.add(popup); popup.parent = this;
     }
     public void remove(MenuComponent menu) { if (popupMenus.remove(menu)) menu.parent = null; }
+
+    /** The JDK's baseline resize behaviours, as returned by {@link #getBaselineResizeBehavior}. */
+    public enum BaselineResizeBehavior {
+        CONSTANT_ASCENT,
+        CONSTANT_DESCENT,
+        CENTER_OFFSET,
+        OTHER
+    }
+
+    /**
+     * Returns the baseline for {@code width} x {@code height}, or a value
+     * less than 0 when the component has none; the JDK's Component has none.
+     */
+    public int getBaseline(int width, int height) {
+        if (width < 0 || height < 0) {
+            throw new IllegalArgumentException("Width and height must be >= 0");
+        }
+        return -1;
+    }
+
+    public BaselineResizeBehavior getBaselineResizeBehavior() {
+        return BaselineResizeBehavior.OTHER;
+    }
+
     private java.beans.PropertyChangeSupport propertyChanges;
     private synchronized java.beans.PropertyChangeSupport properties() {
         if (propertyChanges == null) propertyChanges = new java.beans.PropertyChangeSupport(this);

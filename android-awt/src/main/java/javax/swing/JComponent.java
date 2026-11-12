@@ -144,6 +144,18 @@ public class JComponent extends Container {
     public void setUI(javax.swing.plaf.ComponentUI ui) { javax.swing.plaf.ComponentUI old=this.ui;if(old!=null)old.uninstallUI(this);this.ui=ui;if(ui!=null)ui.installUI(this);firePropertyChange("UI",old,ui);revalidate();repaint(); }
     public String getUIClassID() { return "ComponentUI"; }
 
+    /** The JDK asks the UI delegate; BasicTreeUI asks the tree's renderer through this. */
+    @Override
+    public int getBaseline(int width, int height) {
+        super.getBaseline(width, height);
+        return ui != null ? ui.getBaseline(this, width, height) : -1;
+    }
+
+    @Override
+    public java.awt.Component.BaselineResizeBehavior getBaselineResizeBehavior() {
+        return ui != null ? ui.getBaselineResizeBehavior(this) : java.awt.Component.BaselineResizeBehavior.OTHER;
+    }
+
     public void updateUI() { javax.swing.plaf.ComponentUI delegate=UIManager.getUI(this);if(delegate!=null)setUI(delegate); }
 
     public void repaint(java.awt.Rectangle r) {

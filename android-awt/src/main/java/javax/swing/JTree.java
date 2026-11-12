@@ -1288,7 +1288,10 @@ public class JTree extends JComponent implements Scrollable, Accessible
      * @param p the point to calculate a drop location for
      * @return the drop location, or <code>null</code>
      */
-    DropLocation dropLocationForPoint(Point p) {
+    // JDK: dropLocationForPoint, overriding JComponent's TransferHandler.DropLocation
+    // variant. Until the shadow has TransferHandler, the JDK name would clash with the
+    // JDK JComponent the host contracts compile JTree against.
+    DropLocation treeDropLocationForPoint(Point p) {
         DropLocation location = null;
 
         int row = getClosestRowForLocation(p.x, p.y);

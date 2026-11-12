@@ -50,7 +50,11 @@ public abstract class BasicLookAndFeel extends LookAndFeel {
     // the Basic delegates; until then a subclass (FlatLaf) supplies its own.
     protected void initClassDefaults(UIDefaults table) {
         final String basicPackageName = "javax.swing.plaf.basic.";
+        // LabelUI is listed because DefaultTreeCellRenderer is a JLabel: under a JDK JLabel
+        // (the host contracts) a missing delegate leaves the renderer 0 high, so every row
+        // measures 0 wide. The shadow JLabel sizes itself and does not ask for a delegate.
         Object[] uiDefaults = {
+                  "LabelUI", basicPackageName + "BasicLabelUI",
                    "TreeUI", basicPackageName + "BasicTreeUI",
         };
 
