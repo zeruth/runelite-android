@@ -49,10 +49,24 @@ public class JSeparator extends JComponent implements SwingConstants, javax.acce
     private int orientation;
 
     public JSeparator() { this(HORIZONTAL); }
-    public JSeparator(int orientation) { this.orientation = orientation; }
+    public JSeparator(int orientation) {
+        checkOrientation(orientation);
+        this.orientation = orientation;
+        setFocusable(false);
+    }
 
     public int getOrientation() { return orientation; }
-    public void setOrientation(int orientation) { if(orientation!=HORIZONTAL&&orientation!=VERTICAL)throw new IllegalArgumentException("orientation");int old=this.orientation;this.orientation=orientation;firePropertyChange("orientation",old,orientation);revalidate();repaint(); }
+    public void setOrientation(int orientation) { if(this.orientation==orientation)return;checkOrientation(orientation);int old=this.orientation;this.orientation=orientation;firePropertyChange("orientation",old,orientation);revalidate();repaint(); }
+
+    private void checkOrientation(int orientation) {
+        if (orientation != HORIZONTAL && orientation != VERTICAL) {
+            throw new IllegalArgumentException("orientation must be one of: VERTICAL, HORIZONTAL");
+        }
+    }
+
+    protected String paramString() {
+        return super.paramString() + ",orientation=" + (orientation == HORIZONTAL ? "HORIZONTAL" : "VERTICAL");
+    }
     public javax.swing.plaf.SeparatorUI getUI(){return (javax.swing.plaf.SeparatorUI)ui;}
     public void setUI(javax.swing.plaf.SeparatorUI value){super.setUI(value);}
     public String getUIClassID(){return "SeparatorUI";}

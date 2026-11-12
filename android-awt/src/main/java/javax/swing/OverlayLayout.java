@@ -30,26 +30,103 @@
  */
 package javax.swing;
 import java.awt.*;
+/**
+ * The JDK's OverlayLayout: every child is aligned over the others by its alignmentX/Y,
+ * with the {@link SizeRequirements} aligned math. The requests are taken afresh on every
+ * call rather than cached until invalidateLayout, because the shadow Container does not
+ * call invalidateLayout on every invalidate; the results are those of a fresh JDK cache.
+ */
 public class OverlayLayout implements LayoutManager2, java.io.Serializable {
     private final Container target;
+
     public OverlayLayout(Container target) { this.target = target; }
-    private void check(Container c) { if (c != target) throw new Error("OverlayLayout cannot be shared"); }
-    public void addLayoutComponent(String name, Component c) {}
-    public void addLayoutComponent(Component c, Object constraints) {}
-    public void removeLayoutComponent(Component c) {}
-    public void invalidateLayout(Container c) { check(c); }
-    public float getLayoutAlignmentX(Container c) { check(c); return .5f; }
-    public float getLayoutAlignmentY(Container c) { check(c); return .5f; }
-    private Dimension size(Container c, int kind) {
-        check(c); int w=0,h=0; Insets in=c.getInsets();
-        for(Component child:c.getComponents()) { Dimension d=kind==0?child.getPreferredSize():kind==1?child.getMinimumSize():child.getMaximumSize(); w=Math.max(w,d.width);h=Math.max(h,d.height); }
-        return new Dimension(w+in.left+in.right,h+in.top+in.bottom);
+
+    /** @since 1.6 */
+    public final Container getTarget() { return target; }
+
+    public void invalidateLayout(Container target) { checkContainer(target); }
+    public void addLayoutComponent(String name, Component comp) { invalidateLayout(comp.getParent()); }
+    public void removeLayoutComponent(Component comp) { invalidateLayout(comp.getParent()); }
+    public void addLayoutComponent(Component comp, Object constraints) { invalidateLayout(comp.getParent()); }
+
+    public Dimension preferredLayoutSize(Container target) {
+        checkContainer(target);
+        SizeRequirements[][] r = requests(target);
+        return withInsets(target, new Dimension(r[2][0].preferred, r[2][1].preferred));
     }
-    public Dimension preferredLayoutSize(Container c) { return size(c,0); }
-    public Dimension minimumLayoutSize(Container c) { return size(c,1); }
-    public Dimension maximumLayoutSize(Container c) { return size(c,2); }
-    public void layoutContainer(Container c) {
-        check(c); Insets in=c.getInsets(); int w=Math.max(0,c.getWidth()-in.left-in.right),h=Math.max(0,c.getHeight()-in.top-in.bottom);
-        for(Component child:c.getComponents()) { Dimension max=child.getMaximumSize();int cw=Math.min(w,max.width),ch=Math.min(h,max.height);child.setBounds(in.left+Math.round((w-cw)*child.getAlignmentX()),in.top+Math.round((h-ch)*child.getAlignmentY()),cw,ch); }
+
+    public Dimension minimumLayoutSize(Container target) {
+        checkContainer(target);
+        SizeRequirements[][] r = requests(target);
+        return withInsets(target, new Dimension(r[2][0].minimum, r[2][1].minimum));
+    }
+
+    public Dimension maximumLayoutSize(Container target) {
+        checkContainer(target);
+        SizeRequirements[][] r = requests(target);
+        return withInsets(target, new Dimension(r[2][0].maximum, r[2][1].maximum));
+    }
+
+    public float getLayoutAlignmentX(Container target) {
+        checkContainer(target);
+        return requests(target)[2][0].alignment;
+    }
+
+    public float getLayoutAlignmentY(Container target) {
+        checkContainer(target);
+        return requests(target)[2][1].alignment;
+    }
+
+    public void layoutContainer(Container target) {
+        checkContainer(target);
+        SizeRequirements[][] r = requests(target);
+        int nChildren = target.getComponentCount();
+        int[] xOffsets = new int[nChildren];
+        int[] xSpans = new int[nChildren];
+        int[] yOffsets = new int[nChildren];
+        int[] ySpans = new int[nChildren];
+
+        Dimension alloc = target.getSize();
+        Insets in = target.getInsets();
+        alloc.width -= in.left + in.right;
+        alloc.height -= in.top + in.bottom;
+        SizeRequirements.calculateAlignedPositions(alloc.width, r[2][0], r[0], xOffsets, xSpans);
+        SizeRequirements.calculateAlignedPositions(alloc.height, r[2][1], r[1], yOffsets, ySpans);
+
+        for (int i = 0; i < nChildren; i++) {
+            Component c = target.getComponent(i);
+            c.setBounds(in.left + xOffsets[i], in.top + yOffsets[i], xSpans[i], ySpans[i]);
+        }
+    }
+
+    private static Dimension withInsets(Container target, Dimension size) {
+        Insets insets = target.getInsets();
+        size.width += insets.left + insets.right;
+        size.height += insets.top + insets.bottom;
+        return size;
+    }
+
+    void checkContainer(Container target) {
+        if (this.target != target) {
+            throw new AWTError("OverlayLayout can't be shared");
+        }
+    }
+
+    /** {xChildren, yChildren, {xTotal, yTotal}}; unlike BoxLayout, invisible children count. */
+    private static SizeRequirements[][] requests(Container target) {
+        int n = target.getComponentCount();
+        SizeRequirements[] xChildren = new SizeRequirements[n];
+        SizeRequirements[] yChildren = new SizeRequirements[n];
+        for (int i = 0; i < n; i++) {
+            Component c = target.getComponent(i);
+            Dimension min = c.getMinimumSize();
+            Dimension typ = c.getPreferredSize();
+            Dimension max = c.getMaximumSize();
+            xChildren[i] = new SizeRequirements(min.width, typ.width, max.width, c.getAlignmentX());
+            yChildren[i] = new SizeRequirements(min.height, typ.height, max.height, c.getAlignmentY());
+        }
+        return new SizeRequirements[][] {xChildren, yChildren, {
+            SizeRequirements.getAlignedSizeRequirements(xChildren),
+            SizeRequirements.getAlignedSizeRequirements(yChildren)}};
     }
 }

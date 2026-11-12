@@ -82,16 +82,66 @@ public class JLabel extends JComponent implements SwingConstants, javax.accessib
     }
 
     public String getText() { return text; }
-    public void setText(String text) { this.text = text == null ? "" : text; cachedPref = null; invalidate(); }
+    public void setText(String text) {
+        this.text = text == null ? "" : text; cachedPref = null; invalidate();
+        // 8u: setText re-derives the underline position from the mnemonic.
+        if (displayedMnemonic != 0) {
+            setDisplayedMnemonicIndex(findDisplayedMnemonicIndex(this.text, displayedMnemonic));
+        }
+    }
     public Icon getIcon() { return icon; }
-    public void setIcon(Icon icon) { this.icon = icon; cachedPref = null; invalidate(); }
+    public void setIcon(Icon icon) {
+        // 8u: a derived (not explicitly set) disabled icon is dropped so it tracks the new icon.
+        if (icon != this.icon && !disabledIconSet) {
+            disabledIcon = null;
+        }
+        this.icon = icon; cachedPref = null; invalidate();
+    }
     @Override
     public void setFont(java.awt.Font f) { super.setFont(f); cachedPref = null; invalidate(); }
     private Icon disabledIcon;
     private java.awt.Component labelFor;
+    private boolean disabledIconSet;
     private int displayedMnemonic,displayedMnemonicIndex=-1;
-    public Icon getDisabledIcon() { if(disabledIcon==null&&icon instanceof ImageIcon)disabledIcon=new ImageIcon(GrayFilter.createDisabledImage(((ImageIcon)icon).getImage()));return disabledIcon==null?icon:disabledIcon; }
-    public void setDisabledIcon(Icon value) { Icon old=disabledIcon;disabledIcon=value;firePropertyChange("disabledIcon",old,value);repaint(); }
+
+    /** Client property key set on the labelled component by {@link #setLabelFor}. */
+    static final String LABELED_BY_PROPERTY = "labeledBy";
+
+    /**
+     * Returns the icon used by the label when it's disabled. As in 8u, when no
+     * disabled icon was set one is derived once from the default icon through
+     * the look and feel, and {@code null} is returned when none can be made.
+     */
+    public Icon getDisabledIcon() {
+        if (!disabledIconSet && disabledIcon == null && icon != null) {
+            LookAndFeel laf = UIManager.getLookAndFeel();
+            disabledIcon = laf != null ? laf.getDisabledIcon(this, icon)
+                    : icon instanceof ImageIcon
+                            ? new ImageIcon(GrayFilter.createDisabledImage(((ImageIcon) icon).getImage()))
+                            : null;
+            if (disabledIcon != null) {
+                firePropertyChange("disabledIcon", null, disabledIcon);
+            }
+        }
+        return disabledIcon;
+    }
+
+    public void setDisabledIcon(Icon disabledIcon) {
+        Icon oldValue = this.disabledIcon;
+        this.disabledIcon = disabledIcon;
+        disabledIconSet = (disabledIcon != null);
+        firePropertyChange("disabledIcon", oldValue, disabledIcon);
+        if (disabledIcon != oldValue) {
+            if (disabledIcon == null || oldValue == null
+                    || disabledIcon.getIconWidth() != oldValue.getIconWidth()
+                    || disabledIcon.getIconHeight() != oldValue.getIconHeight()) {
+                revalidate();
+            }
+            if (!isEnabled()) {
+                repaint();
+            }
+        }
+    }
     public int getHorizontalAlignment() { return horizontalAlignment; }
     public void setHorizontalAlignment(int a) { this.horizontalAlignment = a; }
     public int getVerticalAlignment() { return verticalAlignment; }
@@ -102,16 +152,113 @@ public class JLabel extends JComponent implements SwingConstants, javax.accessib
     public void setVerticalTextPosition(int p) { this.verticalTextPosition = p; cachedPref = null; invalidate(); }
     public int getIconTextGap() { return iconTextGap; }
     public void setIconTextGap(int g) { this.iconTextGap = g; cachedPref = null; invalidate(); }
-    public void setLabelFor(java.awt.Component c) { java.awt.Component old=labelFor;labelFor=c;firePropertyChange("labelFor",old,c); }
+    /**
+     * Sets the component this label labels; as in 8u the labelled
+     * {@code JComponent} gets the {@code labeledBy} client property, which its
+     * accessible name falls back to.
+     */
+    public void setLabelFor(java.awt.Component c) {
+        java.awt.Component oldC = labelFor;
+        labelFor = c;
+        firePropertyChange("labelFor", oldC, c);
+        if (oldC instanceof JComponent) {
+            ((JComponent) oldC).putClientProperty(LABELED_BY_PROPERTY, null);
+        }
+        if (c instanceof JComponent) {
+            ((JComponent) c).putClientProperty(LABELED_BY_PROPERTY, this);
+        }
+    }
     public java.awt.Component getLabelFor() { return labelFor; }
-    public void setDisplayedMnemonic(int key) { if(displayedMnemonic!=0)unregisterKeyboardAction(KeyStroke.getKeyStroke(displayedMnemonic,java.awt.event.InputEvent.ALT_DOWN_MASK));int old=displayedMnemonic;displayedMnemonic=key;if(key!=0)registerKeyboardAction(e->{if(labelFor!=null)labelFor.requestFocusInWindow();},KeyStroke.getKeyStroke(key,java.awt.event.InputEvent.ALT_DOWN_MASK),WHEN_IN_FOCUSED_WINDOW);firePropertyChange("displayedMnemonic",old,key); }
-    public void setDisplayedMnemonic(char key) { setDisplayedMnemonic((int)Character.toUpperCase(key)); }
+
+    /*
+     * 8u leaves the Alt+key binding to BasicLabelUI's input map; the shadow label
+     * usually has no delegate, so it registers the focus-transfer action itself.
+     */
+    public void setDisplayedMnemonic(int key) {
+        int oldKey = displayedMnemonic;
+        if (oldKey != 0) {
+            unregisterKeyboardAction(KeyStroke.getKeyStroke(oldKey, java.awt.event.InputEvent.ALT_DOWN_MASK));
+        }
+        displayedMnemonic = key;
+        if (key != 0) {
+            registerKeyboardAction(e -> {
+                if (labelFor != null) {
+                    labelFor.requestFocusInWindow();
+                }
+            }, KeyStroke.getKeyStroke(key, java.awt.event.InputEvent.ALT_DOWN_MASK), WHEN_IN_FOCUSED_WINDOW);
+        }
+        firePropertyChange("displayedMnemonic", oldKey, key);
+        setDisplayedMnemonicIndex(findDisplayedMnemonicIndex(getText(), key));
+        if (key != oldKey) {
+            revalidate();
+            repaint();
+        }
+    }
+    public void setDisplayedMnemonic(char aChar) {
+        int vk = java.awt.event.KeyEvent.getExtendedKeyCodeForChar(aChar);
+        if (vk != java.awt.event.KeyEvent.VK_UNDEFINED) {
+            setDisplayedMnemonic(vk);
+        }
+    }
     public int getDisplayedMnemonic() { return displayedMnemonic; }
-    public void setDisplayedMnemonicIndex(int index) { if(index< -1||index>=text.length())throw new IllegalArgumentException("mnemonic index");displayedMnemonicIndex=index;repaint(); }
+
+    public void setDisplayedMnemonicIndex(int index) throws IllegalArgumentException {
+        int oldValue = displayedMnemonicIndex;
+        if (index != -1) {
+            int textLength = text == null ? 0 : text.length();
+            if (index < -1 || index >= textLength) {
+                throw new IllegalArgumentException("index == " + index);
+            }
+        }
+        displayedMnemonicIndex = index;
+        firePropertyChange("displayedMnemonicIndex", oldValue, index);
+        if (index != oldValue) {
+            revalidate();
+            repaint();
+        }
+    }
     public int getDisplayedMnemonicIndex() { return displayedMnemonicIndex; }
+
+    /** SwingUtilities.findDisplayedMnemonicIndex of 8u: first case-insensitive hit. */
+    private static int findDisplayedMnemonicIndex(String text, int mnemonic) {
+        if (text == null || mnemonic == '\0') {
+            return -1;
+        }
+        char uc = Character.toUpperCase((char) mnemonic);
+        char lc = Character.toLowerCase((char) mnemonic);
+        int uci = text.indexOf(uc);
+        int lci = text.indexOf(lc);
+        if (uci == -1) {
+            return lci;
+        } else if (lci == -1) {
+            return uci;
+        }
+        return (lci < uci) ? lci : uci;
+    }
 
     /** JShadowedLabel and friends call the typed overload — accept and discard. */
     public void setUI(javax.swing.plaf.LabelUI ui) { super.setUI(ui); }
+
+    /*
+     * The shadow JLabel paints itself and installs no delegate unless one is set, while a
+     * JDK JLabel always has one; without it the shared Basic delegate answers, so the
+     * baseline (GroupLayout baseline groups, TitledBorder) matches the JDK's for plain text.
+     */
+    @Override
+    public int getBaseline(int width, int height) {
+        if (ui != null) {
+            return super.getBaseline(width, height);
+        }
+        return javax.swing.plaf.basic.BasicLabelUI.createUI(this).getBaseline(this, width, height);
+    }
+
+    @Override
+    public java.awt.Component.BaselineResizeBehavior getBaselineResizeBehavior() {
+        if (ui != null) {
+            return super.getBaselineResizeBehavior();
+        }
+        return javax.swing.plaf.basic.BasicLabelUI.createUI(this).getBaselineResizeBehavior(this);
+    }
 
     /** Cached content size (text + icon, no insets) — invalidated when text/icon/font
      * changes. Without this every BorderLayout layout pass remeasures the text via
