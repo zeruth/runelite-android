@@ -169,15 +169,20 @@
 # JRE flavour, whose java.util.function default methods hub plugins call though the
 # host never does; verifyReleasePluginApi checks they survive.
 -keep class com.google.common.** { *; }
-# The JRE flavour also names java.lang.ClassValue (API 34; minSdk is 26). The whole-tree keep
-# leaves guava's class names as guava loads them, so R8 adds no failure of its own there;
-# how guava copes with a missing ClassValue on API 26-33 is unverified on device. Its only
-# user is Futures.getChecked's exception-type validator, which neither the client nor the
-# app calls; a hub plugin that does is the one exposure on those API levels. Newer guava-jre
-# releases may also try java.lang.invoke.VarHandle (API 33) in the futures code the whole client
-# uses; whether that falls back on API 26-32 is unconfirmed either. verifyReleasePluginApi prints
-# every guava class naming either type, and a release build has to run on an API 26-32 device
-# before the switch counts as safe.
+# guava-33.6.0-jre names types newer than minSdk 26 in three places (read from its bytecode;
+# verifyReleasePluginApi prints the classes each build). The whole-tree keep matters for all
+# three: guava finds the newer helpers by class name.
+# - ClassValue (API 34): FuturesGetChecked loads its ClassValueValidator by name inside a catch
+#   of Error/RuntimeException and falls back to the weak-set validator.
+# - VarHandle (API 33) in AbstractFutureState: it builds VarHandleAtomicHelper only when
+#   Class.forName("java.lang.invoke.VarHandle") succeeds, else UnsafeAtomicHelper. API 26-27
+#   take the Unsafe path. ART has a hidden VarHandle from API 28, so 28-32 build the helper;
+#   R8 rewrites its Lookup.findVarHandle fields to DesugarVarHandle below API 33.
+# - VarHandle in hash.LittleEndianByteArray (Murmur3/Farm/City hashes, BloomFilter): the same
+#   probe, then MethodHandles.byteArrayViewVarHandle, outside any catch, which R8 does not
+#   desugar. On API 28-32 that path is unconfirmed until a device runs it. The client hashes
+#   only through Hashing.sha256 (MessageDigest), so a hub plugin using those hashes is the one
+#   exposure there.
 
 # Hub plugins load after R8 runs and link against the host's protobuf runtime.
 # Preserve its public binary surface, including methods only those plugins use.
