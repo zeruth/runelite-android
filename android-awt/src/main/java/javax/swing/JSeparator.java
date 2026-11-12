@@ -30,7 +30,21 @@
  */
 package javax.swing;
 
-public class JSeparator extends JComponent implements SwingConstants {
+public class JSeparator extends JComponent implements SwingConstants, javax.accessibility.Accessible {
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJSeparator();
+        }
+        return accessibleContext;
+    }
+
+    /** Accessibility support for separators: role SEPARATOR. */
+    protected class AccessibleJSeparator extends AccessibleJComponent {
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.SEPARATOR;
+        }
+    }
     private static final long serialVersionUID = 1L;
     private int orientation;
 

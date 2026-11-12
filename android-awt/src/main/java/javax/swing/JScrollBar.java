@@ -37,8 +37,46 @@ import javax.swing.event.ChangeListener;
 
 // Adjustable, as on the JDK, rather than SwingConstants: both declare HORIZONTAL/VERTICAL
 // with the same values, and AdjustmentEvent takes an Adjustable source.
-public class JScrollBar extends JComponent implements java.awt.Adjustable {
+public class JScrollBar extends JComponent implements java.awt.Adjustable, javax.accessibility.Accessible {
     private static final long serialVersionUID = 1L;
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJScrollBar();
+        }
+        return accessibleContext;
+    }
+
+    /** Accessibility support for scroll bars: role SCROLL_BAR, valued by the model. */
+    protected class AccessibleJScrollBar extends AccessibleJComponent implements javax.accessibility.AccessibleValue {
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.SCROLL_BAR;
+        }
+
+        public javax.accessibility.AccessibleValue getAccessibleValue() {
+            return this;
+        }
+
+        public Number getCurrentAccessibleValue() {
+            return Integer.valueOf(getValue());
+        }
+
+        public boolean setCurrentAccessibleValue(Number n) {
+            if (n == null) {
+                return false;
+            }
+            setValue(n.intValue());
+            return true;
+        }
+
+        public Number getMinimumAccessibleValue() {
+            return Integer.valueOf(getMinimum());
+        }
+
+        public Number getMaximumAccessibleValue() {
+            return Integer.valueOf(getMaximum() - getVisibleAmount());
+        }
+    }
 
     protected int orientation = VERTICAL;
     protected int unitIncrement = 1;

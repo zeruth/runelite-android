@@ -51,10 +51,98 @@ public class JComponent extends Container {
     /** A list of event listeners for this component. */
     protected javax.swing.event.EventListenerList listenerList = new javax.swing.event.EventListenerList();
 
-    private transient javax.accessibility.AccessibleContext accessibleContext;
+    /**
+     * A JComponent is not {@link javax.accessibility.Accessible} itself (the JDK leaves that to
+     * each widget), but RuneLite panels subclass it directly and the Android host asks every
+     * component it rasterizes, so a plain subclass answers a generic Swing context here.
+     */
     public javax.accessibility.AccessibleContext getAccessibleContext() {
-        if (accessibleContext == null) accessibleContext = new javax.accessibility.AccessibleContext() {};
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJComponent() {
+                private static final long serialVersionUID = 1L;
+            };
+        }
         return accessibleContext;
+    }
+
+    /**
+     * Accessibility support shared by every Swing component: the name falls back to a
+     * titled border, the description to the tool tip, and the children are the container's
+     * accessible components.
+     */
+    public abstract class AccessibleJComponent extends AccessibleAWTContainer
+            implements javax.accessibility.AccessibleExtendedComponent {
+        private static final long serialVersionUID = 1L;
+
+        protected AccessibleJComponent() {
+            super();
+        }
+
+        /** @deprecated This field is unused. */
+        @Deprecated
+        protected java.awt.event.FocusListener accessibleFocusHandler = null;
+
+        public String getAccessibleName() {
+            String name = accessibleName;
+            if (name == null) {
+                name = (String) getClientProperty(javax.accessibility.AccessibleContext.ACCESSIBLE_NAME_PROPERTY);
+            }
+            if (name == null) {
+                name = getBorderTitle(getBorder());
+            }
+            if (name == null) {
+                // JLabel.LABELED_BY_PROPERTY: set by JLabel.setLabelFor on the labelled component.
+                Object o = getClientProperty("labeledBy");
+                if (o instanceof javax.accessibility.Accessible) {
+                    javax.accessibility.AccessibleContext ac = ((javax.accessibility.Accessible) o).getAccessibleContext();
+                    if (ac != null) name = ac.getAccessibleName();
+                }
+            }
+            return name;
+        }
+
+        /** The title of the (possibly compound) titled border, the JDK's name fallback. */
+        protected String getBorderTitle(Border b) {
+            if (b instanceof javax.swing.border.TitledBorder) {
+                return ((javax.swing.border.TitledBorder) b).getTitle();
+            } else if (b instanceof javax.swing.border.CompoundBorder) {
+                String s = getBorderTitle(((javax.swing.border.CompoundBorder) b).getInsideBorder());
+                if (s == null) s = getBorderTitle(((javax.swing.border.CompoundBorder) b).getOutsideBorder());
+                return s;
+            }
+            return null;
+        }
+
+        public String getAccessibleDescription() {
+            String description = accessibleDescription;
+            if (description == null) {
+                description = (String) getClientProperty(javax.accessibility.AccessibleContext.ACCESSIBLE_DESCRIPTION_PROPERTY);
+            }
+            if (description == null) {
+                description = getToolTipText();
+            }
+            return description;
+        }
+
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.SWING_COMPONENT;
+        }
+
+        // State set (OPAQUE included) and children come from AccessibleAWTContainer.
+
+        // AccessibleExtendedComponent
+
+        public String getToolTipText() {
+            return JComponent.this.getToolTipText();
+        }
+
+        public String getTitledBorderText() {
+            return getBorderTitle(getBorder());
+        }
+
+        public javax.accessibility.AccessibleKeyBinding getAccessibleKeyBinding() {
+            return null;
+        }
     }
 
     private Border border;
@@ -94,6 +182,8 @@ public class JComponent extends Container {
     public JComponent() {
         // As the JDK's JComponent(): key events reach processKeyEvent overrides.
         enableEvents(java.awt.AWTEvent.KEY_EVENT_MASK);
+        // As the JDK: an unparented Swing component answers a locale instead of throwing
+        // IllegalComponentStateException from Component.getLocale.
         super.setLocale(JComponent.getDefaultLocale());
         addHierarchyListener(e -> {
             if ((e.getChangeFlags() & (java.awt.event.HierarchyEvent.PARENT_CHANGED | java.awt.event.HierarchyEvent.SHOWING_CHANGED)) == 0) return;
@@ -1000,6 +1090,52 @@ public class JComponent extends Container {
     boolean isFocusTraversalKeysSetByClient(int id) {
         return id == java.awt.KeyboardFocusManager.FORWARD_TRAVERSAL_KEYS ? focusTraversalKeysForwardSet
             : id == java.awt.KeyboardFocusManager.BACKWARD_TRAVERSAL_KEYS && focusTraversalKeysBackwardSet;
+    }
+
+    /**
+     * Sets a property on behalf of a look and feel ({@link LookAndFeel#installProperty}).
+     * As in the JDK, focus traversal keys go in only when the application has not set its
+     * own, and do not count as set by the client.  The JDK's subclasses override this for
+     * their own primitive properties; the shadow's mostly do not, so any other property
+     * goes to its public setter, without the JDK's "set by the client" bookkeeping.
+     */
+    @SuppressWarnings("unchecked")
+    void setUIProperty(String propertyName, Object value) {
+        int id = "focusTraversalKeysForward".equals(propertyName)
+            ? java.awt.KeyboardFocusManager.FORWARD_TRAVERSAL_KEYS
+            : "focusTraversalKeysBackward".equals(propertyName)
+            ? java.awt.KeyboardFocusManager.BACKWARD_TRAVERSAL_KEYS : -1;
+        if (id != -1) {
+            if (!isFocusTraversalKeysSetByClient(id)) {
+                super.setFocusTraversalKeys(id, (java.util.Set<java.awt.AWTKeyStroke>) value);
+            }
+            return;
+        }
+        String setter = "set" + Character.toUpperCase(propertyName.charAt(0)) + propertyName.substring(1);
+        try {
+            for (java.lang.reflect.Method method : getClass().getMethods()) {
+                Class<?>[] parameters = method.getParameterTypes();
+                if (method.getName().equals(setter) && parameters.length == 1) {
+                    if (parameters[0].isPrimitive() && value == null) {
+                        throw new NullPointerException(propertyName);
+                    }
+                    method.invoke(this, value);
+                    return;
+                }
+            }
+        } catch (IllegalAccessException e) {
+            throw new IllegalArgumentException("property \"" + propertyName + "\" cannot be set using this method", e);
+        } catch (java.lang.reflect.InvocationTargetException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof RuntimeException) {
+                throw (RuntimeException) cause;
+            }
+            throw new IllegalArgumentException("property \"" + propertyName + "\" cannot be set using this method", cause);
+        } catch (IllegalArgumentException e) {
+            // Method.invoke reports a value of the wrong type this way.
+            throw new ClassCastException(e.getMessage());
+        }
+        throw new IllegalArgumentException("property \"" + propertyName + "\" cannot be set using this method");
     }
 
     /**

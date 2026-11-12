@@ -49,8 +49,22 @@ import java.io.Serializable;
  * input map that the root pane installs itself, which is what
  * {@code BasicRootPaneUI} installs on the desktop.
  */
-public class JRootPane extends JComponent {
+public class JRootPane extends JComponent implements javax.accessibility.Accessible {
     private static final long serialVersionUID = 1L;
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJRootPane();
+        }
+        return accessibleContext;
+    }
+
+    /** Accessibility support for root panes: role ROOT_PANE. */
+    protected class AccessibleJRootPane extends AccessibleJComponent {
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.ROOT_PANE;
+        }
+    }
 
     private static final String uiClassID = "RootPaneUI";
 

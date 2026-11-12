@@ -194,15 +194,31 @@ public class CellRendererPane extends Container implements Accessible {
 
     /**
      * Gets the AccessibleContext associated with this CellRendererPane.
-     * The shadow's AccessibleContext has no role model, so this is a plain context
-     * rather than the JDK's AccessibleCellRendererPane (role PANEL).
+     * For CellRendererPanes, the AccessibleContext takes the form of an
+     * AccessibleCellRendererPane.
      *
-     * @return an AccessibleContext associated with this CellRendererPane
+     * @return an AccessibleCellRendererPane that serves as the
+     *         AccessibleContext of this CellRendererPane
      */
     public AccessibleContext getAccessibleContext() {
         if (accessibleContext == null) {
-            accessibleContext = new AccessibleContext() { };
+            accessibleContext = new AccessibleCellRendererPane();
         }
         return accessibleContext;
+    }
+
+    /**
+     * This class implements accessibility support for the
+     * {@code CellRendererPane} class.
+     */
+    protected class AccessibleCellRendererPane extends AccessibleAWTContainer {
+        /**
+         * Get the role of this object.
+         *
+         * @return an instance of AccessibleRole describing the role of the object
+         */
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.PANEL;
+        }
     }
 }

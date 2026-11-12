@@ -33,7 +33,7 @@ package java.awt;
 import java.awt.image.BufferedImage;
 import java.util.concurrent.atomic.AtomicReference;
 
-public class Window extends Container {
+public class Window extends Container implements javax.accessibility.Accessible {
     private static final long serialVersionUID = 4497834738069338734L;
 
     public interface VisibilityHandler { void changed(Window window, boolean visible); }
@@ -856,4 +856,44 @@ public class Window extends Container {
     public void setType(Type type) {}
 
     public enum Type { NORMAL, UTILITY, POPUP }
+
+    /** A window answers the default locale when none was set, instead of asking a parent. */
+    @Override
+    public java.util.Locale getLocale() {
+        java.util.Locale own = locale;
+        return own != null ? own : java.util.Locale.getDefault();
+    }
+
+    /** The focus owner when it lies inside this window: the JDK's "window is active" test. */
+    final boolean ownsFocus() {
+        for (Component c = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
+                c != null; c = c.getParent()) {
+            if (c == this) return true;
+        }
+        return false;
+    }
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleAWTWindow();
+        }
+        return accessibleContext;
+    }
+
+    /** Accessibility support for windows: role WINDOW, ACTIVE while it holds the focus. */
+    protected class AccessibleAWTWindow extends AccessibleAWTContainer {
+        private static final long serialVersionUID = 4215068635060671780L;
+
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.WINDOW;
+        }
+
+        public javax.accessibility.AccessibleStateSet getAccessibleStateSet() {
+            javax.accessibility.AccessibleStateSet states = super.getAccessibleStateSet();
+            if (ownsFocus()) {
+                states.add(javax.accessibility.AccessibleState.ACTIVE);
+            }
+            return states;
+        }
+    }
 }
