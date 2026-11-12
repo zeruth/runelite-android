@@ -118,7 +118,9 @@ Reimplement over an Android backend when the OpenJDK file is a thin shell over n
 peer tree the module does not have: `Graphics2D` (raster loops in Rust), `Font`/`FontMetrics`
 rendering (Android `Paint`/`Typeface` through `AwtFontRegistry`), `Toolkit`, `GraphicsEnvironment`,
 `Robot`, `Clipboard`, `SourceDataLine`/`Clip` (`AudioTrack`), `ImageIO` codecs (`BitmapFactory`),
-`Desktop`, `SystemTray`. The public class still carries the OpenJDK signatures and header (what the
+`Desktop`, `SystemTray`, colour management (`java.awt.color`, `ColorConvertOp`: LittleCMS is replaced
+by `MatrixCMM`, the matrix/TRC approximation that is exact for the standard profiles and throws
+`CMMException` for LUT-only ICC profiles). The public class still carries the OpenJDK signatures and header (what the
 caller sees is a port); the body dispatches to a class under `net.runelite.awt.impl` that is written
 from scratch, is free to use any Android API, and is renamed by R8. The split keeps the shadow
 surface mechanical and puts every "how does Android do this" decision in one package.
