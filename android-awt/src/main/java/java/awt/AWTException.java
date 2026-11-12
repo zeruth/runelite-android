@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1995, 1997, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1995, 2003, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -39,9 +39,8 @@ public class AWTException extends Exception {
 
     /**
      * Constructs an instance of <code>AWTException</code> with the
-     * specified detail message. A detail message is an
-     * instance of <code>String</code> that describes this particular
-     * exception.
+     * specified detail message. A detail message is a
+     * <code>String</code> that describes this particular exception.
      * @param   msg     the detail message
      * @since   JDK1.0
      */

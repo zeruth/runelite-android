@@ -26,6 +26,7 @@
 -keep class javax.accessibility.** { *; }
 -keep class javax.imageio.** { *; }
 -keep class javax.management.** { *; }
+-keep class javax.print.** { *; }
 -keep class javax.sound.** { *; }
 -keep class javax.swing.** { *; }
 -keep class sun.** { *; }
