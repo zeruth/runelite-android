@@ -40,6 +40,10 @@ public class Font implements Serializable {
     public static final int BOLD = 1;
     public static final int ITALIC = 2;
 
+    public static final int ROMAN_BASELINE = 0;
+    public static final int CENTER_BASELINE = 1;
+    public static final int HANGING_BASELINE = 2;
+
     public static final String DIALOG = "Dialog";
     public static final String DIALOG_INPUT = "DialogInput";
     public static final String SANS_SERIF = "SansSerif";
