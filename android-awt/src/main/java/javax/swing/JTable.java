@@ -5831,12 +5831,11 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
      */
     private void writeObject(ObjectOutputStream s) throws IOException {
         s.defaultWriteObject();
-        if (getUIClassID().equals(uiClassID)) {
-            byte count = JComponent.getWriteObjCounter(this);
-            JComponent.setWriteObjCounter(this, --count);
-            if (count == 0 && ui != null) {
-                ui.installUI(this);
-            }
+        // The shadow JComponent keeps no per-component write counter (the JDK
+        // uses it to reinstall the UI once the outermost write finishes), so
+        // the UI is reinstalled after every write, as JTableHeader does.
+        if ((ui != null) && (getUIClassID().equals(uiClassID))) {
+            ui.installUI(this);
         }
     }
 
@@ -5856,18 +5855,6 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
         if (getToolTipText() == null) {
             ToolTipManager.sharedInstance().registerComponent(this);
          }
-    }
-
-    /* Called from the JComponent's EnableSerializationFocusListener to
-     * do any Swing-specific pre-serialization configuration.
-     */
-    void compWriteObjectNotify() {
-        super.compWriteObjectNotify();
-        // If ToolTipText != null, then the tooltip has already been
-        // unregistered by JComponent.compWriteObjectNotify()
-        if (getToolTipText() == null) {
-            ToolTipManager.sharedInstance().unregisterComponent(this);
-        }
     }
 
     /**
