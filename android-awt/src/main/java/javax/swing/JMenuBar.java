@@ -119,4 +119,65 @@ public class JMenuBar extends JComponent implements javax.accessibility.Accessib
     }
 
     public Component getComponent() { return this; }
+
+    // --- key bindings (OpenJDK 8u JMenuBar) ---------------------------------
+    // The KeyboardManager hands every unclaimed WHEN_IN_FOCUSED_WINDOW stroke to the
+    // registered bars; the bar passes it down its menus, which is how mnemonics fire.
+
+    /**
+     * Subclassed to check all the child menus.
+     */
+    protected boolean processKeyBinding(KeyStroke ks, java.awt.event.KeyEvent e,
+                                        int condition, boolean pressed) {
+        // See if we have a local binding.
+        boolean retValue = super.processKeyBinding(ks, e, condition, pressed);
+        if (!retValue) {
+            MenuElement[] subElements = getSubElements();
+            for (MenuElement subElement : subElements) {
+                if (processBindingForKeyStrokeRecursive(subElement, ks, e, condition, pressed)) {
+                    return true;
+                }
+            }
+        }
+        return retValue;
+    }
+
+    static boolean processBindingForKeyStrokeRecursive(MenuElement elem, KeyStroke ks,
+                                                       java.awt.event.KeyEvent e, int condition, boolean pressed) {
+        if (elem == null) {
+            return false;
+        }
+        Component c = elem.getComponent();
+        if (!(c.isVisible() || (c instanceof JPopupMenu)) || !c.isEnabled()) {
+            return false;
+        }
+        if (c instanceof JComponent && ((JComponent) c).processKeyBinding(ks, e, condition, pressed)) {
+            return true;
+        }
+        MenuElement[] subElements = elem.getSubElements();
+        for (MenuElement subElement : subElements) {
+            if (processBindingForKeyStrokeRecursive(subElement, ks, e, condition, pressed)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Overrides <code>JComponent.addNotify</code> to register this
+     * menu bar with the current keyboard manager.
+     */
+    public void addNotify() {
+        super.addNotify();
+        KeyboardManager.getCurrentManager().registerMenuBar(this);
+    }
+
+    /**
+     * Overrides <code>JComponent.removeNotify</code> to unregister this
+     * menu bar with the current keyboard manager.
+     */
+    public void removeNotify() {
+        super.removeNotify();
+        KeyboardManager.getCurrentManager().unregisterMenuBar(this);
+    }
 }

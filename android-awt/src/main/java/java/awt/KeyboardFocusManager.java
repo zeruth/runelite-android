@@ -594,7 +594,13 @@ public abstract class KeyboardFocusManager implements KeyEventDispatcher, KeyEve
         Window window = windowOf(component);
         if (window != null && !window.isFocusableWindow()) return false;
         if (component == focusOwner) return true;
-        return changeFocus(component, cause == null ? FocusEvent.Cause.UNKNOWN : cause, temporary);
+        if (cause == null) cause = FocusEvent.Cause.UNKNOWN;
+        // As Component.isRequestFocusAccepted: a window activation always lands, anything else
+        // asks the controller (Swing's InputVerifier) whether the current owner lets go.
+        if (!net.runelite.awt.impl.FocusVeto.accept(focusOwner, component, temporary, cause)) {
+            return false;
+        }
+        return changeFocus(component, cause, temporary);
     }
 
     /** Android host seam: clears the focus owner, and the focused window, when they lie inside subtree. */

@@ -90,6 +90,37 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
     public void setIgnoreRepaint(boolean ignoreRepaint) { this.ignoreRepaint = ignoreRepaint; }
     public boolean getIgnoreRepaint() { return ignoreRepaint; }
 
+    // Package access as in the JDK: Window seeds it without firing a property change.
+    java.util.Locale locale;
+
+    /**
+     * Gets the locale of this component, or of its parent when none was set.
+     *
+     * @exception IllegalComponentStateException if the component has neither
+     *            its own locale nor a parent to take one from
+     */
+    public java.util.Locale getLocale() {
+        java.util.Locale locale = this.locale;
+        if (locale != null) {
+            return locale;
+        }
+        Container parent = this.parent;
+        if (parent == null) {
+            throw new IllegalComponentStateException("This component must have a parent in order to determine its locale");
+        }
+        return parent.getLocale();
+    }
+
+    /** Sets the locale of this component; a bound property. */
+    public void setLocale(java.util.Locale l) {
+        java.util.Locale oldValue = locale;
+        locale = l;
+        firePropertyChange("locale", oldValue, l);
+        // As the JDK's invalidateIfValid: JComponent's constructor sets the default locale
+        // before subclass fields exist, so an unlaid-out component must not invalidate.
+        if (isValid()) invalidate();
+    }
+
     protected int x, y, width, height;
     // Defaults tuned for RuneLite's theme. On desktop FlatLaf populates
     // UIManager.getDefaults() so JPanel/JLabel inherit the dark theme; we don't run
@@ -150,29 +181,6 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
 
     protected Component() {
     }
-
-    private java.util.Locale locale;
-    /**
-     * The JDK's lookup: the component's own locale, else its parent's; a parentless component
-     * without one throws. {@link Window} answers the default locale instead.
-     */
-    public java.util.Locale getLocale() {
-        java.util.Locale locale = this.locale;
-        if (locale != null) return locale;
-        Container parent = this.parent;
-        if (parent == null) {
-            throw new IllegalComponentStateException("This component must have a parent in order to determine its locale");
-        }
-        return parent.getLocale();
-    }
-    public void setLocale(java.util.Locale l) {
-        java.util.Locale oldValue = locale;
-        locale = l;
-        firePropertyChange("locale", oldValue, l);
-        invalidateIfValid();
-    }
-    final java.util.Locale ownLocale() { return locale; }
-    private void invalidateIfValid() { if (isValid()) invalidate(); }
 
     public Container getParent()  { return parent; }
     void setParent(Container p) {

@@ -64,6 +64,8 @@ public class Window extends Container implements javax.accessibility.Accessible 
     public Window(Window owner, GraphicsConfiguration configuration) {
         this.owner = owner;
         visible = false;
+        // As the JDK's Window.init: a window is the root its children's getLocale() reaches.
+        locale = java.util.Locale.getDefault();
         LATEST.set(this);
         ALL_WINDOWS.add(new java.lang.ref.WeakReference<>(this));
     }
@@ -840,7 +842,7 @@ public class Window extends Container implements javax.accessibility.Accessible 
     /** A window answers the default locale when none was set, instead of asking a parent. */
     @Override
     public java.util.Locale getLocale() {
-        java.util.Locale own = ownLocale();
+        java.util.Locale own = locale;
         return own != null ? own : java.util.Locale.getDefault();
     }
 
