@@ -1,5 +1,6 @@
 // host-contract
 import java.awt.*;
+import java.awt.event.*;
 import java.awt.image.BufferedImage;
 import java.util.*;
 import javax.swing.*;
@@ -21,7 +22,97 @@ public class TestTableContracts {
         sortKeepsSelection();
         columnReorder();
         fillsViewport();
-        System.out.println("PASS: editing via the model, selection across sorts, column moves, viewport fill");
+        headerGestures();
+        stringConverter();
+        removedDefaults();
+        System.out.println("PASS: editing via the model, selection across sorts, column moves, viewport fill, "
+            + "header drags and sort icon, string converter, removed defaults");
+    }
+
+    static MouseEvent mouse(Component source, int id, int x, int clicks) {
+        int button = id == MouseEvent.MOUSE_DRAGGED ? MouseEvent.NOBUTTON : MouseEvent.BUTTON1;
+        int modifiers = id == MouseEvent.MOUSE_PRESSED || id == MouseEvent.MOUSE_DRAGGED ? InputEvent.BUTTON1_DOWN_MASK : 0;
+        return new MouseEvent(source, id, System.currentTimeMillis(), modifiers, x, 5, x, 5, clicks, false, button);
+    }
+
+    /** BasicTableHeaderUI's mouse handler; a touch drag reaches the header as these same events. */
+    static void headerGestures() {
+        JTable table = new JTable(model());
+        JTableHeader header = table.getTableHeader();
+        header.setSize(150, 20);
+        TableColumn name = table.getColumnModel().getColumn(0);
+        header.dispatchEvent(mouse(header, MouseEvent.MOUSE_PRESSED, 75, 1));
+        check(header.getResizingColumn() == name && header.getDraggedColumn() == null, "a press on the edge resizes the left column");
+        header.dispatchEvent(mouse(header, MouseEvent.MOUSE_DRAGGED, 95, 0));
+        check(name.getWidth() == 95, "the resize follows the drag: " + name.getWidth());
+        header.dispatchEvent(mouse(header, MouseEvent.MOUSE_RELEASED, 95, 1));
+        check(header.getResizingColumn() == null, "release ends the resize");
+
+        DefaultTableModel model = model();
+        table = new JTable(model);
+        TableRowSorter<TableModel> sorter = new TableRowSorter<>(model);
+        table.setRowSorter(sorter);
+        header = table.getTableHeader();
+        header.setSize(150, 20);
+        TableColumnModel columns = table.getColumnModel();
+        name = columns.getColumn(0);
+        header.dispatchEvent(mouse(header, MouseEvent.MOUSE_PRESSED, 30, 1));
+        check(header.getDraggedColumn() == name && header.getResizingColumn() == null, "a press inside a column drags it");
+        header.dispatchEvent(mouse(header, MouseEvent.MOUSE_DRAGGED, 60, 0));
+        check(header.getDraggedDistance() == 30 && columns.getColumn(0) == name, "under half the neighbour it only slides");
+        header.dispatchEvent(mouse(header, MouseEvent.MOUSE_DRAGGED, 120, 0));
+        check(columns.getColumn(1) == name && header.getDraggedDistance() == 15, "past half the neighbour it swaps: " + header.getDraggedDistance());
+        check(table.convertColumnIndexToModel(0) == 1 && table.convertColumnIndexToView(0) == 1, "the drag remaps the indices");
+        header.dispatchEvent(mouse(header, MouseEvent.MOUSE_RELEASED, 120, 1));
+        check(header.getDraggedColumn() == null && header.getDraggedDistance() == 0, "release ends the drag");
+
+        header.dispatchEvent(mouse(header, MouseEvent.MOUSE_PRESSED, 30, 1));
+        header.dispatchEvent(mouse(header, MouseEvent.MOUSE_RELEASED, 30, 1));
+        header.dispatchEvent(mouse(header, MouseEvent.MOUSE_CLICKED, 30, 1));
+        java.util.List<? extends RowSorter.SortKey> keys = sorter.getSortKeys();
+        check(keys.size() == 1 && keys.get(0).getColumn() == 1 && keys.get(0).getSortOrder() == SortOrder.ASCENDING,
+            "a click sorts the model column under it");
+
+        JLabel sorted = (JLabel) header.getDefaultRenderer().getTableCellRendererComponent(table, "n", false, false, -1, 0);
+        check(sorted.getIcon() != null && "n".equals(sorted.getText()), "the sorted column shows the sort icon");
+        check(sorted.getHorizontalTextPosition() == SwingConstants.LEADING, "with a sorter the text leads the icon");
+        JLabel plain = (JLabel) header.getDefaultRenderer().getTableCellRendererComponent(table, "name", false, false, -1, 1);
+        check(plain.getIcon() == null && "name".equals(plain.getText()), "other columns show no icon");
+
+        header.setEnabled(false);
+        header.dispatchEvent(mouse(header, MouseEvent.MOUSE_PRESSED, 30, 1));
+        check(header.getDraggedColumn() == null, "a disabled header ignores gestures");
+    }
+
+    /** TableRowSorter sorts and filters a column without a Comparable class through its TableStringConverter. */
+    static void stringConverter() {
+        DefaultTableModel model = model();
+        TableRowSorter<TableModel> sorter = new TableRowSorter<>(model);
+        check(sorter.getComparator(0) instanceof java.text.Collator && !(sorter.getComparator(1) instanceof java.text.Collator),
+            "collator for Object columns, compareTo for Comparable ones");
+        TableStringConverter mirror = new TableStringConverter() {
+            @Override public String toString(TableModel m, int row, int column) {
+                return String.valueOf((char) ('z' - (m.getValueAt(row, column).toString().charAt(0) - 'a')));
+            }
+        };
+        sorter.setStringConverter(mirror);
+        check(sorter.getStringConverter() == mirror, "converter kept");
+        sorter.toggleSortOrder(0);
+        check("c".equals(model.getValueAt(sorter.convertRowIndexToModel(0), 0)), "the sort compares the converted strings");
+        sorter.setRowFilter(RowFilter.regexFilter("^z$", 0));
+        check(sorter.getViewRowCount() == 1 && sorter.convertRowIndexToModel(0) == 1, "the filter reads the converted strings");
+    }
+
+    /** Removing a class's default leaves no built-in fallback: lookups answer null and editing refuses. */
+    static void removedDefaults() {
+        JTable table = new JTable(model());
+        table.setDefaultEditor(Object.class, null);
+        check(table.getDefaultEditor(Object.class) == null && table.getDefaultEditor(String.class) == null, "no Object editor");
+        check(!table.editCellAt(0, 0) && !table.isEditing(), "a cell without an editor does not edit");
+        check(table.getDefaultEditor(Integer.class) != null && table.editCellAt(0, 1), "the Number editor survives");
+        table.getCellEditor().cancelCellEditing();
+        table.setDefaultRenderer(Object.class, null);
+        check(table.getDefaultRenderer(Object.class) == null && table.getDefaultRenderer(Integer.class) != null, "renderer lookups the same");
     }
 
     static void editing() {

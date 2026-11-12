@@ -65,7 +65,7 @@ public class JTableHeader extends JComponent implements TableColumnModelListener
     }
 
     protected TableColumnModel createDefaultColumnModel() { return new DefaultTableColumnModel(); }
-    protected TableCellRenderer createDefaultRenderer() { return new SortArrowRenderer(); }
+    protected TableCellRenderer createDefaultRenderer() { return new sun.swing.table.DefaultTableCellHeaderRenderer(); }
 
     public void setTable(JTable table) { JTable old = this.table; this.table = table; firePropertyChange("table", old, table); }
     public JTable getTable() { return table; }
@@ -204,6 +204,7 @@ public class JTableHeader extends JComponent implements TableColumnModelListener
         }
 
         @Override public void mouseDragged(MouseEvent e) {
+            if (!isEnabled()) return;
             int dx = e.getX() - pressX;
             if (dx != 0) moved = true;
             if (resizingColumn != null) {
@@ -227,6 +228,7 @@ public class JTableHeader extends JComponent implements TableColumnModelListener
         }
 
         @Override public void mouseReleased(MouseEvent e) {
+            if (!isEnabled()) return;
             boolean wasDragging = draggedColumn != null || resizingColumn != null;
             draggedColumn = null; resizingColumn = null; draggedDistance = 0;
             if (wasDragging) { repaint(); tableChanged(); }
@@ -252,50 +254,6 @@ public class JTableHeader extends JComponent implements TableColumnModelListener
                 if (Math.abs(px - x) <= RESIZE_SLOP) return column.getResizable() ? column : null;
             }
             return null;
-        }
-    }
-
-    /**
-     * The header default (sun.swing.table.DefaultTableCellHeaderRenderer on the JDK): the
-     * header value, with an arrow for the column the table's sorter sorts first.
-     */
-    static class SortArrowRenderer extends DefaultTableCellRenderer implements javax.swing.plaf.UIResource {
-        private SortOrder order = SortOrder.UNSORTED;
-
-        SortArrowRenderer() { setHorizontalAlignment(SwingConstants.CENTER); }
-
-        @Override public Component getTableCellRendererComponent(JTable table, Object value, boolean selected, boolean focus, int row, int column) {
-            order = SortOrder.UNSORTED;
-            if (table != null) {
-                JTableHeader header = table.getTableHeader();
-                if (header != null) {
-                    setForeground(header.getForeground());
-                    setBackground(header.getBackground());
-                    setFont(header.getFont());
-                }
-                RowSorter<?> sorter = table.getRowSorter();
-                java.util.List<? extends RowSorter.SortKey> keys = sorter == null ? null : sorter.getSortKeys();
-                if (keys != null && !keys.isEmpty() && keys.get(0).getColumn() == table.convertColumnIndexToModel(column)) {
-                    order = keys.get(0).getSortOrder();
-                }
-            }
-            setValue(value);
-            return this;
-        }
-
-        @Override protected void paintComponent(Graphics g) {
-            super.paintComponent(g);
-            g.setColor(getForeground() == null ? Color.BLACK : getForeground());
-            int w = getWidth(), h = getHeight();
-            g.drawLine(w - 1, 0, w - 1, h - 1);
-            g.drawLine(0, h - 1, w - 1, h - 1);
-            if (order == SortOrder.UNSORTED || w < 16) return;
-            int size = Math.max(3, Math.min(h / 4, 5)), cx = w - 4 - size, cy = h / 2;
-            int[] xs = {cx - size, cx + size, cx};
-            int[] ys = order == SortOrder.ASCENDING
-                ? new int[] {cy + size / 2, cy + size / 2, cy - size / 2}
-                : new int[] {cy - size / 2, cy - size / 2, cy + size / 2};
-            g.fillPolygon(xs, ys, 3);
         }
     }
 }

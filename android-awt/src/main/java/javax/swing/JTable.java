@@ -555,7 +555,10 @@ public class JTable extends JComponent implements javax.swing.event.TableModelLi
     public javax.swing.table.TableCellEditor getCellEditor() { return cellEditor; }
     public javax.swing.table.TableCellEditor getCellEditor(int row,int column) { javax.swing.table.TableCellEditor editor=columnModel.getColumn(column).getCellEditor();return editor!=null?editor:getDefaultEditor(getColumnClass(column)); }
     public void setDefaultEditor(Class<?> type,javax.swing.table.TableCellEditor editor) { if(editor==null)defaultEditors.remove(type);else defaultEditors.put(type,editor); }
-    /** The JDK's lookup: the class, then its superclasses, with interfaces falling back to Object. */
+    /**
+     * The JDK's lookup: the class, then its superclasses, with interfaces falling back to Object.
+     * With the Object default removed this answers null, as the JDK does; editCellAt then refuses.
+     */
     public javax.swing.table.TableCellEditor getDefaultEditor(Class<?> type) {
         for(Class<?> c=type;c!=null;c=c.getSuperclass()==null&&c!=Object.class?Object.class:c.getSuperclass()){javax.swing.table.TableCellEditor editor=defaultEditors.get(c);if(editor!=null)return editor;}
         return null;
