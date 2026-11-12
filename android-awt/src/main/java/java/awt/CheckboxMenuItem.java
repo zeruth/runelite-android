@@ -36,6 +36,8 @@ public class CheckboxMenuItem extends MenuItem implements ItemSelectable {
     public CheckboxMenuItem() { this(""); }
     public CheckboxMenuItem(String label) { this(label, false); }
     public CheckboxMenuItem(String label, boolean state) { super(label); this.state = state; }
+    private static int nameCounter = 0;
+    @Override String constructComponentName() { synchronized (CheckboxMenuItem.class) { return "chkmenuitem" + nameCounter++; } }
     public boolean getState() { return state; }
     public void setState(boolean state) { this.state = state; }
     public Object[] getSelectedObjects() { return state ? new Object[]{getLabel()} : null; }

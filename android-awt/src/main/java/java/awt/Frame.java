@@ -54,6 +54,32 @@ public class Frame extends Window {
     public void setTitle(String title) { this.title = (title == null) ? "" : title; }
     public boolean isResizable() { return resizable; }
     public void setResizable(boolean resizable) { this.resizable = resizable; }
+    /**
+     * The frame's menu bar. Android has no native menu bar, so the bar is held and reported as on the JDK
+     * but not drawn; its menus can still be shown as popups.
+     */
+    private MenuBar menuBar;
+    public MenuBar getMenuBar() { return menuBar; }
+    public void setMenuBar(MenuBar mb) {
+        synchronized (getTreeLock()) {
+            if (menuBar == mb) return;
+            if (mb != null && mb.parent != null) mb.parent.remove(mb);
+            if (menuBar != null) remove(menuBar);
+            menuBar = mb;
+            if (mb != null) mb.parent = this;
+        }
+    }
+    @Override public void remove(MenuComponent m) {
+        if (m == null) return;
+        synchronized (getTreeLock()) {
+            if (m == menuBar) {
+                menuBar = null;
+                m.parent = null;
+                return;
+            }
+        }
+        super.remove(m);
+    }
     public boolean isUndecorated() { return undecorated; }
     public void setUndecorated(boolean undecorated) { this.undecorated = undecorated; }
     public int getExtendedState() { return NORMAL; }

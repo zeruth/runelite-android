@@ -36,8 +36,24 @@ public abstract class MenuComponent implements java.io.Serializable {
     public MenuContainer getParent() { return parent; }
     public Font getFont() { return font != null ? font : parent != null ? parent.getFont() : null; }
     public void setFont(Font font) { this.font = font; }
-    public String getName() { return name; }
-    public void setName(String name) { this.name = name; }
+    private boolean nameExplicitlySet;
+    /** As the JDK: an unnamed menu component gets its class's generated name ("menubar0", "menuitem3"). */
+    public String getName() {
+        if (name == null && !nameExplicitlySet) {
+            synchronized (this) {
+                if (name == null && !nameExplicitlySet) name = constructComponentName();
+            }
+        }
+        return name;
+    }
+    public void setName(String name) {
+        synchronized (this) {
+            this.name = name;
+            nameExplicitlySet = true;
+        }
+    }
+    /** The generated name of an unnamed component; null for classes that do not generate one. */
+    String constructComponentName() { return null; }
     public void removeNotify() {}
     public final void dispatchEvent(AWTEvent event) { processEvent(event); }
     protected void processEvent(AWTEvent event) {}

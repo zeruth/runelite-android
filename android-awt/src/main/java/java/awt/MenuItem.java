@@ -38,6 +38,8 @@ public class MenuItem extends MenuComponent {
     public MenuItem() { this(""); }
     public MenuItem(String label) { this(label, null); }
     public MenuItem(String label, MenuShortcut shortcut) { this.label = label; this.shortcut = shortcut; }
+    private static int nameCounter = 0;
+    @Override String constructComponentName() { synchronized (MenuItem.class) { return "menuitem" + nameCounter++; } }
     public String getLabel() { return label; }
     public void setLabel(String label) { this.label = label; }
     public boolean isEnabled() { return enabled; }

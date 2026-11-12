@@ -35,6 +35,8 @@ public class Menu extends MenuItem implements MenuContainer {
     public Menu() { this(""); }
     public Menu(String label) { this(label, false); }
     public Menu(String label, boolean tearOff) { super(label); this.tearOff = tearOff; }
+    private static int nameCounter = 0;
+    @Override String constructComponentName() { synchronized (Menu.class) { return "menu" + nameCounter++; } }
     public boolean isTearOff() { return tearOff; }
     public MenuItem add(MenuItem item) { insert(item, items.size()); return item; }
     public void add(String label) { add(new MenuItem(label)); }

@@ -285,5 +285,24 @@ public class TestAwtWidgetContracts {
         check(fired[0] != null && "Open".equals(fired[0].getActionCommand()), "menu item delivers its action");
         file.remove(open);
         check(open.getParent() == null && file.getItemCount() == 2, "menu removes an item");
+
+        check(String.valueOf(new MenuBar().getName()).startsWith("menubar"), "menu bar generates its name");
+        check(String.valueOf(new MenuItem("x").getName()).startsWith("menuitem"), "menu item generates its name");
+        MenuItem named = new MenuItem("y");
+        named.setName("mine");
+        check("mine".equals(named.getName()), "an explicit name wins");
+
+        java.awt.Frame frame;
+        try {
+            frame = new java.awt.Frame("menus");
+        } catch (java.awt.HeadlessException e) {
+            // The runner fell back to the JDK's Frame (the shadow needs the Android backend): nothing to test.
+            System.out.println("frame menu bar: JDK Frame in use, skipped");
+            return;
+        }
+        frame.setMenuBar(bar);
+        check(frame.getMenuBar() == bar && bar.getParent() == frame, "frame holds its menu bar");
+        frame.setMenuBar(null);
+        check(frame.getMenuBar() == null && bar.getParent() == null, "frame releases its menu bar");
     }
 }
