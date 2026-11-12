@@ -31,20 +31,34 @@
 package com.sun.management;
 
 /**
- * Extended Operating System MXBean. Used by RuneLite for diagnostics; we return -1
- * (the JDK's "not available" sentinel) everywhere.
+ * The extended operating system MXBean. The platform bean
+ * ({@code ManagementFactory.getOperatingSystemMXBean()}) reads /proc/self/stat,
+ * /proc/self/status, /proc/meminfo, /proc/stat and /proc/loadavg; a value whose source the
+ * process may not read (Android 8+ denies apps /proc/stat) is -1, the JDK's "not available".
  */
-@net.runelite.awt.ShadowStub("every extended counter is -1, the JDK's unavailable sentinel; Android exposes none of them to an app")
 public interface OperatingSystemMXBean extends java.lang.management.OperatingSystemMXBean {
-    default long getCommittedVirtualMemorySize() { return -1L; }
-    default long getTotalSwapSpaceSize() { return -1L; }
-    default long getFreeSwapSpaceSize() { return -1L; }
-    default long getProcessCpuTime() { return -1L; }
-    default long getFreePhysicalMemorySize() { return -1L; }
-    default long getTotalPhysicalMemorySize() { return -1L; }
-    default double getSystemCpuLoad() { return -1.0; }
-    default double getProcessCpuLoad() { return -1.0; }
-    default double getCpuLoad() { return -1.0; }
-    default long getFreeMemorySize() { return -1L; }
-    default long getTotalMemorySize() { return -1L; }
+    long getCommittedVirtualMemorySize();
+    long getTotalSwapSpaceSize();
+    long getFreeSwapSpaceSize();
+    long getProcessCpuTime();
+
+    @Deprecated
+    long getFreePhysicalMemorySize();
+
+    // JDK 14
+    default long getFreeMemorySize() { return getFreePhysicalMemorySize(); }
+
+    @Deprecated
+    long getTotalPhysicalMemorySize();
+
+    // JDK 14
+    default long getTotalMemorySize() { return getTotalPhysicalMemorySize(); }
+
+    @Deprecated
+    double getSystemCpuLoad();
+
+    // JDK 14
+    default double getCpuLoad() { return getSystemCpuLoad(); }
+
+    double getProcessCpuLoad();
 }

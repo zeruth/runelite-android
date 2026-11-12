@@ -30,7 +30,7 @@
  */
 package java.lang.management;
 
-public interface MemoryMXBean {
+public interface MemoryMXBean extends PlatformManagedObject {
     MemoryUsage getHeapMemoryUsage();
     MemoryUsage getNonHeapMemoryUsage();
     int getObjectPendingFinalizationCount();
