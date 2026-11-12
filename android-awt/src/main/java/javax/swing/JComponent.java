@@ -826,7 +826,7 @@ public class JComponent extends Container {
     // --- focus (OpenJDK 8u JComponent, JDK 9 InputVerifier) ----------------
 
     static {
-        java.awt.KeyboardFocusManager.setRequestFocusController(JComponent::acceptRequestFocus);
+        net.runelite.awt.impl.FocusVeto.install(JComponent::acceptRequestFocus);
     }
 
     /** The component whose InputVerifier is running; EDT-confined, as the JDK's AppContext slot. */

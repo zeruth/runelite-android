@@ -45,16 +45,15 @@ import java.util.ListIterator;
  * traversed after a focus cycle root will be the focus-cycle-root's default
  * Component to focus. This behavior can be disabled using the
  * <code>setImplicitDownCycleTraversal</code> method.
- * <p>
- * Android: the JDK's superclass is InternalFrameFocusTraversalPolicy, which needs
- * JInternalFrame; the shadow has neither yet, so this extends FocusTraversalPolicy.
  *
  * @author David Mendenhall
  *
  * @see java.util.Comparator
  * @since 1.4
  */
-public class SortingFocusTraversalPolicy extends FocusTraversalPolicy {
+public class SortingFocusTraversalPolicy
+    extends InternalFrameFocusTraversalPolicy
+{
     private Comparator<? super Component> comparator;
     private boolean implicitDownCycleTraversal = true;
 

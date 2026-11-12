@@ -1,7 +1,8 @@
-// host-contract
+// host-contract: patched-args=shadow
 import java.awt.Component;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.FocusEvent;
 import java.awt.event.KeyEvent;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -14,6 +15,9 @@ import javax.swing.InputMap;
 import javax.swing.InputVerifier;
 import javax.swing.JComponent;
 import javax.swing.JInternalFrame;
+import javax.swing.JMenu;
+import javax.swing.JMenuBar;
+import javax.swing.JMenuItem;
 import javax.swing.JPanel;
 import javax.swing.KeyStroke;
 import javax.swing.LayoutFocusTraversalPolicy;
@@ -31,8 +35,11 @@ import javax.swing.plaf.UIResource;
  *
  * Headless, so there is no Window: the JInternalFrame is the one top ancestor the JDK's
  * KeyboardManager accepts without one, and it is shown through addNotify + setVisible, which a
- * lightweight root allows. A focus transfer itself needs a Window on the JDK, so the InputVerifier
- * veto over a real tab-out is checked on the device; here its verdicts are.
+ * lightweight root allows. A focus transfer itself needs a Window on the JDK, and on the host the
+ * JDK's own Component and KeyboardFocusManager run in both modes, so the veto a tab-out goes
+ * through is reached directly in the patched run (argument {@code shadow}): FocusVeto.accept is
+ * the call the shadow KeyboardFocusManager makes before every focus change, and it runs the
+ * shadow JComponent's InputVerifier controller.
  */
 public final class TestSwingFocusContracts {
     private static int failures;
@@ -60,9 +67,14 @@ public final class TestSwingFocusContracts {
     }
 
     public static void main(String[] args) {
+        boolean shadow = args.length > 0 && "shadow".equals(args[0]);
         bindingWalk();
+        menuBarBinding();
         mapParity();
         inputVerifier();
+        if (shadow) {
+            ShadowVeto.run();
+        }
         layoutOrder();
         System.out.println("TestSwingFocusContracts: " + (total - failures) + "/" + total + " passed");
         if (failures != 0) System.exit(1);
@@ -144,6 +156,40 @@ public final class TestSwingFocusContracts {
         other.setEnabled(true);
         other.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).remove(f3);
         check("F3: removing the stroke from the ComponentInputMap unregisters it", !press(focused, KeyEvent.VK_F3));
+    }
+
+    // --- JMenuBar: the KeyboardManager's last stop -----------------------------------------
+
+    static void menuBarBinding() {
+        JInternalFrame frame = new JInternalFrame();
+        Field focused = new Field("menuFocused");
+        frame.getContentPane().add(focused);
+        JMenuBar bar = new JMenuBar();
+        JMenu menu = new JMenu("File");
+        JMenuItem item = new JMenuItem("Open");
+        menu.add(item);
+        bar.add(menu);
+        frame.setJMenuBar(bar);
+        // How BasicMenuItemUI installs an accelerator: a window binding on an item whose popup is
+        // not in the tree, so only the menu bar's walk down its menus can reach it.
+        KeyStroke f6 = KeyStroke.getKeyStroke(KeyEvent.VK_F6, 0);
+        bind(item, JComponent.WHEN_IN_FOCUSED_WINDOW, f6, "itemF6");
+
+        frame.addNotify();
+        frame.setVisible(true);
+        check("menu bar: shown with the frame", bar.isShowing() && focused.isShowing());
+        check("menu bar: the popup's item is not showing", !item.isShowing());
+        check("menu bar: F6 is processed", press(focused, KeyEvent.VK_F6));
+        checkEquals("menu bar: a hidden popup item's window binding fires through the bar",
+            Arrays.asList("itemF6:null"), fired);
+        item.setEnabled(false);
+        check("menu bar: a disabled item's binding does not fire", !press(focused, KeyEvent.VK_F6) && fired.isEmpty());
+        item.setEnabled(true);
+        bar.setEnabled(false);
+        check("menu bar: a disabled bar is skipped", !press(focused, KeyEvent.VK_F6) && fired.isEmpty());
+        bar.setEnabled(true);
+        frame.setJMenuBar(null);
+        check("menu bar: a removed bar no longer dispatches", !press(focused, KeyEvent.VK_F6) && fired.isEmpty());
     }
 
     // --- InputMap / ActionMap parity -----------------------------------------------------
@@ -282,5 +328,54 @@ public final class TestSwingFocusContracts {
         checkEquals("layout policy: default component is the first", left[0], policy.getDefaultComponent(form));
         right[0].setEnabled(false);
         checkEquals("layout policy: a disabled field is skipped", left[1], policy.getComponentAfter(form, left[0]));
+    }
+
+    // --- the focus veto a tab-out goes through (patched run only) -----------------------------
+
+    /** Its own class, so the plain-JDK run never resolves net.runelite.awt.impl. */
+    static final class ShadowVeto {
+        static boolean accept(Component from, Component to, FocusEvent.Cause cause) {
+            return net.runelite.awt.impl.FocusVeto.accept(from, to, false, cause);
+        }
+
+        static void run() {
+            new JPanel(); // JComponent's static initializer installs the controller
+            check("shadow: JComponent installed its focus veto", net.runelite.awt.impl.FocusVeto.installed() != null);
+
+            final JComponent field = new Field("vetoField");
+            final JComponent next = new Field("vetoNext");
+            final JComponent third = new Field("vetoThird");
+            final boolean[] valid = {false};
+            final List<Boolean> nested = new ArrayList<>();
+            final int[] calls = {0};
+            field.setInputVerifier(new InputVerifier() {
+                @Override public boolean verify(JComponent input) {
+                    calls[0]++;
+                    // A verifier that moves focus itself must not be asked again for that move.
+                    nested.add(accept(field, third, FocusEvent.Cause.TRAVERSAL_FORWARD));
+                    return valid[0];
+                }
+            });
+            FocusEvent.Cause tab = FocusEvent.Cause.TRAVERSAL_FORWARD;
+            check("shadow: an invalid field blocks tab-out", !accept(field, next, tab));
+            checkEquals("shadow: the verifier ran once for the tab-out", 1, calls[0]);
+            checkEquals("shadow: a focus request from inside the verifier is let through", Arrays.asList(Boolean.TRUE), nested);
+            check("shadow: an invalid field blocks a backward tab too", !accept(field, next, FocusEvent.Cause.TRAVERSAL_BACKWARD));
+            calls[0] = 0;
+            check("shadow: a window activation skips the verifier", accept(field, next, FocusEvent.Cause.ACTIVATION) && calls[0] == 0);
+            check("shadow: the owner asking for itself skips the verifier", accept(field, field, tab) && calls[0] == 0);
+            check("shadow: no current owner skips the verifier", accept(null, next, tab) && calls[0] == 0);
+            next.setVerifyInputWhenFocusTarget(false);
+            check("shadow: a target with verifyInputWhenFocusTarget=false is let through",
+                accept(field, next, tab) && calls[0] == 0);
+            next.setVerifyInputWhenFocusTarget(true);
+            check("shadow: a non-Swing target is let through",
+                accept(field, new java.awt.Component() { }, tab) && calls[0] == 0);
+            valid[0] = true;
+            check("shadow: a valid field lets focus go", accept(field, next, tab) && calls[0] == 1);
+            field.setInputVerifier(null);
+            valid[0] = false;
+            check("shadow: no verifier, no veto", accept(field, next, tab));
+        }
     }
 }

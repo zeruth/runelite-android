@@ -597,29 +597,10 @@ public abstract class KeyboardFocusManager implements KeyEventDispatcher, KeyEve
         if (cause == null) cause = FocusEvent.Cause.UNKNOWN;
         // As Component.isRequestFocusAccepted: a window activation always lands, anything else
         // asks the controller (Swing's InputVerifier) whether the current owner lets go.
-        RequestFocusController controller = requestFocusController;
-        Component from = focusOwner;
-        if (from != null && cause != FocusEvent.Cause.ACTIVATION && controller != null
-                && !controller.acceptRequestFocus(from, component, temporary, true, cause)) {
+        if (!net.runelite.awt.impl.FocusVeto.accept(focusOwner, component, temporary, cause)) {
             return false;
         }
         return changeFocus(component, cause, temporary);
-    }
-
-    /**
-     * Android seam for the JDK's {@code sun.awt.RequestFocusController}: the one veto Swing
-     * holds over every focus request, which it uses to run the focus owner's InputVerifier.
-     */
-    public interface RequestFocusController {
-        boolean acceptRequestFocus(Component from, Component to, boolean temporary,
-                                   boolean focusedWindowChangeAllowed, FocusEvent.Cause cause);
-    }
-
-    private static volatile RequestFocusController requestFocusController;
-
-    /** Android seam: installed once by javax.swing.JComponent, as the JDK does through AWTAccessor. */
-    public static void setRequestFocusController(RequestFocusController controller) {
-        requestFocusController = controller;
     }
 
     /** Android host seam: clears the focus owner, and the focused window, when they lie inside subtree. */
