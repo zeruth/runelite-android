@@ -33,15 +33,26 @@ package java.awt.event;
 import java.awt.Component;
 import java.awt.Container;
 
-/** A component was added to or removed from a container. */
+/**
+ * A container's contents changed because a component was added or removed.
+ */
 public class ContainerEvent extends ComponentEvent {
+
     private static final long serialVersionUID = -4114942250539772041L;
 
+    /** The first number in the range of ids used for container events. */
     public static final int CONTAINER_FIRST = 300;
+
+    /** The last number in the range of ids used for container events. */
     public static final int CONTAINER_LAST = 301;
+
+    /** This event indicates that a component was added to the container. */
     public static final int COMPONENT_ADDED = CONTAINER_FIRST;
+
+    /** This event indicates that a component was removed from the container. */
     public static final int COMPONENT_REMOVED = 1 + CONTAINER_FIRST;
 
+    /** The non-null component that is being added or removed from the Container. */
     Component child;
 
     public ContainerEvent(Component source, int id, Component child) {
@@ -49,6 +60,7 @@ public class ContainerEvent extends ComponentEvent {
         this.child = child;
     }
 
+    /** The originator of the event, or null when the source is not a Container. */
     public Container getContainer() {
         return (source instanceof Container) ? (Container) source : null;
     }

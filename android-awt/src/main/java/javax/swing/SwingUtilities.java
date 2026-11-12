@@ -49,7 +49,7 @@ import javax.swing.text.View;
  * A collection of utility methods for Swing.
  *
  * <p>Ported from OpenJDK 8u. Where the shadow AWT core is thinner than the JDK's
- * (no ComponentOrientation, no glyph outlines, no JLayer, an AccessibleContext without
+ * (no ComponentOrientation, no glyph outlines, an AccessibleContext without
  * a child model) the method says what it answers instead.
  *
  * @author unknown
@@ -1670,7 +1670,6 @@ public class SwingUtilities implements SwingConstants {
     /**
      * Returns the first ancestor of the {@code component}
      * which is not an instance of {@code JLayer}.
-     * The shadow tree has no JLayer yet, so that is the parent itself.
      *
      * @param component {@code Component} to get
      * the first ancestor of, which is not a {@code JLayer} instance.
@@ -1684,13 +1683,16 @@ public class SwingUtilities implements SwingConstants {
      * @since 1.7
      */
     public static Container getUnwrappedParent(Component component) {
-        return component.getParent();
+        Container parent = component.getParent();
+        while (parent instanceof JLayer) {
+            parent = parent.getParent();
+        }
+        return parent;
     }
 
     /**
      * Returns the first {@code JViewport}'s descendant
      * which is not an instance of {@code JLayer}.
-     * The shadow tree has no JLayer yet, so that is the view itself.
      *
      * @param viewport {@code JViewport} to get the first descendant of,
      * which in not a {@code JLayer} instance.
@@ -1704,6 +1706,10 @@ public class SwingUtilities implements SwingConstants {
      * @since 1.7
      */
     public static Component getUnwrappedView(JViewport viewport) {
-        return viewport.getView();
+        Component view = viewport.getView();
+        while (view instanceof JLayer) {
+            view = ((JLayer) view).getView();
+        }
+        return view;
     }
 }

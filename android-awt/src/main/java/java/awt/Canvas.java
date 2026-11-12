@@ -40,8 +40,24 @@ import java.util.concurrent.atomic.AtomicReference;
  * returns a {@code Graphics2D} writing into that buffer; the most recently active canvas
  * is exposed via {@link #latest()} so the Compose host can read pixels and draw them.
  */
-public class Canvas extends Component {
+public class Canvas extends Component implements javax.accessibility.Accessible {
     private static final long serialVersionUID = -2284879212465893870L;
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleAWTCanvas();
+        }
+        return accessibleContext;
+    }
+
+    /** Accessibility support for canvases: role CANVAS. */
+    protected class AccessibleAWTCanvas extends AccessibleAWTComponent {
+        private static final long serialVersionUID = -6325592262103146699L;
+
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.CANVAS;
+        }
+    }
     private static final AtomicReference<Canvas> LATEST = new AtomicReference<>();
 
     /**
