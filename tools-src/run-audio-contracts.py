@@ -76,7 +76,8 @@ def main():
             with zipfile.ZipFile(args.awt_jar) as awt:
                 for name in awt.namelist():
                     if name.endswith('.class') and name.startswith(('javax/sound/sampled/', 'net/runelite/awt/impl/AndroidClip', 'net/runelite/awt/impl/WavDecoder',
-                                                                         'net/runelite/awt/impl/AndroidMixer', 'net/runelite/awt/impl/AudioFileCodec', 'net/runelite/awt/impl/PcmConverter')):
+                                                                         'net/runelite/awt/impl/AndroidMixer', 'net/runelite/awt/impl/SampledProviders',
+                                                                         'com/sun/media/sound/')):
                         archive.writestr(name, awt.read(name))
     dex = out/'audio-probe.jar'
     run([java/'java.exe', '-cp', buildtools/'lib/d8.jar', 'com.android.tools.r8.D8',
