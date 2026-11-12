@@ -27,8 +27,13 @@ package javax.swing;
 
 import java.awt.*;
 import java.beans.PropertyVetoException;
+import javax.accessibility.Accessible;
+import javax.accessibility.AccessibleContext;
+import javax.accessibility.AccessibleRole;
 import javax.swing.event.InternalFrameEvent;
 import javax.swing.event.InternalFrameListener;
+import javax.swing.plaf.DesktopIconUI;
+import javax.swing.plaf.InternalFrameUI;
 
 /**
  * A lightweight object that provides many of the features of
@@ -92,6 +97,11 @@ public class JInternalFrame extends JComponent implements
     protected Icon frameIcon;
     /** The title displayed in this internal frame's title bar. */
     protected String  title;
+    /**
+     * The icon that is displayed when this internal frame is iconified.
+     * @see #iconable
+     */
+    protected JDesktopIcon desktopIcon;
 
     private Rectangle normalBounds = null;
 
@@ -196,6 +206,7 @@ public class JInternalFrame extends JComponent implements
         isIcon = false;
         setVisible(false);
         setRootPaneCheckingEnabled(true);
+        desktopIcon = new JDesktopIcon(this);
         updateUI();
     }
 
@@ -223,6 +234,76 @@ public class JInternalFrame extends JComponent implements
      */
     public String getUIClassID() {
         return "InternalFrameUI";
+    }
+
+    /**
+     * Returns the look-and-feel object that renders this component.
+     *
+     * @return the <code>InternalFrameUI</code> object that renders
+     *          this component
+     */
+    public InternalFrameUI getUI() {
+        return (InternalFrameUI)ui;
+    }
+
+    /**
+     * Sets the UI delegate for this <code>JInternalFrame</code>.
+     *
+     * @param ui  the UI delegate
+     */
+    public void setUI(InternalFrameUI ui) {
+        boolean checkingEnabled = isRootPaneCheckingEnabled();
+        try {
+            setRootPaneCheckingEnabled(false);
+            super.setUI(ui);
+        }
+        finally {
+            setRootPaneCheckingEnabled(checkingEnabled);
+        }
+    }
+
+    /**
+     * Returns the <code>JDesktopIcon</code> used when this
+     * <code>JInternalFrame</code> is iconified.
+     *
+     * @return the <code>JDesktopIcon</code> displayed on the desktop
+     */
+    public JDesktopIcon getDesktopIcon() {
+        return desktopIcon;
+    }
+
+    /**
+     * Sets the <code>JDesktopIcon</code> associated with this
+     * <code>JInternalFrame</code>.
+     *
+     * @param d the <code>JDesktopIcon</code> to display on the desktop
+     */
+    public void setDesktopIcon(JDesktopIcon d) {
+        JDesktopIcon oldValue = getDesktopIcon();
+        desktopIcon = d;
+        firePropertyChange("desktopIcon", oldValue, d);
+    }
+
+    /**
+     * Convenience method that searches the ancestor hierarchy for a
+     * <code>JDesktop</code> instance. If <code>JInternalFrame</code>
+     * finds none, the <code>desktopIcon</code> tree is searched.
+     *
+     * @return the <code>JDesktopPane</code> this internal frame belongs to,
+     *         or <code>null</code> if none is found
+     */
+    public JDesktopPane getDesktopPane() {
+        Container p = getParent();
+        while (p != null && !(p instanceof JDesktopPane)) {
+            p = p.getParent();
+        }
+        if (p == null && desktopIcon != null) {
+            p = desktopIcon.getParent();
+            while (p != null && !(p instanceof JDesktopPane)) {
+                p = p.getParent();
+            }
+        }
+        return (JDesktopPane) p;
     }
 
     /**
@@ -1068,5 +1149,131 @@ public class JInternalFrame extends JComponent implements
         ",rootPane=" + rootPaneString +
         ",rootPaneCheckingEnabled=" + rootPaneCheckingEnabledString +
         ",title=" + titleString;
+    }
+
+    /**
+     * This component represents an iconified version of a
+     * <code>JInternalFrame</code>.
+     *
+     * @author David Kloba
+     */
+    @SuppressWarnings("serial") // Same-version serialization only
+    static public class JDesktopIcon extends JComponent implements Accessible
+    {
+        JInternalFrame internalFrame;
+
+        /**
+         * Creates an icon for an internal frame.
+         *
+         * @param f  the <code>JInternalFrame</code>
+         *              for which the icon is created
+         */
+        public JDesktopIcon(JInternalFrame f) {
+            setVisible(false);
+            setInternalFrame(f);
+            updateUI();
+        }
+
+        /**
+         * Returns the look-and-feel object that renders this component.
+         *
+         * @return the <code>DesktopIconUI</code> object that renders
+         *              this component
+         */
+        public DesktopIconUI getUI() {
+            return (DesktopIconUI)ui;
+        }
+
+        /**
+         * Sets the look-and-feel object that renders this component.
+         *
+         * @param ui  the <code>DesktopIconUI</code> look-and-feel object
+         */
+        public void setUI(DesktopIconUI ui) {
+            super.setUI(ui);
+        }
+
+        /**
+         * Returns the <code>JInternalFrame</code> that this
+         * <code>DesktopIcon</code> is associated with.
+         *
+         * @return the <code>JInternalFrame</code> with which this icon
+         *              is associated
+         */
+        public JInternalFrame getInternalFrame() {
+            return internalFrame;
+        }
+
+        /**
+         * Sets the <code>JInternalFrame</code> with which this
+         * <code>DesktopIcon</code> is associated.
+         *
+         * @param f  the <code>JInternalFrame</code> with which this icon
+         *              is associated
+         */
+        public void setInternalFrame(JInternalFrame f) {
+            internalFrame = f;
+        }
+
+        /**
+         * Convenience method to ask the icon for the <code>Desktop</code>
+         * object it belongs to.
+         *
+         * @return the <code>JDesktopPane</code> that contains this
+         *           icon's internal frame, or <code>null</code> if none found
+         */
+        public JDesktopPane getDesktopPane() {
+            if (getInternalFrame() != null) {
+                return getInternalFrame().getDesktopPane();
+            }
+            return null;
+        }
+
+        /**
+         * Deliberate no-op, as {@link JInternalFrame#updateUI}: no
+         * <code>DesktopIconUI</code> delegate (BasicDesktopIconUI) is ported,
+         * so a look and feel's mapping for "DesktopIconUI" cannot load.
+         */
+        public void updateUI() {
+        }
+
+        /**
+         * Returns the name of the look-and-feel
+         * class that renders this component.
+         *
+         * @return the string "DesktopIconUI"
+         */
+        public String getUIClassID() {
+            return "DesktopIconUI";
+        }
+
+        /**
+         * Gets the AccessibleContext associated with this JDesktopIcon.
+         *
+         * @return an AccessibleJDesktopIcon that serves as the
+         *         AccessibleContext of this JDesktopIcon
+         */
+        public AccessibleContext getAccessibleContext() {
+            if (accessibleContext == null) {
+                accessibleContext = new AccessibleJDesktopIcon();
+            }
+            return accessibleContext;
+        }
+
+        /**
+         * This class implements accessibility support for the
+         * <code>JInternalFrame.JDesktopIcon</code> class.
+         */
+        protected class AccessibleJDesktopIcon extends AccessibleJComponent {
+            /**
+             * Gets the role of this object.
+             *
+             * @return an instance of AccessibleRole describing the role of
+             * the object
+             */
+            public AccessibleRole getAccessibleRole() {
+                return AccessibleRole.DESKTOP_ICON;
+            }
+        }
     }
 }

@@ -31,12 +31,23 @@ internal fun ColorSettingRow(label: String, description: String?, stored: String
         ColorPreview(current, Modifier.size(32.dp))
     }
     if (open) {
-        var draft by remember { mutableStateOf(current) }
-        var hex by remember { mutableStateOf(ConfigColors.hex(current, alpha)) }
+        ColorPickerDialog(label, current, alpha, onDismiss = { open = false }) { save(it.toString()); open = false }
+    }
+}
+
+/**
+ * The color picker of a config row. It is also the system dialog that answers a plugin's
+ * `JColorChooser.showDialog` (see SwingDialogs), so both pick colors the same way.
+ */
+@Composable
+internal fun ColorPickerDialog(title: String, initial: Int, alpha: Boolean, onDismiss: () -> Unit, onApply: (Int) -> Unit) {
+    run {
+        var draft by remember { mutableStateOf(initial) }
+        var hex by remember { mutableStateOf(ConfigColors.hex(initial, alpha)) }
         val parsed = ConfigColors.parseHex(hex, alpha)
         AlertDialog(
-            onDismissRequest = { open = false },
-            title = { Text(label) },
+            onDismissRequest = onDismiss,
+            title = { Text(title) },
             text = {
                 Column(Modifier.verticalScroll(rememberScrollState())) {
                     ColorPreview(draft, Modifier.fillMaxWidth().height(40.dp))
@@ -64,9 +75,9 @@ internal fun ColorSettingRow(label: String, description: String?, stored: String
                 }
             },
             confirmButton = { TextButton(enabled = parsed != null, onClick = {
-                parsed?.let { save(it.toString()); open = false }
+                parsed?.let { onApply(it) }
             }) { Text("Apply") } },
-            dismissButton = { TextButton(onClick = { open = false }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
         )
     }
 }

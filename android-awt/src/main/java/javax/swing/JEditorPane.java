@@ -37,6 +37,8 @@ import javax.swing.text.EditorKit;
 import javax.swing.text.JTextComponent;
 
 public class JEditorPane extends JTextComponent {
+    private static final String uiClassID = "EditorPaneUI";
+    public String getUIClassID() { return uiClassID; }
 
     public javax.accessibility.AccessibleContext getAccessibleContext() {
         if (accessibleContext == null) {
