@@ -122,9 +122,9 @@ configurations.all {
 // at run time. okio 2+ keeps okio 1's public Java API. What it drops (Buffer.writableSegment,
 // AsyncTimeout.exit(boolean)/exit(IOException)) is package-private, so only classes in
 // package okio call it: a plugin's shaded okio copy, whose classes are either shadowed by
-// the host's or never load. okioFloor states runelite-client's okio as the minimum, and the scanner
-// resolves against it, the narrowest API the APK can ship.
-val okioFloor = "com.squareup.okio:okio:1.17.2"
+// the host's or never load. okhttp 3.14.9 asks for okio 1.17.2 and DataStore raises it;
+// hub-compat-scan.py reads the version that wins from the dependency report, so it scans the
+// okio the APK ships rather than a pin stated here.
 val hostLibraryPins = listOf(
     "com.squareup.okhttp3:okhttp:3.14.9",
     "org.slf4j:slf4j-api:${libs.versions.slf4j.get()}",
@@ -242,7 +242,6 @@ if (androidSdkAvailable) {
         "implementation"("org.lsposed.hiddenapibypass:hiddenapibypass:4.3")
 
         "implementation"(guavaJre)
-        "implementation"(okioFloor)
         constraints.add("implementation", guavaJre) {
             attributes {
                 attribute(TargetJvmEnvironment.TARGET_JVM_ENVIRONMENT_ATTRIBUTE,

@@ -23,6 +23,13 @@ JRE_FLAVOUR_MEMBERS = (
     ("com/google/common/collect/Multiset", ("method", "forEachEntry", "(Ljava/util/function/ObjIntConsumer;)V")),
     ("com/google/common/collect/Multimap", ("method", "forEach", "(Ljava/util/function/BiConsumer;)V")),
 )
+# Client members hub plugins call that come from code generation (Lombok @Getter), so no
+# library jar states them; the APK alone must carry them.
+APK_MEMBERS = (
+    ("net/runelite/client/discord/DiscordService",
+     ("method", "getCurrentUser", "()Lnet/runelite/discord/DiscordUser;")),
+)
+APK_CLASSES = frozenset(name for name, _ in APK_MEMBERS)
 
 
 def class_api(data):
@@ -109,7 +116,7 @@ def dex_api(data):
     for i in range(u4(96)):
         offset = u4(100) + i * 32
         name = types[u4(offset)][1:-1]
-        if not name.startswith(PREFIXES) and name not in RUNTIME_CLASSES:
+        if not name.startswith(PREFIXES) and name not in RUNTIME_CLASSES and name not in APK_CLASSES:
             continue
         access = u4(offset + 4)
         pos = u4(offset + 24)
@@ -161,6 +168,10 @@ def main():
             failures.append("Library guava is not the -jre flavour, lacks " + signature)
         if member not in actual.get(name, (0, {}))[1]:
             failures.append("APK lacks guava-jre member " + signature)
+    for name, member in APK_MEMBERS:
+        received = actual.get(name, (0, {}))[1].get(member)
+        if received is None or not received & 1:
+            failures.append("APK lacks public " + name + "." + member[1] + member[2])
     member_count = 0
     for name, (access, members) in expected.items():
         if name not in actual:

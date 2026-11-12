@@ -757,6 +757,8 @@ def find_gradle_lib(group, artifact, version=None, gradle_home=None):
     return _newest(hits, r'^%s-(.+)\.jar$' % re.escape(artifact))
 
 
+DEFAULT_DEPENDENCY_REPORT = os.path.join(ROOT, 'build', 'hub-compat', 'releaseRuntimeClasspath.txt')
+
 _DEP_LINE = re.compile(r'[+\\]--- ([\w.\-]+):([\w.\-]+)(?::([\w.\-]+))?(?: -> ([\w.\-]+))?')
 
 
@@ -1874,7 +1876,8 @@ def build_parser():
     ap.add_argument('--no-default-libs', action='store_true', help='skip the gradle-cache library lookup')
     ap.add_argument('--dependency-report',
                     help='output of `gradlew :android:dependencies --configuration releaseRuntimeClasspath`; '
-                         'host library versions come from it instead of the build-script pins')
+                         'host library versions come from it instead of the build-script pins '
+                         '(default: build/hub-compat/releaseRuntimeClasspath.txt when present)')
     jdk = ap.add_argument_group('--jdk-gaps')
     jdk.add_argument('--jdk-gaps', action='store_true', help='audit JDK 9-21 java.*/javax.* members instead of the host surface')
     jdk.add_argument('--min-api', type=int, help='floor API level (default: minSdk of android/build.gradle.kts)')
@@ -1906,7 +1909,15 @@ def resolve_sources(args):
     add('android app classes', args.app_classes or find_app_classes(), required=False)
     libs = list(args.lib)
     if not args.no_default_libs:
-        libs += default_libs(args.dependency_report)
+        report = args.dependency_report
+        if not report and os.path.exists(DEFAULT_DEPENDENCY_REPORT):
+            report = DEFAULT_DEPENDENCY_REPORT
+        if not report:
+            # Without it okio has no pin (the APK ships whatever DataStore raises it to),
+            # so the scan would describe a jar the APK may not ship.
+            sys.stderr.write('warning: no dependency report (%s); host library versions come from '
+                             'the build-script pins and the gradle cache\n' % DEFAULT_DEPENDENCY_REPORT)
+        libs += default_libs(report)
     for lib in libs:
         add(lib, lib)
     return sources
