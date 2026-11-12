@@ -39,6 +39,17 @@ public abstract class JTextComponent extends JComponent {
     public static final String DEFAULT_KEYMAP = "default";
     public static final String FOCUS_ACCELERATOR_KEY = "focusAcceleratorKey";
 
+    /** Binding record for creating key bindings; what LookAndFeel.makeKeyBindings returns. */
+    public static class KeyBinding {
+        public javax.swing.KeyStroke key;
+        public String actionName;
+
+        public KeyBinding(javax.swing.KeyStroke key, String actionName) {
+            this.key = key;
+            this.actionName = actionName;
+        }
+    }
+
     protected Document doc;
     protected String text = "";
     private java.awt.Insets margin = new java.awt.Insets(0, 0, 0, 0);
