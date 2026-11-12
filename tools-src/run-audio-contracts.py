@@ -50,7 +50,7 @@ def main():
             raise RuntimeError(f'Command failed ({result.returncode}): {command[0]}')
         return result.stdout
 
-    sources = [source/'PooledSourceDataLine.java', source/'AndroidAudioBridge.java', repo/'tools-src'/f'{args.test}.java', runner]
+    sources = [source/'PooledSourceDataLine.java', source/'AndroidAudioBridge.java', source/'TrackControls.java', repo/'tools-src'/f'{args.test}.java', runner]
     if (source/'LegacySourceDataLine.java').is_file(): sources.append(source/'LegacySourceDataLine.java')
     if args.release_host: sources = [repo/'tools-src'/f'{args.test}.java', runner]
     if args.package:
@@ -74,7 +74,8 @@ def main():
         if args.standalone or args.package:
             with zipfile.ZipFile(args.awt_jar) as awt:
                 for name in awt.namelist():
-                    if name.endswith('.class') and name.startswith(('javax/sound/sampled/', 'net/runelite/awt/impl/AndroidClip', 'net/runelite/awt/impl/WavDecoder')):
+                    if name.endswith('.class') and name.startswith(('javax/sound/sampled/', 'net/runelite/awt/impl/AndroidClip', 'net/runelite/awt/impl/WavDecoder',
+                                                                         'net/runelite/awt/impl/AndroidMixer', 'net/runelite/awt/impl/AudioFileCodec', 'net/runelite/awt/impl/PcmConverter')):
                         archive.writestr(name, awt.read(name))
     dex = out/'audio-probe.jar'
     run([java/'java.exe', '-cp', buildtools/'lib/d8.jar', 'com.android.tools.r8.D8',
