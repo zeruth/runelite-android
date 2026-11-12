@@ -257,19 +257,58 @@ public class Font implements Serializable {
     public String getFontName(){return getName();}
     public String getFontName(java.util.Locale locale){return getName();}
     public String getPSName(){return getName().replace(" ","");}
+    /**
+     * Logical bounds as the JDK lays them out: x 0, y at minus the ascent, the advance as
+     * width and ascent + descent + leading as height, so the height matches getLineMetrics.
+     */
     public java.awt.geom.Rectangle2D getStringBounds(String text,java.awt.font.FontRenderContext context){
+        char[] chars=text.toCharArray();
+        return getStringBounds(chars,0,chars.length,context);
+    }
+    public java.awt.geom.Rectangle2D getStringBounds(String text,int start,int limit,java.awt.font.FontRenderContext context){
+        return getStringBounds(text.substring(start,limit),context);
+    }
+    public java.awt.geom.Rectangle2D getStringBounds(char[] text,int start,int limit,java.awt.font.FontRenderContext context){
+        checkRange(start,limit,text.length);
         android.graphics.Paint paint=net.runelite.awt.impl.BufferedImageFontMetrics.paintFor(this);
         android.graphics.Paint.FontMetrics metrics=paint.getFontMetrics();
-        java.awt.geom.Rectangle2D bounds = new java.awt.geom.Rectangle2D.Float(0,metrics.ascent,paint.measureText(text),metrics.descent-metrics.ascent+metrics.leading);
-        return isTransformed() ? getTransform().createTransformedShape(bounds).getBounds2D() : bounds;
+        float advance=limit>start?paint.measureText(text,start,limit-start):0;
+        java.awt.geom.Rectangle2D bounds=new java.awt.geom.Rectangle2D.Float(0,metrics.ascent,advance,metrics.descent-metrics.ascent+metrics.leading);
+        return isTransformed()?getTransform().createTransformedShape(bounds).getBounds2D():bounds;
     }
-    public java.awt.geom.Rectangle2D getStringBounds(String text,int start,int limit,java.awt.font.FontRenderContext context){return getStringBounds(text.substring(start,limit),context);}
-    public java.awt.geom.Rectangle2D getStringBounds(char[] text,int start,int limit,java.awt.font.FontRenderContext context){return getStringBounds(new String(text,start,limit-start),context);}
+    public java.awt.geom.Rectangle2D getStringBounds(java.text.CharacterIterator ci,int beginIndex,int limit,java.awt.font.FontRenderContext context){
+        return getStringBounds(iteratorChars(ci,beginIndex,limit),0,limit-beginIndex,context);
+    }
     public java.awt.font.LineMetrics getLineMetrics(String text,java.awt.font.FontRenderContext context){return new net.runelite.awt.impl.AndroidLineMetrics(this,text.length());}
-    public java.awt.font.LineMetrics getLineMetrics(String text,int start,int limit,java.awt.font.FontRenderContext context){return new net.runelite.awt.impl.AndroidLineMetrics(this,limit-start);}
-    public java.awt.font.LineMetrics getLineMetrics(char[] text,int start,int limit,java.awt.font.FontRenderContext context){return new net.runelite.awt.impl.AndroidLineMetrics(this,limit-start);}
-    public java.awt.geom.Rectangle2D getMaxCharBounds(java.awt.font.FontRenderContext context){return getStringBounds("W",context);}
+    public java.awt.font.LineMetrics getLineMetrics(String text,int start,int limit,java.awt.font.FontRenderContext context){checkRange(start,limit,text.length());return new net.runelite.awt.impl.AndroidLineMetrics(this,limit-start);}
+    public java.awt.font.LineMetrics getLineMetrics(char[] text,int start,int limit,java.awt.font.FontRenderContext context){checkRange(start,limit,text.length);return new net.runelite.awt.impl.AndroidLineMetrics(this,limit-start);}
+    public java.awt.font.LineMetrics getLineMetrics(java.text.CharacterIterator ci,int beginIndex,int limit,java.awt.font.FontRenderContext context){
+        iteratorChars(ci,beginIndex,limit);
+        return new net.runelite.awt.impl.AndroidLineMetrics(this,limit-beginIndex);
+    }
+    /** The JDK's shape: (0, -ascent, max advance, ascent + descent + leading). */
+    public java.awt.geom.Rectangle2D getMaxCharBounds(java.awt.font.FontRenderContext context){
+        android.graphics.Paint.FontMetrics metrics=net.runelite.awt.impl.BufferedImageFontMetrics.paintFor(this).getFontMetrics();
+        float maxAdvance=net.runelite.awt.impl.BufferedImageFontMetrics.forFont(this).getMaxAdvance();
+        return new java.awt.geom.Rectangle2D.Float(0,metrics.ascent,maxAdvance,metrics.descent-metrics.ascent+metrics.leading);
+    }
+    /** As on the JDK: always false, the safe answer for fonts that may fall back per glyph. */
     public boolean hasUniformLineMetrics(){return false;}
+
+    private static void checkRange(int start,int limit,int length){
+        if(start<0)throw new IndexOutOfBoundsException("beginIndex: "+start);
+        if(limit>length)throw new IndexOutOfBoundsException("limit: "+limit);
+        if(start>limit)throw new IndexOutOfBoundsException("range length: "+(limit-start));
+    }
+    private static char[] iteratorChars(java.text.CharacterIterator ci,int beginIndex,int limit){
+        if(beginIndex<ci.getBeginIndex())throw new IndexOutOfBoundsException("beginIndex: "+beginIndex);
+        if(limit>ci.getEndIndex())throw new IndexOutOfBoundsException("limit: "+limit);
+        if(beginIndex>limit)throw new IndexOutOfBoundsException("range length: "+(limit-beginIndex));
+        char[] chars=new char[limit-beginIndex];
+        ci.setIndex(beginIndex);
+        for(int i=0;i<chars.length;i++){chars[i]=ci.current();ci.next();}
+        return chars;
+    }
 
     @Override
     public boolean equals(Object obj) {

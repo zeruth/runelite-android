@@ -104,6 +104,22 @@ public abstract class Graphics {
     public void fillPolygon(Polygon p) { fillPolygon(p.xpoints, p.ypoints, p.npoints); }
 
     public abstract void drawString(String str, int x, int y);
+
+    public void drawChars(char[] data, int offset, int length, int x, int y) {
+        drawString(new String(data, offset, length), x, y);
+    }
+
+    /** Draws the bytes as ISO-8859-1 characters, as the JDK's String(byte[], 0, off, len) does. */
+    public void drawBytes(byte[] data, int offset, int length, int x, int y) {
+        if (offset < 0 || length < 0 || length > data.length - offset) {
+            throw new StringIndexOutOfBoundsException("offset " + offset + ", length " + length);
+        }
+        char[] chars = new char[length];
+        for (int i = 0; i < length; i++) {
+            chars[i] = (char) (data[offset + i] & 0xff);
+        }
+        drawString(new String(chars), x, y);
+    }
     public abstract boolean drawImage(java.awt.Image img, int x, int y, ImageObserver observer);
     public abstract boolean drawImage(java.awt.Image img, int x, int y, int width, int height, ImageObserver observer);
     public abstract boolean drawImage(java.awt.Image img, int x, int y, Color bgcolor, ImageObserver observer);
