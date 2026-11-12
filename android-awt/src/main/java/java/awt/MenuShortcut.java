@@ -39,4 +39,9 @@ public class MenuShortcut implements java.io.Serializable {
     public boolean equals(MenuShortcut other) { return other != null && other.key == key && other.shift == shift; }
     @Override public boolean equals(Object other) { return other instanceof MenuShortcut && equals((MenuShortcut) other); }
     @Override public int hashCode() { return key ^ (shift ? -1 : 0); }
+    /** As the JDK on non-Mac desktops: the menu shortcut key is Ctrl. */
+    @Override public String toString() {
+        return "Ctrl+" + (shift ? "Shift+" : "") + java.awt.event.KeyEvent.getKeyText(key);
+    }
+    protected String paramString() { return "key=" + key + (shift ? ",usesShiftModifier" : ""); }
 }
