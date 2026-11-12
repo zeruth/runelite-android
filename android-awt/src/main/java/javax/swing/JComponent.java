@@ -328,6 +328,46 @@ public class JComponent extends Container {
 
     public java.awt.Insets getInsets() { return border != null ? border.getBorderInsets(this) : super.getInsets(); }
 
+    private boolean autoscrolls;
+    public void setAutoscrolls(boolean autoscrolls) { this.autoscrolls = autoscrolls; }
+    public boolean getAutoscrolls() { return autoscrolls; }
+
+    private TransferHandler transferHandler;
+
+    /**
+     * Sets the {@code TransferHandler}, which provides support for transfer
+     * of data into and out of this component via cut/copy/paste and drag
+     * and drop. As on desktop, a drop target is installed unless the
+     * application set its own.
+     *
+     * @since 1.4
+     */
+    public void setTransferHandler(TransferHandler newHandler) {
+        TransferHandler oldHandler = transferHandler;
+        transferHandler = newHandler;
+        TransferHandler.installSwingDropTargetAsNecessary(this, newHandler);
+        firePropertyChange("transferHandler", oldHandler, newHandler);
+    }
+
+    public TransferHandler getTransferHandler() { return transferHandler; }
+
+    /**
+     * Calculates a custom drop location for this type of component,
+     * representing where a drop at the given point should insert data.
+     * {@code null} means the plain point-only location.
+     */
+    TransferHandler.DropLocation dropLocationForPoint(java.awt.Point p) {
+        return null;
+    }
+
+    /**
+     * Called to set or clear the drop location during a DnD operation;
+     * returns the state the next call is handed back.
+     */
+    Object setDropLocation(TransferHandler.DropLocation location, Object state, boolean forDrop) {
+        return null;
+    }
+
     private JPopupMenu componentPopupMenu;
     public void setComponentPopupMenu(JPopupMenu menu) { this.componentPopupMenu = menu; }
     public JPopupMenu getComponentPopupMenu() { if (componentPopupMenu == null && inheritsPopupMenu && getParent() instanceof JComponent) return ((JComponent)getParent()).getComponentPopupMenu(); return componentPopupMenu; }
