@@ -41,6 +41,12 @@ public abstract class GraphicsConfiguration {
     public java.awt.geom.AffineTransform getNormalizingTransform() { return new java.awt.geom.AffineTransform(); }
     public Rectangle getBounds() { return new Rectangle(0, 0, 0, 0); }
 
+    /** Images live in heap int[] rasters drawn by the software pipeline: never accelerated. */
+    public ImageCapabilities getImageCapabilities() { return new ImageCapabilities(false); }
+
+    /** Translucent windows need an alpha channel in the configuration's color model, as on the JDK. */
+    public boolean isTranslucencyCapable() { return getColorModel(Transparency.TRANSLUCENT).hasAlpha(); }
+
     // VolatileImage factories. The patched OSRS gamepack calls these to allocate the
     // SW-mode double buffer; without them the Client thread dies with
     // NoSuchMethodError on first frame and the screen stays black (toggling

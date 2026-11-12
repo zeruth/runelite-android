@@ -196,6 +196,9 @@ object KeyDispatch {
             return false
         }
         val numLock = (event.metaState and AndroidKeyEvent.META_NUM_LOCK_ON) != 0
+        net.runelite.awt.impl.HostToolkit.updateLockingKeys(
+            (event.metaState and AndroidKeyEvent.META_CAPS_LOCK_ON) != 0, numLock,
+            (event.metaState and AndroidKeyEvent.META_SCROLL_LOCK_ON) != 0)
         val vk = androidKeyCodeToAwt(event.keyCode, numLock)
         val mods = androidMetaToAwtModifiers(event.metaState) or ModifierState.modifierMask()
         val keyChar = desktopKeyChar(event, vk, mods)

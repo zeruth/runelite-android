@@ -32,6 +32,7 @@ package net.runelite.awt.impl;
 
 import java.awt.GraphicsConfiguration;
 import java.awt.GraphicsDevice;
+import java.awt.Insets;
 import java.awt.Rectangle;
 
 public final class HeadlessGraphicsConfiguration extends GraphicsConfiguration {
@@ -45,6 +46,15 @@ public final class HeadlessGraphicsConfiguration extends GraphicsConfiguration {
         display = new int[]{width, height, dpi};
     }
     public static int getResolution() { return display[2]; }
+
+    private static volatile int[] insets = {0, 0, 0, 0};
+
+    /** Host system bars and display cutout over the viewport, in the units of {@link #updateDisplay}. */
+    public static void updateInsets(int top, int left, int bottom, int right) {
+        if (top < 0 || left < 0 || bottom < 0 || right < 0) throw new IllegalArgumentException("Display insets");
+        insets = new int[]{top, left, bottom, right};
+    }
+    public static Insets getInsets() { int[] i = insets; return new Insets(i[0], i[1], i[2], i[3]); }
 
     private final GraphicsDevice device = new HeadlessGraphicsDevice(this);
 
