@@ -87,4 +87,27 @@ public class ComponentInputMap extends InputMap {
     public JComponent getComponent() {
         return component;
     }
+
+    /**
+     * Adds a binding for <code>keyStroke</code> to <code>actionMapKey</code>.
+     * If <code>actionMapKey</code> is null, this removes the current binding
+     * for <code>keyStroke</code>.
+     */
+    public void put(KeyStroke keyStroke, Object actionMapKey) {
+        super.put(keyStroke, actionMapKey);
+    }
+
+    /**
+     * Removes the binding for <code>key</code> from this object.
+     */
+    public void remove(KeyStroke key) {
+        super.remove(key);
+    }
+
+    /**
+     * Removes all the mappings from this object.
+     */
+    public void clear() {
+        super.clear();
+    }
 }

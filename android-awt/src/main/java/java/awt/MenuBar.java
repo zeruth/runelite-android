@@ -41,7 +41,17 @@ public class MenuBar extends MenuComponent implements MenuContainer {
     private final java.util.Vector<Menu> menus = new java.util.Vector<>();
     private Menu helpMenu;
 
+    private static int nameCounter = 0;
+
     public MenuBar() {
+    }
+
+    /** The JDK's generated name of an unnamed bar: "menubar0", "menubar1", ... */
+    @Override
+    String constructComponentName() {
+        synchronized (MenuBar.class) {
+            return "menubar" + nameCounter++;
+        }
     }
 
     /** Deliberate no-op: there is no native menu bar peer to create. */
