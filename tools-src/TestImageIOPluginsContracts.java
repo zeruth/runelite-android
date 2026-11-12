@@ -172,6 +172,25 @@ public final class TestImageIOPluginsContracts {
         return true;
     }
 
+    /** Same size and the same getRGB everywhere, whatever the samples are. */
+    private static boolean sameRgb(BufferedImage expected, BufferedImage actual) {
+        if (actual == null || actual.getWidth() != expected.getWidth()
+            || actual.getHeight() != expected.getHeight()) {
+            return false;
+        }
+        for (int y = 0; y < expected.getHeight(); y++) {
+            for (int x = 0; x < expected.getWidth(); x++) {
+                if (expected.getRGB(x, y) != actual.getRGB(x, y)) {
+                    System.out.println("     rgb mismatch at " + x + "," + y + ": "
+                        + Integer.toHexString(expected.getRGB(x, y)) + " vs "
+                        + Integer.toHexString(actual.getRGB(x, y)));
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
     private static void roundTrip(String label, String format, BufferedImage img, boolean rgb)
         throws Exception {
         byte[] data = write(img, format);
@@ -181,6 +200,22 @@ public final class TestImageIOPluginsContracts {
         }
         BufferedImage back = ImageIO.read(new ByteArrayInputStream(data));
         check(format + " " + label + " round trip is identical", same(img, back, rgb));
+    }
+
+    /**
+     * A round trip whose indices the writer may renumber: the JDK PNG writer moves
+     * translucent palette entries to the front so tRNS stays short (PNGMetadata
+     * PLTE_order), so only the colours are kept.
+     */
+    private static void roundTripColours(String label, String format, BufferedImage img)
+        throws Exception {
+        byte[] data = write(img, format);
+        check(format + " " + label + " is written", data != null && data.length > 0);
+        if (data == null) {
+            return;
+        }
+        BufferedImage back = ImageIO.read(new ByteArrayInputStream(data));
+        check(format + " " + label + " round trip keeps every colour", sameRgb(img, back));
     }
 
     // ---- contracts ------------------------------------------------------------------
@@ -202,7 +237,7 @@ public final class TestImageIOPluginsContracts {
         roundTrip("BYTE_GRAY", "png", gray, true);
         roundTrip("USHORT_GRAY", "png", gray16(), false);
         roundTrip("BYTE_INDEXED", "png", indexed, true);
-        roundTrip("BYTE_INDEXED tRNS alpha", "png", indexedAlpha, true);
+        roundTripColours("BYTE_INDEXED tRNS alpha", "png", indexedAlpha);
         roundTrip("BYTE_BINARY 2-bit", "png", packed2, true);
         roundTrip("BYTE_BINARY", "png", binary, true);
 
@@ -212,7 +247,10 @@ public final class TestImageIOPluginsContracts {
 
         roundTrip("INT_RGB", "bmp", rgb, true);
         roundTrip("3BYTE_BGR", "bmp", bgr, true);
-        roundTrip("BYTE_INDEXED", "bmp", indexed, true);
+        // A palette of 16 or fewer entries makes the BMP writer emit 4-bit rows from the
+        // 8-bit raster, which does not round-trip on the JDK either; 32 entries keeps
+        // the 8-bit path.
+        roundTrip("BYTE_INDEXED", "bmp", indexed(palette(8, 32, -1, false), 0), true);
         roundTrip("BYTE_BINARY", "bmp", binary, true);
 
         roundTrip("BYTE_BINARY", "wbmp", binary, true);
@@ -247,7 +285,32 @@ public final class TestImageIOPluginsContracts {
         byte[] stored = writeWithParam(argb, "png", off, plain);
         back = ImageIO.read(new ByteArrayInputStream(stored));
         check("png uncompressed round trip", same(argb, back, true));
-        check("png uncompressed is larger than best compression", stored.length > small.length);
+
+        // The 13x7 fixture is too small and noisy to compare sizes (interlacing alone
+        // outweighs deflate there on the JDK too), so compare on a large repetitive
+        // image written non-interlaced both ways.
+        BufferedImage flat = new BufferedImage(128, 128, BufferedImage.TYPE_INT_ARGB);
+        for (int y = 0; y < 128; y++) {
+            for (int x = 0; x < 128; x++) {
+                flat.setRGB(x, y, argbAt(x % 3, 0));
+            }
+        }
+        ImageWriter best = ImageIO.getImageWritersByFormatName("png").next();
+        ImageWriteParam bestParam = best.getDefaultWriteParam();
+        bestParam.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
+        bestParam.setCompressionQuality(0.0f);
+        bestParam.setProgressiveMode(ImageWriteParam.MODE_DISABLED);
+        byte[] flatSmall = writeWithParam(flat, "png", bestParam, best);
+        ImageWriter none = ImageIO.getImageWritersByFormatName("png").next();
+        ImageWriteParam noneParam = none.getDefaultWriteParam();
+        noneParam.setCompressionMode(ImageWriteParam.MODE_DISABLED);
+        noneParam.setProgressiveMode(ImageWriteParam.MODE_DISABLED);
+        byte[] flatStored = writeWithParam(flat, "png", noneParam, none);
+        check("png uncompressed is larger than best compression",
+            flatStored.length > flatSmall.length);
+        check("png stored and compressed decode the same",
+            same(flat, ImageIO.read(new ByteArrayInputStream(flatStored)), true)
+            && same(flat, ImageIO.read(new ByteArrayInputStream(flatSmall)), true));
 
         ImageReader reader = ImageIO.getImageReadersByFormatName("png").next();
         ImageInputStream iis = ImageIO.createImageInputStream(new ByteArrayInputStream(small));
