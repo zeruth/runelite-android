@@ -1,4 +1,4 @@
-// host-contract
+// host-contract: patched-args=shadow
 import java.awt.Component;
 import java.awt.Image;
 import java.awt.MediaTracker;
@@ -22,10 +22,67 @@ import java.awt.image.ReplicateScaleFilter;
  * MediaTracker over produced images. Every expectation is an independent model of the JDK
  * algorithm (ReplicateScaleFilter's source maps, AreaAveragingScaleFilter's alpha-weighted
  * box average), so the same assertions hold on the real JDK and on the shadow.
+ *
+ * <p>The host never compiles the shadow Toolkit (it names android.*), so the patched run still
+ * has the JDK's HeadlessToolkit, whose ToolkitImage/ImageRepresentation cast the shadow's rasters
+ * to JDK internals. Scaled images are therefore read through getSource() only, and with
+ * {@code shadow} produced images and the tracker's target are built the way the shadow
+ * Toolkit's createImage/checkImage/prepareImage build them.
  */
 public final class TestImageProducerContracts {
     private static int failures;
     private static int total;
+    private static boolean shadow;
+    private static final String PRODUCER_IMAGE = "java.awt.image.ProducerImage";
+
+    /** Toolkit.createImage(ImageProducer); on the shadow, what its Toolkit returns. */
+    private static Image createImage(ImageProducer producer) throws Exception {
+        if (!shadow) {
+            return Toolkit.getDefaultToolkit().createImage(producer);
+        }
+        // Reflective so the plain-JDK run never links the shadow-only class.
+        return (Image) Class.forName(PRODUCER_IMAGE).getConstructor(ImageProducer.class).newInstance(producer);
+    }
+
+    private static Object call(Image image, String method, ImageObserver observer) {
+        try {
+            return image.getClass().getMethod(method, ImageObserver.class).invoke(image, observer);
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(method, e);
+        }
+    }
+
+    /** A MediaTracker target; on the shadow, one whose image checks are the shadow Toolkit's. */
+    private static Component target() {
+        if (!shadow) {
+            return new Component() { };
+        }
+        return new Component() {
+            @Override
+            public boolean prepareImage(Image image, int width, int height, ImageObserver observer) {
+                if (width == 0 || height == 0 || !image.getClass().getName().equals(PRODUCER_IMAGE)) {
+                    return true;
+                }
+                return (Boolean) call(image, "prepare", observer);
+            }
+
+            @Override
+            public int checkImage(Image image, int width, int height, ImageObserver observer) {
+                if (!image.getClass().getName().equals(PRODUCER_IMAGE)) {
+                    return ImageObserver.ALLBITS;
+                }
+                int flags = (Integer) call(image, "check", observer);
+                return (width == 0 || height == 0) ? flags | ImageObserver.ALLBITS : flags;
+            }
+        };
+    }
+
+    /** The size an image's producer delivers, without asking the image (no ToolkitImage watcher). */
+    private static int[] sizeOf(Image image) throws InterruptedException {
+        PixelGrabber grabber = new PixelGrabber(image, 0, 0, -1, -1, true);
+        grabber.grabPixels(5000);
+        return new int[] {grabber.getWidth(), grabber.getHeight()};
+    }
 
     private static void check(String name, boolean actual) {
         total++;
@@ -55,7 +112,10 @@ public final class TestImageProducerContracts {
         int[] pixels = new int[w * h];
         PixelGrabber grabber = new PixelGrabber(producer, 0, 0, w, h, pixels, 0, w);
         boolean ok = grabber.grabPixels(5000);
-        check("grab " + w + "x" + h + " completes", ok && (grabber.getStatus() & ImageObserver.ALLBITS) != 0);
+        // FRAMEBITS or ALLBITS, as grabPixels itself tests: OffScreenImageSource sends
+        // SINGLEFRAMEDONE first, the grabber detaches on it, and STATICIMAGEDONE never arrives.
+        check("grab " + w + "x" + h + " completes",
+            ok && (grabber.getStatus() & (ImageObserver.FRAMEBITS | ImageObserver.ALLBITS)) != 0);
         return pixels;
     }
 
@@ -141,6 +201,7 @@ public final class TestImageProducerContracts {
     }
 
     public static void main(String[] args) throws Exception {
+        shadow = java.util.Arrays.asList(args).contains("shadow");
         BufferedImage src = fixture();
 
         compare("BufferedImage.getSource -> PixelGrabber", all(src), grab(src.getSource(), SW, SH), 0);
@@ -172,8 +233,9 @@ public final class TestImageProducerContracts {
             grab(new FilteredImageSource(cropped, new ReplicateScaleFilter(14, 10)), 14, 10), 0);
 
         Image smooth = src.getScaledInstance(3, 2, Image.SCALE_SMOOTH);
-        check("SCALE_SMOOTH width", smooth.getWidth(null) == 3);
-        check("SCALE_SMOOTH height", smooth.getHeight(null) == 2);
+        int[] smoothSize = sizeOf(smooth);
+        check("SCALE_SMOOTH width", smoothSize[0] == 3);
+        check("SCALE_SMOOTH height", smoothSize[1] == 2);
         compare("getScaledInstance SCALE_SMOOTH = area average", areaModel(src, 3, 2), pixelsOf(smooth, 3, 2), 1);
 
         Image fast = src.getScaledInstance(13, 9, Image.SCALE_FAST);
@@ -181,7 +243,7 @@ public final class TestImageProducerContracts {
 
         // -1 keeps the aspect ratio with the filter's integer arithmetic: 7*4/5 = 5.
         Image aspect = src.getScaledInstance(-1, 4, Image.SCALE_DEFAULT);
-        check("getScaledInstance(-1, 4) width", aspect.getWidth(null) == SW * 4 / SH);
+        check("getScaledInstance(-1, 4) width", sizeOf(aspect)[0] == SW * 4 / SH);
 
         PixelGrabber forced = new PixelGrabber(smooth, 0, 0, -1, -1, true);
         check("PixelGrabber(-1,-1,forceRGB) grabs", forced.grabPixels(5000));
@@ -190,8 +252,8 @@ public final class TestImageProducerContracts {
         compare("PixelGrabber forceRGB pixels", areaModel(src, 3, 2), (int[]) forced.getPixels(), 1);
 
         int[] memory = all(src);
-        Image produced = Toolkit.getDefaultToolkit().createImage(new MemoryImageSource(SW, SH, memory, 0, SW));
-        Component target = new Component() { };
+        Image produced = createImage(new MemoryImageSource(SW, SH, memory, 0, SW));
+        Component target = target();
         MediaTracker tracker = new MediaTracker(target);
         tracker.addImage(produced, 1);
         tracker.addImage(src, 2);
@@ -200,10 +262,10 @@ public final class TestImageProducerContracts {
         check("MediaTracker.statusAll COMPLETE", tracker.statusAll(false) == MediaTracker.COMPLETE);
         check("MediaTracker.isErrorAny false", !tracker.isErrorAny() && tracker.getErrorsAny() == null);
         check("produced image ALLBITS",
-            (Toolkit.getDefaultToolkit().checkImage(produced, -1, -1, null) & ImageObserver.ALLBITS) != 0);
+            (target.checkImage(produced, -1, -1, null) & ImageObserver.ALLBITS) != 0);
         compare("produced image pixels", memory, pixelsOf(produced, SW, SH), 0);
 
-        Image broken = Toolkit.getDefaultToolkit().createImage(new ImageProducer() {
+        Image broken = createImage(new ImageProducer() {
             public void addConsumer(ImageConsumer ic) { }
             public boolean isConsumer(ImageConsumer ic) { return false; }
             public void removeConsumer(ImageConsumer ic) { }

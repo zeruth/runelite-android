@@ -34,7 +34,25 @@ import java.awt.Component;
 import java.awt.Container;
 import java.awt.Frame;
 
-public class JFrame extends Frame implements RootPaneContainer {
+public class JFrame extends Frame implements javax.accessibility.Accessible, RootPaneContainer {
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJFrame();
+        }
+        return accessibleContext;
+    }
+
+    /** Accessibility support for Swing frames: a FRAME context named by the title. */
+    protected class AccessibleJFrame extends AccessibleAWTFrame {
+        public String getAccessibleName() {
+            if (accessibleName != null) {
+                return accessibleName;
+            }
+            String title = getTitle();
+            return title == null ? super.getAccessibleName() : title;
+        }
+    }
     private static final long serialVersionUID = 1L;
 
     public static final int EXIT_ON_CLOSE = 3;

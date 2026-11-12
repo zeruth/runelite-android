@@ -36,7 +36,25 @@ import java.awt.Dialog;
 import java.awt.Frame;
 import java.awt.Window;
 
-public class JDialog extends Dialog implements RootPaneContainer {
+public class JDialog extends Dialog implements javax.accessibility.Accessible, RootPaneContainer {
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJDialog();
+        }
+        return accessibleContext;
+    }
+
+    /** Accessibility support for Swing dialogs: a DIALOG context named by the title. */
+    protected class AccessibleJDialog extends AccessibleAWTDialog {
+        public String getAccessibleName() {
+            if (accessibleName != null) {
+                return accessibleName;
+            }
+            String title = getTitle();
+            return title == null ? super.getAccessibleName() : title;
+        }
+    }
     private static final long serialVersionUID = 1L;
 
     public static final int DO_NOTHING_ON_CLOSE = 0;
@@ -72,6 +90,30 @@ public class JDialog extends Dialog implements RootPaneContainer {
         enableEvents(java.awt.AWTEvent.KEY_EVENT_MASK | java.awt.AWTEvent.WINDOW_EVENT_MASK);
         super.setLayout(new java.awt.BorderLayout());
         super.add(rootPane, -1);
+        if (isDefaultLookAndFeelDecorated()) {
+            boolean supportsWindowDecorations = UIManager.getLookAndFeel().getSupportsWindowDecorations();
+            if (supportsWindowDecorations) {
+                setUndecorated(true);
+                rootPane.setWindowDecorationStyle(JRootPane.PLAIN_DIALOG);
+            }
+        }
+    }
+
+    // The JDK keeps this in the AppContext; the shadow has one application context.
+    private static volatile boolean defaultLookAndFeelDecorated;
+
+    /**
+     * Provides a hint as to whether or not newly created {@code JDialog}s
+     * should have their Window decorations (such as borders, widgets to
+     * close the window, title...) provided by the current look and feel.
+     */
+    public static void setDefaultLookAndFeelDecorated(boolean defaultLookAndFeelDecorated) {
+        JDialog.defaultLookAndFeelDecorated = defaultLookAndFeelDecorated;
+    }
+
+    /** Returns true if newly created {@code JDialog}s should have their decorations provided by the look and feel. */
+    public static boolean isDefaultLookAndFeelDecorated() {
+        return defaultLookAndFeelDecorated;
     }
     @Override public Component add(Component c) { return c == rootPane ? super.add(c) : getContentPane().add(c); }
     @Override public Component add(Component c, int index) { return c == rootPane ? super.add(c, index) : getContentPane().add(c, index); }
