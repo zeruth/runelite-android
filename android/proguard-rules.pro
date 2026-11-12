@@ -173,7 +173,11 @@
 # leaves guava's class names as guava loads them, so R8 adds no failure of its own there;
 # how guava copes with a missing ClassValue on API 26-33 is unverified on device. Its only
 # user is Futures.getChecked's exception-type validator, which neither the client nor the
-# app calls; a hub plugin that does is the one exposure on those API levels.
+# app calls; a hub plugin that does is the one exposure on those API levels. Newer guava-jre
+# releases may also try java.lang.invoke.VarHandle (API 33) in the futures code the whole client
+# uses; whether that falls back on API 26-32 is unconfirmed either. verifyReleasePluginApi prints
+# every guava class naming either type, and a release build has to run on an API 26-32 device
+# before the switch counts as safe.
 
 # Hub plugins load after R8 runs and link against the host's protobuf runtime.
 # Preserve its public binary surface, including methods only those plugins use.
