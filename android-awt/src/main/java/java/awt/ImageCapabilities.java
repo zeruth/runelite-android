@@ -1,45 +1,80 @@
 /*
- * Copyright (c) 2026, Tyler Bochard
- * All rights reserved.
+ * Copyright (c) 2000, 2013, Oracle and/or its affiliates. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
- * Part of android-awt, the Android shadow of the desktop JDK surface used by
- * runelite-android. Original work of this project, not derived from OpenJDK;
- * licensed under the BSD 2-Clause License (see the LICENSE file at the
- * repository root). Files ported from OpenJDK carry the OpenJDK header instead;
- * see android-awt/LICENSE.
+ * This code is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 only, as
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
+ * This code is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ * version 2 for more details (a copy is included in the LICENSE file that
+ * accompanied this code).
  *
- * 1. Redistributions of source code must retain the above copyright notice, this
- *    list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright notice,
- *    this list of conditions and the following disclaimer in the documentation
- *    and/or other materials provided with the distribution.
+ * You should have received a copy of the GNU General Public License version
+ * 2 along with this work; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
- * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
+ * or visit www.oracle.com if you need additional information or have any
+ * questions.
  */
 package java.awt;
 
+/**
+ * Capabilities and properties of images.
+ * @author Michael Martak
+ * @since 1.4
+ */
 public class ImageCapabilities implements Cloneable {
-    private final boolean accelerated;
 
-    public ImageCapabilities(boolean accelerated) { this.accelerated = accelerated; }
+    private boolean accelerated = false;
 
-    public boolean isAccelerated() { return accelerated; }
-    public boolean isTrueVolatile() { return false; }
-
-    @Override
-    public Object clone() {
-        try { return super.clone(); } catch (CloneNotSupportedException e) { throw new InternalError(e); }
+    /**
+     * Creates a new object for specifying image capabilities.
+     * @param accelerated whether or not an accelerated image is desired
+     */
+    public ImageCapabilities(boolean accelerated) {
+        this.accelerated = accelerated;
     }
+
+    /**
+     * Returns <code>true</code> if the object whose capabilities are
+     * encapsulated in this <code>ImageCapabilities</code> can be or is
+     * accelerated.
+     * @return whether or not an image can be, or is, accelerated.  There are
+     * various platform-specific ways to accelerate an image, including
+     * pixmaps, VRAM, AGP.  This is the general acceleration method (as
+     * opposed to residing in system memory).
+     */
+    public boolean isAccelerated() {
+        return accelerated;
+    }
+
+    /**
+     * Returns <code>true</code> if the <code>VolatileImage</code>
+     * described by this <code>ImageCapabilities</code> can lose
+     * its surfaces.
+     * @return whether or not a volatile image is subject to losing its surfaces
+     * at the whim of the operating system.
+     */
+    public boolean isTrueVolatile() {
+        return false;
+    }
+
+    /**
+     * @return a copy of this ImageCapabilities object.
+     */
+    public Object clone() {
+        try {
+            return super.clone();
+        } catch (CloneNotSupportedException e) {
+            // Since we implement Cloneable, this should never happen
+            throw new InternalError(e);
+        }
+    }
+
 }
