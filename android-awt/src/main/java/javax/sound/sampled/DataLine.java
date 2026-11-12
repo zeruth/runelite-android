@@ -50,14 +50,6 @@ public interface DataLine extends Line {
         private final int minBufferSize;
         private final int maxBufferSize;
 
-        public Info(Class<?> lineClass, AudioFormat format) {
-            this(lineClass, new AudioFormat[]{format}, AudioSystem.NOT_SPECIFIED, AudioSystem.NOT_SPECIFIED);
-        }
-
-        public Info(Class<?> lineClass, AudioFormat format, int bufferSize) {
-            this(lineClass, new AudioFormat[]{format}, bufferSize, bufferSize);
-        }
-
         public Info(Class<?> lineClass, AudioFormat[] formats, int minBufferSize, int maxBufferSize) {
             super(lineClass);
             this.formats = formats == null ? new AudioFormat[0] : formats.clone();
@@ -65,18 +57,79 @@ public interface DataLine extends Line {
             this.maxBufferSize = maxBufferSize;
         }
 
+        public Info(Class<?> lineClass, AudioFormat format, int bufferSize) {
+            super(lineClass);
+            this.formats = format == null ? new AudioFormat[0] : new AudioFormat[]{format};
+            this.minBufferSize = bufferSize;
+            this.maxBufferSize = bufferSize;
+        }
+
+        public Info(Class<?> lineClass, AudioFormat format) {
+            this(lineClass, format, AudioSystem.NOT_SPECIFIED);
+        }
+
         public AudioFormat[] getFormats() {
             return formats.clone();
         }
 
+        /** True when {@code format} satisfies one of the supported formats (their wildcards apply). */
         public boolean isFormatSupported(AudioFormat format) {
-            for (AudioFormat f : formats) {
-                if (format.matches(f)) return true;
+            for (AudioFormat supported : formats) {
+                if (format.matches(supported)) {
+                    return true;
+                }
             }
             return false;
         }
 
+        /**
+         * True when {@code info} (a supported line) can serve this (a request): the line class
+         * matches, the requested buffer range lies within the supported one where both are
+         * specified, and every requested format is supported.
+         */
+        @Override
+        public boolean matches(Line.Info info) {
+            if (!super.matches(info)) {
+                return false;
+            }
+            Info dataLineInfo = (Info) info;
+            // Anything below zero is NOT_SPECIFIED.
+            if (getMaxBufferSize() >= 0 && dataLineInfo.getMaxBufferSize() >= 0
+                    && getMaxBufferSize() > dataLineInfo.getMaxBufferSize()) {
+                return false;
+            }
+            if (getMinBufferSize() >= 0 && dataLineInfo.getMinBufferSize() >= 0
+                    && getMinBufferSize() < dataLineInfo.getMinBufferSize()) {
+                return false;
+            }
+            for (AudioFormat format : formats) {
+                if (format != null && !dataLineInfo.isFormatSupported(format)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
         public int getMinBufferSize() { return minBufferSize; }
         public int getMaxBufferSize() { return maxBufferSize; }
+
+        @Override
+        public String toString() {
+            String format = "";
+            if (formats.length == 1 && formats[0] != null) {
+                format = " supporting format " + formats[0];
+            } else if (formats.length > 1) {
+                format = " supporting " + formats.length + " audio formats";
+            }
+            String buffers = "";
+            if (minBufferSize != AudioSystem.NOT_SPECIFIED && maxBufferSize != AudioSystem.NOT_SPECIFIED) {
+                buffers = ", and buffers of " + minBufferSize + " to " + maxBufferSize + " bytes";
+            } else if (minBufferSize != AudioSystem.NOT_SPECIFIED && minBufferSize > 0) {
+                buffers = ", and buffers of at least " + minBufferSize + " bytes";
+            } else if (maxBufferSize != AudioSystem.NOT_SPECIFIED) {
+                buffers = ", and buffers of up to " + maxBufferSize + " bytes";
+            }
+            return super.toString() + format + buffers;
+        }
     }
 }

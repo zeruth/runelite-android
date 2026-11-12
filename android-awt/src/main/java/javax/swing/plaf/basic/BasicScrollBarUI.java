@@ -56,7 +56,7 @@ public class BasicScrollBarUI extends ScrollBarUI implements LayoutManager, Swin
         scrollbar = (JScrollBar) component;
         previousLayout = scrollbar.getLayout();
         scrollbar.setLayout(this);
-        configureScrollBarColors();
+        installDefaults();
         decrButton = createDecreaseButton(vertical() ? NORTH : WEST);
         incrButton = createIncreaseButton(vertical() ? SOUTH : EAST);
         scrollbar.add(decrButton);
@@ -87,17 +87,46 @@ public class BasicScrollBarUI extends ScrollBarUI implements LayoutManager, Swin
         decrButton.removeActionListener(decrement);
         incrButton.removeActionListener(increment);
     }
+    /** The look and feel's thumb bounds ("ScrollBar.minimumThumbSize"/"maximumThumbSize"). */
+    protected Dimension minimumThumbSize, maximumThumbSize;
+
+    /**
+     * The JDK's: the bar width and thumb bounds from the look and feel, with 16 when
+     * "ScrollBar.width" is unset, then the colours.
+     */
+    protected void installDefaults() {
+        scrollBarWidth = UIManager.getInt("ScrollBar.width");
+        if (scrollBarWidth <= 0) scrollBarWidth = 16;
+        Object min = UIManager.get("ScrollBar.minimumThumbSize");
+        Object max = UIManager.get("ScrollBar.maximumThumbSize");
+        minimumThumbSize = min instanceof Dimension ? (Dimension) min : null;
+        maximumThumbSize = max instanceof Dimension ? (Dimension) max : null;
+        configureScrollBarColors();
+    }
     protected void configureScrollBarColors() {
-        trackColor = scrollbar.getBackground();
-        trackHighlightColor = trackColor;
-        thumbColor = Color.GRAY;
-        thumbDarkShadowColor = Color.DARK_GRAY;
-        thumbHighlightColor = thumbLightShadowColor = Color.LIGHT_GRAY;
+        trackColor = UIManager.getColor("ScrollBar.track");
+        if (trackColor == null) trackColor = scrollbar.getBackground();
+        trackHighlightColor = UIManager.getColor("ScrollBar.trackHighlight");
+        if (trackHighlightColor == null) trackHighlightColor = trackColor;
+        thumbColor = UIManager.getColor("ScrollBar.thumb");
+        if (thumbColor == null) thumbColor = Color.GRAY;
+        thumbDarkShadowColor = UIManager.getColor("ScrollBar.thumbDarkShadow");
+        if (thumbDarkShadowColor == null) thumbDarkShadowColor = Color.DARK_GRAY;
+        thumbHighlightColor = UIManager.getColor("ScrollBar.thumbHighlight");
+        if (thumbHighlightColor == null) thumbHighlightColor = Color.LIGHT_GRAY;
+        thumbLightShadowColor = UIManager.getColor("ScrollBar.thumbShadow");
+        if (thumbLightShadowColor == null) thumbLightShadowColor = Color.LIGHT_GRAY;
     }
     protected JButton createDecreaseButton(int orientation) { return new BasicArrowButton(orientation); }
     protected JButton createIncreaseButton(int orientation) { return new BasicArrowButton(orientation); }
-    protected Dimension getMinimumThumbSize() { return new Dimension(8, 8); }
-    protected Dimension getMaximumThumbSize() { return new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE); }
+    /**
+     * The look and feel's minimum, or 8x8: a thumb a finger can still catch when the
+     * content is many pages long.
+     */
+    protected Dimension getMinimumThumbSize() { return minimumThumbSize != null ? minimumThumbSize : new Dimension(8, 8); }
+    protected Dimension getMaximumThumbSize() {
+        return maximumThumbSize != null ? maximumThumbSize : new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE);
+    }
     protected Rectangle getThumbBounds() { return thumbRect; }
     protected Rectangle getTrackBounds() { return trackRect; }
     public boolean isThumbRollover() { return rollover; }

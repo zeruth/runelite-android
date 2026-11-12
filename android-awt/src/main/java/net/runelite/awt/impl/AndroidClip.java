@@ -41,7 +41,6 @@ import javax.sound.sampled.AudioSystem;
 import javax.sound.sampled.Clip;
 import javax.sound.sampled.Control;
 import javax.sound.sampled.DataLine;
-import javax.sound.sampled.FloatControl;
 import javax.sound.sampled.Line;
 import javax.sound.sampled.LineEvent;
 import javax.sound.sampled.LineListener;
@@ -59,7 +58,8 @@ import java.util.concurrent.CopyOnWriteArrayList;
  *  - RuneLite's AudioPlayer opens a Clip per sound, starts it, and on the STOP event
  *    closes the previous clip — so STOP must fire when playback runs out, not only on
  *    stop(). A notification marker at the last frame does that.
- *  - MASTER_GAIN is set in dB; AudioTrack takes linear volume, capped at unity.
+ *  - MASTER_GAIN (dB), MUTE, PAN/BALANCE and VOLUME come from {@link TrackControls};
+ *    AudioTrack takes linear per-channel volume, capped at unity.
  *  - The PCM is normalised to 16-bit signed little-endian, ≤ 2 channels: it plays on every
  *    API level we support, while 24/32-bit PCM needs API 31.
  * Line events are delivered on a dedicated thread, as the JDK does from its own.
@@ -84,10 +84,11 @@ public final class AndroidClip implements Clip {
         java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<>());
 
     private final List<LineListener> listeners = new CopyOnWriteArrayList<>();
-    private final MasterGain gain = new MasterGain();
     private final Object lock = new Object();
 
-    private AudioTrack track;
+    private volatile AudioTrack track;
+    /** Created by open() for the clip's channel count, as the JDK's lines have controls only once open. */
+    private volatile TrackControls controls;
     private AudioFormat format;
     private int frames;
     private int sampleRate;
@@ -98,6 +99,14 @@ public final class AndroidClip implements Clip {
 
     @Override
     public void open(AudioInputStream stream) throws LineUnavailableException, IOException {
+        AudioFormat.Encoding encoding = stream.getFormat().getEncoding();
+        if (!AudioFormat.Encoding.PCM_SIGNED.equals(encoding) && !AudioFormat.Encoding.PCM_UNSIGNED.equals(encoding)
+                && !AudioFormat.Encoding.PCM_FLOAT.equals(encoding)
+                && AudioSystem.isConversionSupported(AudioFormat.Encoding.PCM_SIGNED, stream.getFormat())) {
+            // An encoded stream (G.711, or MP3/Vorbis straight from getAudioInputStream) is decoded
+            // here rather than refused, so a plugin that skips the explicit PCM conversion still plays.
+            stream = AudioSystem.getAudioInputStream(AudioFormat.Encoding.PCM_SIGNED, stream);
+        }
         byte[] data = WavDecoder.Bytes.readAll(stream);
         open(stream.getFormat(), data, 0, data.length);
     }
@@ -137,7 +146,11 @@ public final class AndroidClip implements Clip {
                 }, EVENTS);
                 track = t;
                 OPEN.add(this);
-                gain.apply();
+                // A fresh track plays at unity, which is what new controls describe.
+                controls = new TrackControls(channels, (left, right) -> {
+                    AudioTrack current = track;
+                    if (current != null) TrackControls.applyTo(current, left, right);
+                });
             } catch (LineUnavailableException e) {
                 throw e;
             } catch (Exception e) {
@@ -314,13 +327,23 @@ public final class AndroidClip implements Clip {
     @Override public boolean isOpen() { synchronized (lock) { return track != null; } }
 
     @Override public Line.Info getLineInfo() { return new DataLine.Info(Clip.class, format); }
-    @Override public Control[] getControls() { return new Control[]{gain}; }
-    @Override public boolean isControlSupported(Control.Type type) { return type == FloatControl.Type.MASTER_GAIN; }
+    @Override
+    public Control[] getControls() {
+        TrackControls c = controls;
+        return c == null ? new Control[0] : c.controls();
+    }
+
+    @Override
+    public boolean isControlSupported(Control.Type type) {
+        TrackControls c = controls;
+        return c != null && c.supports(type);
+    }
 
     @Override
     public Control getControl(Control.Type type) {
-        if (type == FloatControl.Type.MASTER_GAIN) return gain;
-        throw new IllegalArgumentException("Unsupported control type: " + type);
+        TrackControls c = controls;
+        if (c == null) throw new IllegalArgumentException("Unsupported control type: " + type);
+        return c.get(type);
     }
 
     @Override public void addLineListener(LineListener listener) { if (listener != null) listeners.add(listener); }
@@ -336,24 +359,6 @@ public final class AndroidClip implements Clip {
                 }
             }
         });
-    }
-
-    /** dB gain, same range the JDK's mixers report; applied as linear volume (≤ 1). */
-    private final class MasterGain extends FloatControl {
-        MasterGain() { super(FloatControl.Type.MASTER_GAIN, -80f, 6.0206f, 0.01f, -1, 0f, "dB"); }
-
-        @Override
-        public void setValue(float value) {
-            super.setValue(value);
-            apply();
-        }
-
-        void apply() {
-            AudioTrack t = track;
-            if (t == null) return;
-            float linear = (float) Math.pow(10.0, getValue() / 20.0);
-            try { t.setVolume(Math.max(0f, Math.min(1f, linear))); } catch (IllegalStateException ignored) {}
-        }
     }
 
     /** Any PCM layout → 16-bit signed little-endian, keeping at most the first two channels. */

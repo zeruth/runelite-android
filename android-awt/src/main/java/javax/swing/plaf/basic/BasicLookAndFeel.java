@@ -34,6 +34,8 @@ import java.awt.Color;
 import java.awt.SystemColor;
 import javax.swing.LookAndFeel;
 import javax.swing.UIDefaults;
+import javax.swing.border.BevelBorder;
+import javax.swing.plaf.BorderUIResource;
 import javax.swing.plaf.ColorUIResource;
 
 public abstract class BasicLookAndFeel extends LookAndFeel {
@@ -48,7 +50,23 @@ public abstract class BasicLookAndFeel extends LookAndFeel {
 
     // The ComponentUI class table and the per-component defaults arrive with
     // the Basic delegates; until then a subclass (FlatLaf) supplies its own.
-    protected void initClassDefaults(UIDefaults table) {}
+    protected void initClassDefaults(UIDefaults table) {
+        final String basicPackageName = "javax.swing.plaf.basic.";
+        // LabelUI is listed because DefaultTreeCellRenderer is a JLabel: under a JDK JLabel
+        // (the host contracts) a missing delegate leaves the renderer 0 high, so every row
+        // measures 0 wide. The shadow JLabel sizes itself and does not ask for a delegate.
+        Object[] uiDefaults = {
+                  "LabelUI", basicPackageName + "BasicLabelUI",
+             "OptionPaneUI", basicPackageName + "BasicOptionPaneUI",
+           "ColorChooserUI", basicPackageName + "BasicColorChooserUI",
+            "FileChooserUI", basicPackageName + "BasicFileChooserUI",
+                   "TreeUI", basicPackageName + "BasicTreeUI",
+                  "TableUI", basicPackageName + "BasicTableUI",
+            "TableHeaderUI", basicPackageName + "BasicTableHeaderUI",
+        };
+
+        table.putDefaults(uiDefaults);
+    }
 
     /** The JDK's Basic system colors, loaded natively when the subclass is a native look and feel. */
     protected void initSystemColorDefaults(UIDefaults table) {
@@ -84,7 +102,205 @@ public abstract class BasicLookAndFeel extends LookAndFeel {
         loadSystemColors(table, defaultSystemColors, isNativeLookAndFeel());
     }
 
-    protected void initComponentDefaults(UIDefaults table) {}
+    /**
+     * The JDK's Basic per-component defaults for the delegates the shadow has
+     * ported (the Tree, OptionPane and Table sections). The JDK's gif node icons are not
+     * bundled; DefaultTreeCellRenderer draws no icon when they are absent. The
+     * JDK's lazy sun.swing.icon.SortArrowIcon is not ported either;
+     * DefaultTableCellHeaderRenderer draws its own arrow in
+     * {@code Table.sortIconColor} when the sort icons are absent.
+     */
+    protected void initComponentDefaults(UIDefaults table) {
+        Object dialogPlain12 = new javax.swing.plaf.FontUIResource("Dialog", java.awt.Font.PLAIN, 12);
+        Object controlText = table.get("controlText");
+        Object window = table.get("window");
+        Object control = table.get("control");
+        Object controlShadow = table.get("controlShadow");
+        Object focusCellHighlightBorder =
+                new BorderUIResource.LineBorderUIResource(new ColorUIResource(Color.yellow));
+        Object tableHeaderBorder = new BorderUIResource.BevelBorderUIResource(
+                BevelBorder.RAISED, table.getColor("controlLtHighlight"), table.getColor("control"),
+                table.getColor("controlDkShadow"), table.getColor("controlShadow"));
+        Object[] defaults = {
+            "Tree.font", dialogPlain12,
+            "Tree.background", table.get("window"),
+            "Tree.foreground", table.get("textText"),
+            "Tree.hash", table.get("controlShadow"),
+            "Tree.textForeground", table.get("textText"),
+            "Tree.textBackground", table.get("text"),
+            "Tree.selectionForeground", table.get("textHighlightText"),
+            "Tree.selectionBackground", table.get("textHighlight"),
+            "Tree.selectionBorderColor", new ColorUIResource(Color.black),
+            "Tree.dropLineColor", table.get("controlShadow"),
+            "Tree.leftChildIndent", Integer.valueOf(7),
+            "Tree.rightChildIndent", Integer.valueOf(13),
+            "Tree.rowHeight", Integer.valueOf(16),
+            "Tree.scrollsOnExpand", Boolean.TRUE,
+            "Tree.timeFactor", Long.valueOf(1000L),
+            "Tree.changeSelectionWithFocus", Boolean.TRUE,
+            "Tree.drawsFocusBorderAroundIcon", Boolean.FALSE,
+            "Tree.lineTypeDashed", Boolean.FALSE,
+            "Tree.paintLines", Boolean.TRUE,
+
+            // OptionPane as in the JDK's Basic table. The error/information/
+            // warning/question gif icons are not bundled, so a pane without
+            // its own icon shows none. The texts are the JDK's English
+            // basic.properties entries, which the shadow does not bundle.
+            "OptionPane.font", dialogPlain12,
+            "OptionPane.background", table.get("control"),
+            "OptionPane.foreground", table.get("controlText"),
+            "OptionPane.messageForeground", table.get("controlText"),
+            "OptionPane.border", new javax.swing.plaf.BorderUIResource.EmptyBorderUIResource(10, 10, 12, 10),
+            "OptionPane.messageAreaBorder", new javax.swing.plaf.BorderUIResource.EmptyBorderUIResource(0, 0, 0, 0),
+            "OptionPane.buttonAreaBorder", new javax.swing.plaf.BorderUIResource.EmptyBorderUIResource(6, 0, 0, 0),
+            "OptionPane.minimumSize", new javax.swing.plaf.DimensionUIResource(262, 90),
+            "OptionPane.windowBindings", new Object[] {"ESCAPE", "close"},
+            "OptionPane.yesButtonText", "Yes",
+            "OptionPane.noButtonText", "No",
+            "OptionPane.okButtonText", "OK",
+            "OptionPane.cancelButtonText", "Cancel",
+            "OptionPane.titleText", "Select an Option",
+            "OptionPane.inputDialogTitle", "Input",
+            "OptionPane.messageDialogTitle", "Message",
+
+            "Table.font", dialogPlain12,
+            "Table.foreground", controlText,
+            "Table.background", window,
+            "Table.selectionForeground", table.get("textHighlightText"),
+            "Table.selectionBackground", table.get("textHighlight"),
+            "Table.dropLineColor", controlShadow,
+            "Table.dropLineShortColor", new ColorUIResource(Color.black),
+            "Table.gridColor", new ColorUIResource(Color.gray),
+            "Table.focusCellBackground", window,
+            "Table.focusCellForeground", controlText,
+            "Table.focusCellHighlightBorder", focusCellHighlightBorder,
+            "Table.scrollPaneBorder", BorderUIResource.getLoweredBevelBorderUIResource(),
+            "Table.ancestorInputMap",
+               new UIDefaults.LazyInputMap(new Object[] {
+                               "ctrl C", "copy",
+                               "ctrl V", "paste",
+                               "ctrl X", "cut",
+                                 "COPY", "copy",
+                                "PASTE", "paste",
+                                  "CUT", "cut",
+                       "control INSERT", "copy",
+                         "shift INSERT", "paste",
+                         "shift DELETE", "cut",
+                                "RIGHT", "selectNextColumn",
+                             "KP_RIGHT", "selectNextColumn",
+                          "shift RIGHT", "selectNextColumnExtendSelection",
+                       "shift KP_RIGHT", "selectNextColumnExtendSelection",
+                     "ctrl shift RIGHT", "selectNextColumnExtendSelection",
+                  "ctrl shift KP_RIGHT", "selectNextColumnExtendSelection",
+                           "ctrl RIGHT", "selectNextColumnChangeLead",
+                        "ctrl KP_RIGHT", "selectNextColumnChangeLead",
+                                 "LEFT", "selectPreviousColumn",
+                              "KP_LEFT", "selectPreviousColumn",
+                           "shift LEFT", "selectPreviousColumnExtendSelection",
+                        "shift KP_LEFT", "selectPreviousColumnExtendSelection",
+                      "ctrl shift LEFT", "selectPreviousColumnExtendSelection",
+                   "ctrl shift KP_LEFT", "selectPreviousColumnExtendSelection",
+                            "ctrl LEFT", "selectPreviousColumnChangeLead",
+                         "ctrl KP_LEFT", "selectPreviousColumnChangeLead",
+                                 "DOWN", "selectNextRow",
+                              "KP_DOWN", "selectNextRow",
+                           "shift DOWN", "selectNextRowExtendSelection",
+                        "shift KP_DOWN", "selectNextRowExtendSelection",
+                      "ctrl shift DOWN", "selectNextRowExtendSelection",
+                   "ctrl shift KP_DOWN", "selectNextRowExtendSelection",
+                            "ctrl DOWN", "selectNextRowChangeLead",
+                         "ctrl KP_DOWN", "selectNextRowChangeLead",
+                                   "UP", "selectPreviousRow",
+                                "KP_UP", "selectPreviousRow",
+                             "shift UP", "selectPreviousRowExtendSelection",
+                          "shift KP_UP", "selectPreviousRowExtendSelection",
+                        "ctrl shift UP", "selectPreviousRowExtendSelection",
+                     "ctrl shift KP_UP", "selectPreviousRowExtendSelection",
+                              "ctrl UP", "selectPreviousRowChangeLead",
+                           "ctrl KP_UP", "selectPreviousRowChangeLead",
+                                 "HOME", "selectFirstColumn",
+                           "shift HOME", "selectFirstColumnExtendSelection",
+                      "ctrl shift HOME", "selectFirstRowExtendSelection",
+                            "ctrl HOME", "selectFirstRow",
+                                  "END", "selectLastColumn",
+                            "shift END", "selectLastColumnExtendSelection",
+                       "ctrl shift END", "selectLastRowExtendSelection",
+                             "ctrl END", "selectLastRow",
+                              "PAGE_UP", "scrollUpChangeSelection",
+                        "shift PAGE_UP", "scrollUpExtendSelection",
+                   "ctrl shift PAGE_UP", "scrollLeftExtendSelection",
+                         "ctrl PAGE_UP", "scrollLeftChangeSelection",
+                            "PAGE_DOWN", "scrollDownChangeSelection",
+                      "shift PAGE_DOWN", "scrollDownExtendSelection",
+                 "ctrl shift PAGE_DOWN", "scrollRightExtendSelection",
+                       "ctrl PAGE_DOWN", "scrollRightChangeSelection",
+                                  "TAB", "selectNextColumnCell",
+                            "shift TAB", "selectPreviousColumnCell",
+                                "ENTER", "selectNextRowCell",
+                          "shift ENTER", "selectPreviousRowCell",
+                               "ctrl A", "selectAll",
+                           "ctrl SLASH", "selectAll",
+                      "ctrl BACK_SLASH", "clearSelection",
+                               "ESCAPE", "cancel",
+                                   "F2", "startEditing",
+                                "SPACE", "addToSelection",
+                           "ctrl SPACE", "toggleAndAnchor",
+                          "shift SPACE", "extendTo",
+                     "ctrl shift SPACE", "moveSelectionTo",
+                                   "F8", "focusHeader"
+                 }),
+            "Table.ancestorInputMap.RightToLeft",
+               new UIDefaults.LazyInputMap(new Object[] {
+                                "RIGHT", "selectPreviousColumn",
+                             "KP_RIGHT", "selectPreviousColumn",
+                          "shift RIGHT", "selectPreviousColumnExtendSelection",
+                       "shift KP_RIGHT", "selectPreviousColumnExtendSelection",
+                     "ctrl shift RIGHT", "selectPreviousColumnExtendSelection",
+                  "ctrl shift KP_RIGHT", "selectPreviousColumnExtendSelection",
+                           "ctrl RIGHT", "selectPreviousColumnChangeLead",
+                        "ctrl KP_RIGHT", "selectPreviousColumnChangeLead",
+                                 "LEFT", "selectNextColumn",
+                              "KP_LEFT", "selectNextColumn",
+                           "shift LEFT", "selectNextColumnExtendSelection",
+                        "shift KP_LEFT", "selectNextColumnExtendSelection",
+                      "ctrl shift LEFT", "selectNextColumnExtendSelection",
+                   "ctrl shift KP_LEFT", "selectNextColumnExtendSelection",
+                            "ctrl LEFT", "selectNextColumnChangeLead",
+                         "ctrl KP_LEFT", "selectNextColumnChangeLead",
+                         "ctrl PAGE_UP", "scrollRightChangeSelection",
+                       "ctrl PAGE_DOWN", "scrollLeftChangeSelection",
+                   "ctrl shift PAGE_UP", "scrollRightExtendSelection",
+                 "ctrl shift PAGE_DOWN", "scrollLeftExtendSelection",
+                 }),
+            "Table.sortIconColor", controlShadow,
+
+            "TableHeader.font", dialogPlain12,
+            "TableHeader.foreground", controlText,
+            "TableHeader.background", control,
+            "TableHeader.cellBorder", tableHeaderBorder,
+            "TableHeader.focusCellBackground", table.getColor("text"),
+            "TableHeader.focusCellForeground", null,
+            "TableHeader.focusCellBorder", null,
+            "TableHeader.ancestorInputMap",
+               new UIDefaults.LazyInputMap(new Object[] {
+                                "SPACE", "toggleSortOrder",
+                                 "LEFT", "selectColumnToLeft",
+                              "KP_LEFT", "selectColumnToLeft",
+                                "RIGHT", "selectColumnToRight",
+                             "KP_RIGHT", "selectColumnToRight",
+                             "alt LEFT", "moveColumnLeft",
+                          "alt KP_LEFT", "moveColumnLeft",
+                            "alt RIGHT", "moveColumnRight",
+                         "alt KP_RIGHT", "moveColumnRight",
+                       "alt shift LEFT", "resizeLeft",
+                    "alt shift KP_LEFT", "resizeLeft",
+                      "alt shift RIGHT", "resizeRight",
+                   "alt shift KP_RIGHT", "resizeRight",
+                               "ESCAPE", "focusTable",
+               }),
+        };
+        table.putDefaults(defaults);
+    }
 
     /**
      * Populates {@code table} with the {@code name-color} pairs in
@@ -114,6 +330,17 @@ public abstract class BasicLookAndFeel extends LookAndFeel {
                 table.put(systemColors[i], new ColorUIResource(color));
             }
         }
+    }
+
+    /**
+     * Returns {@code ui} when it is a {@code klass}, otherwise null. The JDK
+     * also unwraps a {@code MultiLookAndFeel} UI, which the shadow never creates.
+     */
+    static Object getUIOfType(javax.swing.plaf.ComponentUI ui, Class<?> klass) {
+        if (klass.isInstance(ui)) {
+            return ui;
+        }
+        return null;
     }
 
     @Override public void initialize() {}

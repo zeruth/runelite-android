@@ -37,6 +37,90 @@ import javax.swing.event.ChangeListener;
 public abstract class AbstractButton extends JComponent {
     private static final long serialVersionUID = -937921912697029109L;
 
+    /**
+     * Accessibility support shared by buttons and menu items: named by their text, one
+     * "click" action that runs {@link #doClick()}, and a 0/1 value for the selected state.
+     */
+    protected abstract class AccessibleAbstractButton extends AccessibleJComponent
+            implements javax.accessibility.AccessibleAction, javax.accessibility.AccessibleValue {
+
+        public String getAccessibleName() {
+            String name = accessibleName;
+            if (name == null) {
+                name = (String) getClientProperty(javax.accessibility.AccessibleContext.ACCESSIBLE_NAME_PROPERTY);
+            }
+            if (name == null) {
+                name = AbstractButton.this.getText();
+            }
+            if (name == null) {
+                name = super.getAccessibleName();
+            }
+            return name;
+        }
+
+        public javax.accessibility.AccessibleStateSet getAccessibleStateSet() {
+            javax.accessibility.AccessibleStateSet states = super.getAccessibleStateSet();
+            if (getModel().isArmed()) {
+                states.add(javax.accessibility.AccessibleState.ARMED);
+            }
+            if (isFocusOwner()) {
+                states.add(javax.accessibility.AccessibleState.FOCUSED);
+            }
+            if (getModel().isPressed()) {
+                states.add(javax.accessibility.AccessibleState.PRESSED);
+            }
+            if (isSelected()) {
+                states.add(javax.accessibility.AccessibleState.CHECKED);
+            }
+            return states;
+        }
+
+        public javax.accessibility.AccessibleAction getAccessibleAction() {
+            return this;
+        }
+
+        public javax.accessibility.AccessibleValue getAccessibleValue() {
+            return this;
+        }
+
+        public int getAccessibleActionCount() {
+            return 1;
+        }
+
+        public String getAccessibleActionDescription(int i) {
+            // UIManager "AbstractButton.clickText" in every desktop look and feel.
+            return i == 0 ? "click" : null;
+        }
+
+        public boolean doAccessibleAction(int i) {
+            if (i == 0) {
+                doClick();
+                return true;
+            }
+            return false;
+        }
+
+        public Number getCurrentAccessibleValue() {
+            return Integer.valueOf(isSelected() ? 1 : 0);
+        }
+
+        public boolean setCurrentAccessibleValue(Number n) {
+            if (n == null) {
+                return false;
+            }
+            setSelected(n.intValue() != 0);
+            return true;
+        }
+
+        public Number getMinimumAccessibleValue() {
+            return Integer.valueOf(0);
+        }
+
+        public Number getMaximumAccessibleValue() {
+            return Integer.valueOf(1);
+        }
+    }
+
     public static final String TEXT_CHANGED_PROPERTY = "text";
     public static final String ICON_CHANGED_PROPERTY = "icon";
     public static final String SELECTED_CHANGED_PROPERTY = "selected";
@@ -125,11 +209,19 @@ public abstract class AbstractButton extends JComponent {
         if (model != null) model.setEnabled(enabled);
     }
     private final javax.swing.event.EventListenerList buttonListeners = new javax.swing.event.EventListenerList();
-    private final ActionListener modelActionListener = e -> {
+    private final ActionListener modelActionListener = e -> fireActionPerformed(e);
+
+    /**
+     * Notifies the action listeners with an event whose source is this button;
+     * the command falls back to the button's action command.
+     */
+    protected void fireActionPerformed(java.awt.event.ActionEvent e) {
+        String command = e.getActionCommand();
+        if (command == null) command = getActionCommand();
         java.awt.event.ActionEvent event = new java.awt.event.ActionEvent(this,
-            java.awt.event.ActionEvent.ACTION_PERFORMED, getActionCommand(), e.getWhen(), e.getModifiers());
+            java.awt.event.ActionEvent.ACTION_PERFORMED, command, e.getWhen(), e.getModifiers());
         for (ActionListener listener : getActionListeners()) listener.actionPerformed(event);
-    };
+    }
     private final ItemListener modelItemListener = e -> {
         java.awt.event.ItemEvent event = new java.awt.event.ItemEvent(this,
             java.awt.event.ItemEvent.ITEM_STATE_CHANGED, this, e.getStateChange());

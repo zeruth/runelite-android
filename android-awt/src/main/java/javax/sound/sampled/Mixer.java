@@ -39,6 +39,14 @@ public interface Mixer extends Line {
     boolean isLineSupported(Line.Info info);
     Line getLine(Line.Info info) throws LineUnavailableException;
 
+    /** How many lines matching {@code info} can be open at once; {@code NOT_SPECIFIED} for no limit. */
+    int getMaxLines(Line.Info info);
+    Line[] getSourceLines();
+    Line[] getTargetLines();
+    void synchronize(Line[] lines, boolean maintainSync);
+    void unsynchronize(Line[] lines);
+    boolean isSynchronizationSupported(Line[] lines, boolean maintainSync);
+
     class Info {
         private final String name;
         private final String vendor;
@@ -56,6 +64,16 @@ public interface Mixer extends Line {
         public final String getVendor()      { return vendor; }
         public final String getDescription() { return description; }
         public final String getVersion()     { return version; }
+
+        @Override
+        public final boolean equals(Object obj) {
+            return super.equals(obj);
+        }
+
+        @Override
+        public final int hashCode() {
+            return super.hashCode();
+        }
 
         @Override
         public final String toString() {

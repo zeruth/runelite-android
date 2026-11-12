@@ -29,6 +29,7 @@ internal class SwingDialogs(private val activity: ComponentActivity) {
     private val directory = File(activity.cacheDir, "swing-files").apply { mkdirs() }
     private var pending: Pick? = null // Android main thread
     private var confirmation: AlertDialog? = null
+    private var colorPick: (() -> Unit)? = null // Android main thread; cancels the open color picker
     private val watchers = mutableSetOf<FileObserver>()
     private val windows = mutableMapOf<java.awt.Window, AlertDialog>()
     private var closed = false
@@ -54,10 +55,17 @@ internal class SwingDialogs(private val activity: ComponentActivity) {
     private val open = activity.registerForActivityResult(ActivityResultContracts.OpenDocument()) { finishPick(listOfNotNull(it)) }
     private val openMany = activity.registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { finishPick(it) }
     private val save = activity.registerForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { finishPick(listOfNotNull(it)) }
+    private val tree = activity.registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { finishTree(it) }
 
     init {
-        java.awt.Window.setVisibilityHandler { window, visible ->
+        java.awt.Window.setVisibilityHandler handler@{ window, visible ->
+            // The client frame and the splash are drawn full-screen by the main activity (AppAndroid);
+            // presenting them here would put the whole client in a dialog whose Close runs RuneLite's exit.
+            if (window is net.runelite.client.ui.ContainableFrame || window is net.runelite.client.ui.SplashScreen) return@handler
             main.post {
+                // Window events are not fired here: Window.setVisible fires OPENED and activates
+                // (ACTIVATED, GAINED_FOCUS) on show, and hiding clears focus (LOST_FOCUS, DEACTIVATED)
+                // synchronously, before dispose posts CLOSED, in the desktop order.
                 if (!visible || closed) windows.remove(window)?.dismiss()
                 else if (!windows.containsKey(window)) {
                     val root = (window as? javax.swing.RootPaneContainer)?.rootPane
@@ -65,9 +73,11 @@ internal class SwingDialogs(private val activity: ComponentActivity) {
                         val view = net.runelite.mp.ui.panels.SwingPanelView(activity, "Swing window", root)
                         val title = (window as? java.awt.Dialog)?.title ?: (window as? java.awt.Frame)?.title
                         val dialog = AlertDialog.Builder(activity).setTitle(title).setView(view).setNegativeButton("Close", null).create()
+                        // The close button is the desktop title-bar close: WINDOW_CLOSING lets JFrame/JDialog apply
+                        // their default close operation and plugin listeners veto or react, as on the JDK.
                         fun requestClose() {
                             javax.swing.SwingUtilities.invokeLater {
-                                if (window is javax.swing.JDialog)
+                                if (window is java.awt.Frame || window is java.awt.Dialog)
                                     window.dispatchEvent(java.awt.event.WindowEvent(window, java.awt.event.WindowEvent.WINDOW_CLOSING))
                                 else window.isVisible = false
                             }
@@ -101,12 +111,12 @@ internal class SwingDialogs(private val activity: ComponentActivity) {
                         pending = request
                         try {
                             when {
-                                chooser.fileSelectionMode == JFileChooser.DIRECTORIES_ONLY -> showDirectory(request)
+                                chooser.fileSelectionMode == JFileChooser.DIRECTORIES_ONLY -> launchTree(request)
                                 saving -> save.launch(chooser.selectedFile?.name ?: "export.properties")
                                 chooser.fileSelectionMode == JFileChooser.FILES_AND_DIRECTORIES -> {
                                     confirmation = AlertDialog.Builder(activity).setTitle(chooser.dialogTitle ?: "Select")
                                         .setItems(arrayOf("File", "Folder")) { _, index ->
-                                            if (index == 1) showDirectory(request) else launchOpen(request)
+                                            if (index == 1) launchTree(request) else launchOpen(request)
                                         }.setNegativeButton("Cancel") { _, _ -> cancelPick(request) }
                                         .setOnCancelListener { cancelPick(request) }.show()
                                 }
@@ -166,38 +176,14 @@ internal class SwingDialogs(private val activity: ComponentActivity) {
                 result
             }
         }
-        javax.swing.JColorChooser.setDialogHandler { _, title, initial ->
-            if (Looper.myLooper() == Looper.getMainLooper()) null
-            else {
-                val done = Completion()
-                var result: java.awt.Color? = null
-                main.post {
-                    if (closed) done.finish()
-                    else {
-                        confirmation?.dismiss()
-                        val input = android.widget.EditText(activity).apply {
-                            setSingleLine(true)
-                            setText(String.format("#%06X", initial.rgb and 0xFFFFFF))
-                            hint = "#RRGGBB"
-                        }
-                        val dialog = AlertDialog.Builder(activity).setTitle(title).setView(input)
-                            .setPositiveButton("OK", null).setNegativeButton("Cancel", null).create()
-                        dialog.setOnShowListener {
-                            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                                try {
-                                    result = java.awt.Color(android.graphics.Color.parseColor(input.text.toString()))
-                                    dialog.dismiss()
-                                } catch (_: IllegalArgumentException) { input.error = "Enter a color such as #FF8800" }
-                            }
-                        }
-                        dialog.setOnDismissListener { done.finish() }
-                        confirmation = dialog; dialog.show()
-                    }
-                }
-                try { done.await() } catch (_: InterruptedException) { Thread.currentThread().interrupt() }
-                result
-            }
-        }
+        // An object, not a SAM lambda: the lambda would only implement the three-argument show, and the
+        // interface's default four-argument show would then drop the transparency request.
+        javax.swing.JColorChooser.setDialogHandler(object : javax.swing.JColorChooser.DialogHandler {
+            override fun show(parent: java.awt.Component?, title: String?, initial: java.awt.Color?): java.awt.Color? =
+                pickColor(title, initial ?: java.awt.Color.white, false)
+            override fun show(parent: java.awt.Component?, title: String?, initial: java.awt.Color?, transparency: Boolean): java.awt.Color? =
+                pickColor(title, initial ?: java.awt.Color.white, transparency)
+        })
         JOptionPane.setDialogHandler { message, title, optionType, options ->
             if (Looper.myLooper() == Looper.getMainLooper()) JOptionPane.CLOSED_OPTION
             else {
@@ -243,6 +229,42 @@ internal class SwingDialogs(private val activity: ComponentActivity) {
         }
     }
 
+    /**
+     * Answers JColorChooser.showDialog with the config panel's Compose color picker, so a plugin's
+     * "pick a color" looks and works like a color setting. The picker is hosted by a zero-size
+     * ComposeView added to the activity, which supplies the lifecycle owners a Compose dialog needs.
+     */
+    private fun pickColor(title: String?, initial: java.awt.Color, alpha: Boolean): java.awt.Color? {
+        if (Looper.myLooper() == Looper.getMainLooper()) return null
+        val done = Completion()
+        var result: java.awt.Color? = null
+        main.post {
+            if (closed) { done.finish(); return@post }
+            confirmation?.dismiss()
+            colorPick?.invoke()
+            val host = androidx.compose.ui.platform.ComposeView(activity)
+            var finished = false
+            fun finish(argb: Int?) {
+                if (finished) return
+                finished = true
+                if (argb != null) result = java.awt.Color(argb, alpha)
+                (host.parent as? android.view.ViewGroup)?.removeView(host)
+                colorPick = null
+                done.finish()
+            }
+            colorPick = { finish(null) }
+            host.setContent {
+                net.runelite.mp.ui.RuneLiteMenuTheme {
+                    net.runelite.mp.ui.widgets.ColorPickerDialog(title ?: "Choose a color", initial.rgb, alpha,
+                        onDismiss = { finish(null) }) { finish(it) }
+                }
+            }
+            activity.addContentView(host, android.view.ViewGroup.LayoutParams(0, 0))
+        }
+        try { done.await() } catch (_: InterruptedException) { Thread.currentThread().interrupt() }
+        return result
+    }
+
     private fun messageView(message: Any?): View = when (message) {
         is Array<*> -> LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
@@ -276,6 +298,81 @@ internal class SwingDialogs(private val activity: ComponentActivity) {
         if (request.chooser.isMultiSelectionEnabled) openMany.launch(mimeTypes(request.chooser))
         else open.launch(mimeTypes(request.chooser))
     }
+
+    private fun launchTree(request: Pick) {
+        try { tree.launch(null) }
+        // Builds without a documents UI (some TV and automotive images) browse app storage instead.
+        catch (_: android.content.ActivityNotFoundException) { showDirectory(request) }
+    }
+
+    /**
+     * A folder pick (ACTION_OPEN_DOCUMENT_TREE) comes back as a local folder in app storage holding
+     * copies of the tree's top-level files; whatever the plugin then writes into it is copied back
+     * into the picked tree, replacing a document of the same name or creating one. Sub-folders are
+     * not mirrored: a picked Downloads folder would otherwise be copied whole.
+     */
+    private fun finishTree(uri: Uri?) {
+        val request = pending ?: return
+        if (uri == null) { cancelPick(request); return }
+        io.execute {
+            try {
+                val resolver = activity.contentResolver
+                val treeId = android.provider.DocumentsContract.getTreeDocumentId(uri)
+                val root = android.provider.DocumentsContract.buildDocumentUriUsingTree(uri, treeId)
+                val parent = File(directory, java.util.UUID.randomUUID().toString())
+                val folder = File(parent, selectedName(root, "folder")).apply { mkdirs() }
+                val documents = java.util.concurrent.ConcurrentHashMap<String, Uri>()
+                val children = android.provider.DocumentsContract.buildChildDocumentsUriUsingTree(uri, treeId)
+                val columns = arrayOf(android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                    android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                    android.provider.DocumentsContract.Document.COLUMN_MIME_TYPE)
+                resolver.query(children, columns, null, null, null)?.use { cursor ->
+                    while (cursor.moveToNext()) {
+                        if (cursor.getString(2) == android.provider.DocumentsContract.Document.MIME_TYPE_DIR) continue
+                        val name = cursor.getString(1)?.substringAfterLast('/')
+                            ?.takeIf { it.isNotBlank() && it != "." && it != ".." } ?: continue
+                        val document = android.provider.DocumentsContract.buildDocumentUriUsingTree(uri, cursor.getString(0))
+                        documents[name] = document
+                        resolver.openInputStream(document)?.use { input -> File(folder, name).outputStream().use { input.copyTo(it) } }
+                    }
+                }
+                val observer = object : FileObserver(folder.absolutePath, CLOSE_WRITE or MOVED_TO) {
+                    override fun onEvent(event: Int, path: String?) {
+                        val written = path?.let { File(folder, it) }?.takeIf { it.isFile } ?: return
+                        try {
+                            io.execute {
+                                try {
+                                    val target = documents[written.name] ?: android.provider.DocumentsContract.createDocument(
+                                        resolver, root, mimeType(written.name), written.name)?.also { documents[written.name] = it }
+                                        ?: error("Could not create ${written.name} in the picked folder")
+                                    resolver.openOutputStream(target, "wt")?.use { output ->
+                                        written.inputStream().use { it.copyTo(output) }
+                                    } ?: error("Could not write ${written.name} to the picked folder")
+                                } catch (e: Exception) { fail(e) }
+                            }
+                        } catch (_: java.util.concurrent.RejectedExecutionException) {
+                            // The bridge closed between the write and this event.
+                        }
+                    }
+                }
+                main.post {
+                    if (!closed && pending === request) {
+                        watchers.add(observer); observer.startWatching()
+                        completePick(request, arrayOf(folder), parent)
+                    } else {
+                        request.done.finish()
+                    }
+                }
+            } catch (e: Exception) {
+                fail(e)
+                main.post { cancelPick(request) }
+            }
+        }
+    }
+
+    private fun mimeType(name: String): String =
+        android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(name.substringAfterLast('.', "").lowercase(java.util.Locale.ROOT))
+            ?: "application/octet-stream"
 
     private fun cancelPick(request: Pick) {
         if (pending === request) pending = null
@@ -391,6 +488,7 @@ internal class SwingDialogs(private val activity: ComponentActivity) {
         windows.values.toList().forEach { it.dismiss() }; windows.clear()
         pending?.done?.finish(); pending = null
         confirmation?.dismiss(); confirmation = null
+        colorPick?.invoke()
         watchers.forEach { it.stopWatching() }; watchers.clear()
         // Let already queued transfers finish; reject new dialogs through closed above.
         io.shutdown()

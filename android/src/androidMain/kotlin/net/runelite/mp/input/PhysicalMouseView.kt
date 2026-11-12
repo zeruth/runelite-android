@@ -5,6 +5,7 @@ import android.os.Build
 import android.os.SystemClock
 import android.view.InputDevice
 import android.view.MotionEvent
+import android.view.PointerIcon
 import android.view.View
 import java.awt.event.InputEvent
 import java.awt.event.MouseEvent
@@ -38,6 +39,14 @@ internal abstract class PhysicalMouseView(context: Context) : View(context) {
 
     override fun dispatchTouchEvent(event: MotionEvent) = route(event) || super.dispatchTouchEvent(event)
     override fun dispatchGenericMotionEvent(event: MotionEvent) = route(event) || super.dispatchGenericMotionEvent(event)
+
+    /** The AWT cursor under a mouse or stylus pointer at view coordinates; `null` keeps the view's icon. */
+    protected open fun awtCursor(x: Float, y: Float): java.awt.Cursor? = null
+
+    override fun onResolvePointerIcon(event: MotionEvent, pointerIndex: Int): PointerIcon? {
+        val cursor = awtCursor(event.getX(pointerIndex), event.getY(pointerIndex))
+        return cursor?.let { AwtPointerIcons.resolve(context, it) } ?: super.onResolvePointerIcon(event, pointerIndex)
+    }
 
     protected fun cancelMouse() = buttons.cancel(SystemClock.uptimeMillis())
     override fun onWindowFocusChanged(hasWindowFocus: Boolean) {

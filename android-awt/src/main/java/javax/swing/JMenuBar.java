@@ -34,8 +34,27 @@ import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
 
-public class JMenuBar extends JComponent {
+public class JMenuBar extends JComponent implements javax.accessibility.Accessible, MenuElement {
+    private static final String uiClassID = "MenuBarUI";
+    public javax.swing.plaf.MenuBarUI getUI() { return (javax.swing.plaf.MenuBarUI) ui; }
+    public void setUI(javax.swing.plaf.MenuBarUI ui) { super.setUI(ui); }
+    public String getUIClassID() { return uiClassID; }
     private static final long serialVersionUID = 1L;
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJMenuBar();
+        }
+        return accessibleContext;
+    }
+
+    /** Accessibility support for menu bars: role MENU_BAR. */
+    protected class AccessibleJMenuBar extends AccessibleJComponent {
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.MENU_BAR;
+        }
+    }
+
     private static final int DEFAULT_HEIGHT = 28;
     private SingleSelectionModel selectionModel = new DefaultSingleSelectionModel();
     private boolean borderPainted = true;
@@ -86,4 +105,83 @@ public class JMenuBar extends JComponent {
     public java.awt.Insets getMargin() { return (java.awt.Insets) margin.clone(); }
     public void setMargin(java.awt.Insets m) { java.awt.Insets old=margin; margin=m==null?new java.awt.Insets(0,0,0,0):(java.awt.Insets)m.clone(); firePropertyChange("margin",old,margin); revalidate(); repaint(); }
     public boolean isFloatable() { return false; }
+
+    // MenuElement, as JMenuBar in 8u: the bar itself takes no mouse/key action, the
+    // manager routes events to the menus it lists.
+    public void processMouseEvent(java.awt.event.MouseEvent event, MenuElement path[], MenuSelectionManager manager) {}
+    public void processKeyEvent(java.awt.event.KeyEvent e, MenuElement path[], MenuSelectionManager manager) {}
+    public void menuSelectionChanged(boolean isIncluded) {}
+
+    public MenuElement[] getSubElements() {
+        java.util.List<MenuElement> tmp = new java.util.ArrayList<MenuElement>();
+        int c = getComponentCount();
+        for (int i = 0; i < c; i++) {
+            Component m = getComponent(i);
+            if (m instanceof MenuElement) tmp.add((MenuElement) m);
+        }
+        return tmp.toArray(new MenuElement[0]);
+    }
+
+    public Component getComponent() { return this; }
+
+    // --- key bindings (OpenJDK 8u JMenuBar) ---------------------------------
+    // The KeyboardManager hands every unclaimed WHEN_IN_FOCUSED_WINDOW stroke to the
+    // registered bars; the bar passes it down its menus, which is how mnemonics fire.
+
+    /**
+     * Subclassed to check all the child menus.
+     */
+    protected boolean processKeyBinding(KeyStroke ks, java.awt.event.KeyEvent e,
+                                        int condition, boolean pressed) {
+        // See if we have a local binding.
+        boolean retValue = super.processKeyBinding(ks, e, condition, pressed);
+        if (!retValue) {
+            MenuElement[] subElements = getSubElements();
+            for (MenuElement subElement : subElements) {
+                if (processBindingForKeyStrokeRecursive(subElement, ks, e, condition, pressed)) {
+                    return true;
+                }
+            }
+        }
+        return retValue;
+    }
+
+    static boolean processBindingForKeyStrokeRecursive(MenuElement elem, KeyStroke ks,
+                                                       java.awt.event.KeyEvent e, int condition, boolean pressed) {
+        if (elem == null) {
+            return false;
+        }
+        Component c = elem.getComponent();
+        if (!(c.isVisible() || (c instanceof JPopupMenu)) || !c.isEnabled()) {
+            return false;
+        }
+        if (c instanceof JComponent && ((JComponent) c).processKeyBinding(ks, e, condition, pressed)) {
+            return true;
+        }
+        MenuElement[] subElements = elem.getSubElements();
+        for (MenuElement subElement : subElements) {
+            if (processBindingForKeyStrokeRecursive(subElement, ks, e, condition, pressed)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Overrides <code>JComponent.addNotify</code> to register this
+     * menu bar with the current keyboard manager.
+     */
+    public void addNotify() {
+        super.addNotify();
+        KeyboardManager.getCurrentManager().registerMenuBar(this);
+    }
+
+    /**
+     * Overrides <code>JComponent.removeNotify</code> to unregister this
+     * menu bar with the current keyboard manager.
+     */
+    public void removeNotify() {
+        super.removeNotify();
+        KeyboardManager.getCurrentManager().unregisterMenuBar(this);
+    }
 }

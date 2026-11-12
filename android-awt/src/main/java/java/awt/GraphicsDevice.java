@@ -51,4 +51,57 @@ public abstract class GraphicsDevice {
     public DisplayMode getDisplayMode() { return null; }
     public DisplayMode[] getDisplayModes() { return new DisplayMode[0]; }
     public void setDisplayMode(DisplayMode dm) {}
+    public int getAvailableAcceleratedMemory() { return -1; }
+
+    /**
+     * Kinds of translucency supported by the underlying system.
+     *
+     * @see #isWindowTranslucencySupported
+     * @since 1.7
+     */
+    public static enum WindowTranslucency {
+        /** Each pixel is either fully opaque or fully transparent (window shapes). */
+        PERPIXEL_TRANSPARENT,
+        /** All pixels share one alpha value (window opacity). */
+        TRANSLUCENT,
+        /** Each pixel has its own alpha (non-opaque window backgrounds). */
+        PERPIXEL_TRANSLUCENT;
+    }
+
+    /**
+     * Returns whether the given level of translucency is supported by this graphics device.
+     *
+     * <p>Every top-level window here is an ARGB backbuffer that the Android host composites,
+     * so a raster screen supports shaping and opacity the way the desktop toolkits do;
+     * per-pixel translucency additionally needs a translucency-capable configuration, as on
+     * the JDK.
+     *
+     * @since 1.7
+     */
+    public boolean isWindowTranslucencySupported(WindowTranslucency translucencyKind) {
+        switch (translucencyKind) {
+            case PERPIXEL_TRANSPARENT:
+            case TRANSLUCENT:
+                return getType() == TYPE_RASTER_SCREEN;
+            case PERPIXEL_TRANSLUCENT:
+                return getType() == TYPE_RASTER_SCREEN && getTranslucencyCapableGC() != null;
+        }
+        return false;
+    }
+
+    GraphicsConfiguration getTranslucencyCapableGC() {
+        GraphicsConfiguration defaultGC = getDefaultConfiguration();
+        if (defaultGC != null && defaultGC.isTranslucencyCapable()) {
+            return defaultGC;
+        }
+        GraphicsConfiguration[] configs = getConfigurations();
+        if (configs != null) {
+            for (GraphicsConfiguration config : configs) {
+                if (config != null && config.isTranslucencyCapable()) {
+                    return config;
+                }
+            }
+        }
+        return null;
+    }
 }

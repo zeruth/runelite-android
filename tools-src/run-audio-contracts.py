@@ -19,9 +19,15 @@ def main():
     p.add_argument('--mode', default='')
     p.add_argument('--trace', action='store_true', help='Trace native calls in test bytecode only')
     p.add_argument('--release-host', action='store_true', help='Test only the implementation shipped in --apk, without an overlay')
+    p.add_argument('--arg', action='append', default=[], help='Program argument for the test (repeatable), e.g. audible')
+    p.add_argument('--fixture', action='append', default=[], metavar='FILE[=SECONDS]',
+                   help='Push FILE next to the probe and pass its device path (with =SECONDS kept) to the test; '
+                        'TestAudioMusicAndEffect plays each .mp3/.ogg through the compressed-audio decoder')
     args = p.parse_args()
     if args.release_host and (args.package or args.standalone or args.trace):
         p.error('--release-host runs against the actual APK and cannot use an overlay or instrumentation')
+    if args.package and (args.arg or args.fixture):
+        p.error('--arg/--fixture reach the test through app_process only; the instrumentation passes --mode alone')
     repo = Path(__file__).resolve().parents[1]
     sdk = Path(os.environ['ANDROID_HOME'])
     java = Path(os.environ['JAVA_HOME']) / 'bin'
@@ -37,7 +43,7 @@ def main():
     runner = out / 'AudioContractMain.java'
     runner.write_text('''public class AudioContractMain {
  public static void main(String[] args) {
-  try { System.out.println("BEGIN " + args[0]); Class.forName(args[0]).getMethod("main", String[].class).invoke(null, (Object) new String[0]); System.exit(0); }
+  try { System.out.println("BEGIN " + args[0]); Class.forName(args[0]).getMethod("main", String[].class).invoke(null, (Object) java.util.Arrays.copyOfRange(args, 1, args.length)); System.exit(0); }
   catch (Throwable error) { while(error.getCause()!=null) error=error.getCause(); error.printStackTrace(System.out); System.exit(1); }
  }
 }''', encoding='utf-8')
@@ -50,7 +56,8 @@ def main():
             raise RuntimeError(f'Command failed ({result.returncode}): {command[0]}')
         return result.stdout
 
-    sources = [source/'PooledSourceDataLine.java', source/'AndroidAudioBridge.java', repo/'tools-src'/f'{args.test}.java', runner]
+    sources = [source/'PooledSourceDataLine.java', source/'AndroidAudioBridge.java', source/'TrackControls.java',
+               source/'AndroidTargetDataLine.java', repo/'tools-src'/f'{args.test}.java', runner]
     if (source/'LegacySourceDataLine.java').is_file(): sources.append(source/'LegacySourceDataLine.java')
     if args.release_host: sources = [repo/'tools-src'/f'{args.test}.java', runner]
     if args.package:
@@ -74,7 +81,10 @@ def main():
         if args.standalone or args.package:
             with zipfile.ZipFile(args.awt_jar) as awt:
                 for name in awt.namelist():
-                    if name.endswith('.class') and name.startswith(('javax/sound/sampled/', 'net/runelite/awt/impl/AndroidClip', 'net/runelite/awt/impl/WavDecoder')):
+                    if name.endswith('.class') and name.startswith(('javax/sound/sampled/', 'net/runelite/awt/impl/AndroidClip', 'net/runelite/awt/impl/WavDecoder',
+                                                                         'net/runelite/awt/impl/AndroidMixer', 'net/runelite/awt/impl/SampledProviders',
+                                                                         'net/runelite/awt/impl/CompressedAudio', 'net/runelite/awt/impl/MediaCodecAudioDecoder',
+                                                                         'com/sun/media/sound/')):
                         archive.writestr(name, awt.read(name))
     dex = out/'audio-probe.jar'
     run([java/'java.exe', '-cp', buildtools/'lib/d8.jar', 'com.android.tools.r8.D8',
@@ -111,7 +121,18 @@ def main():
     if exists.returncode and not args.standalone:
         run([adb, '-s', args.serial, 'push', args.apk.resolve(), remote+'/'+name])
     classpath = remote+'/audio-probe.jar' if args.standalone else f'{remote}/audio-probe.jar:{remote}/{name}'
+    import shlex
+    program = list(args.arg)
+    for spec in args.fixture:
+        path, _, seconds = spec.rpartition('=') if '=' in spec else (spec, '', '')
+        local = Path(path)
+        if not local.is_file(): raise SystemExit(f'fixture not found: {local}')
+        device = f'{remote}/fixtures/{local.name}'
+        run([adb, '-s', args.serial, 'shell', 'mkdir', '-p', remote+'/fixtures'])
+        run([adb, '-s', args.serial, 'push', local.resolve(), device])
+        program.append(device + ('=' + seconds if seconds else ''))
     command = f'CLASSPATH={classpath} app_process /system/bin AudioContractMain {args.test}'
+    command += ''.join(' ' + shlex.quote(a) for a in program)
     result = subprocess.run([str(adb), '-s', args.serial, 'shell', command], text=True,
                             encoding='utf-8', errors='replace', stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT, timeout=180)
