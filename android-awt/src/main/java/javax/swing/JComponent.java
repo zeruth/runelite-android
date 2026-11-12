@@ -314,7 +314,6 @@ public class JComponent extends Container {
         }
         return retValue;
     }
-<<<<<<< HEAD
 
     /** Returns the condition that determines whether a registered action occurs in response to the keystroke. */
     public int getConditionForKeyStroke(KeyStroke aKeyStroke) {
