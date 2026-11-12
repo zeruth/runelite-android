@@ -34,6 +34,8 @@ import java.io.Serializable;
 import java.text.ParseException;
 
 public class JFormattedTextField extends JTextField {
+    private static final String uiClassID = "FormattedTextFieldUI";
+    public String getUIClassID() { return uiClassID; }
     private static final long serialVersionUID = 1L;
 
     public abstract static class AbstractFormatter implements Serializable, Cloneable {

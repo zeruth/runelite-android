@@ -32,6 +32,8 @@ package javax.swing;
 import javax.swing.text.*;
 import java.awt.*;
 public class JTextPane extends JEditorPane {
+    private static final String uiClassID = "TextPaneUI";
+    public String getUIClassID() { return uiClassID; }
     public JTextPane() { setDocument(new DefaultStyledDocument()); }
     public JTextPane(Document doc) { this(); if(doc!=null)setDocument(doc); }
     public JTextPane(StyledDocument doc) { this((Document)doc); }

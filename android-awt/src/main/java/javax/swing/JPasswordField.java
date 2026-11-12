@@ -33,6 +33,8 @@ package javax.swing;
 import javax.swing.text.Document;
 
 public class JPasswordField extends JTextField {
+    private static final String uiClassID = "PasswordFieldUI";
+    public String getUIClassID() { return uiClassID; }
 
     public javax.accessibility.AccessibleContext getAccessibleContext() {
         if (accessibleContext == null) {

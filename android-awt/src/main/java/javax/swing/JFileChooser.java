@@ -35,6 +35,9 @@ import java.io.File;
 import javax.swing.filechooser.FileFilter;
 
 public class JFileChooser extends JComponent implements javax.accessibility.Accessible {
+    private static final String uiClassID = "FileChooserUI";
+    public javax.swing.plaf.FileChooserUI getUI() { return (javax.swing.plaf.FileChooserUI) ui; }
+    public String getUIClassID() { return uiClassID; }
 
     public javax.accessibility.AccessibleContext getAccessibleContext() {
         if (accessibleContext == null) {

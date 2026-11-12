@@ -36,6 +36,8 @@ import javax.swing.text.Document;
 import javax.swing.text.JTextComponent;
 
 public class JTextField extends JTextComponent {
+    private static final String uiClassID = "TextFieldUI";
+    public String getUIClassID() { return uiClassID; }
 
     public javax.accessibility.AccessibleContext getAccessibleContext() {
         if (accessibleContext == null) {

@@ -31,6 +31,8 @@
 package javax.swing;
 
 public class JCheckBox extends JToggleButton implements javax.accessibility.Accessible {
+    private static final String uiClassID = "CheckBoxUI";
+    public String getUIClassID() { return uiClassID; }
 
     public javax.accessibility.AccessibleContext getAccessibleContext() {
         if (accessibleContext == null) {
