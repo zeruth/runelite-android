@@ -184,11 +184,30 @@ public abstract class Toolkit {
         catch (Throwable ignored) { return null; }
     }
 
-    /** Android can't host an OS-level cursor — just hand back a Cursor object
-     *  so callers that expect a non-null don't NPE. CustomCursorPlugin etc.
-     *  used to hit a NoSuchMethodError here and abort plugin startup. */
-    public Cursor createCustomCursor(Image image, Point hotspot, String name) {
-        return new Cursor(Cursor.CUSTOM_CURSOR);
+    /** Creates a cursor from an image; the host maps it to a bitmap
+     *  PointerIcon for mice and styluses. Not headless-checked: the shadow
+     *  GraphicsEnvironment always reports headless, and CustomCursorPlugin
+     *  must start. The hotspot check is sun.awt.CustomCursor's. */
+    public Cursor createCustomCursor(Image cursor, Point hotSpot, String name)
+        throws IndexOutOfBoundsException, HeadlessException {
+        int width = cursor.getWidth(null);
+        int height = cursor.getHeight(null);
+        // A not-yet-loaded image reports -1; its size is unknown, as is the hotspot's validity.
+        if (width >= 0 && height >= 0
+                && (hotSpot.x >= width || hotSpot.y >= height || hotSpot.x < 0 || hotSpot.y < 0)) {
+            throw new IndexOutOfBoundsException("invalid hotSpot");
+        }
+        return new net.runelite.awt.impl.ImageCursor(cursor, hotSpot, name);
+    }
+
+    /** Returns the size asked for: PointerIcon takes a bitmap of any size. */
+    public Dimension getBestCursorSize(int preferredWidth, int preferredHeight) throws HeadlessException {
+        return new Dimension(preferredWidth, preferredHeight);
+    }
+
+    /** Custom cursor bitmaps are full ARGB on Android. */
+    public int getMaximumCursorColors() throws HeadlessException {
+        return 0xFFFFFF;
     }
 
     /**

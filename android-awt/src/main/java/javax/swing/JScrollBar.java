@@ -35,7 +35,9 @@ import java.awt.event.AdjustmentListener;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
 
-public class JScrollBar extends JComponent implements SwingConstants {
+// Adjustable, as on the JDK, rather than SwingConstants: both declare HORIZONTAL/VERTICAL
+// with the same values, and AdjustmentEvent takes an Adjustable source.
+public class JScrollBar extends JComponent implements java.awt.Adjustable {
     private static final long serialVersionUID = 1L;
 
     protected int orientation = VERTICAL;
