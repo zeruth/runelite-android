@@ -22,6 +22,14 @@ public final class TestRuntimeCoreContracts {
         com.sun.management.OperatingSystemMXBean os=(com.sun.management.OperatingSystemMXBean)java.lang.management.ManagementFactory.getOperatingSystemMXBean();
         check(os.getTotalMemorySize()>0&&os.getFreeMemorySize()<=os.getTotalMemorySize()&&os.getProcessCpuTime()>0,"OS memory and process CPU time on Android");
         double load=os.getProcessCpuLoad();check(load==-1||(load>=0&&load<=1),"process CPU load in range");
+        // App processes may read /proc/meminfo and /proc/self; SELinux denies /proc/stat (and on some builds /proc/loadavg), hence -1 there.
+        check(os.getTotalSwapSpaceSize()>=0&&os.getFreeSwapSpaceSize()>=0&&os.getFreeSwapSpaceSize()<=os.getTotalSwapSpaceSize(),"swap from /proc/meminfo on Android");
+        check(os.getCommittedVirtualMemorySize()>=(1<<20),"committed virtual memory from /proc/self/status on Android");
+        double system=os.getSystemCpuLoad();check(system==-1||(system>=0&&system<=1),"system CPU load in range or unavailable");
+        double average=os.getSystemLoadAverage();check(average==-1||average>=0,"load average in range or unavailable");
+        java.lang.management.RuntimeMXBean runtime=java.lang.management.ManagementFactory.getRuntimeMXBean();
+        check(runtime.getPid()==android.os.Process.myPid()&&runtime.getName().startsWith(runtime.getPid()+"@"),"pid from the app process");
+        check(runtime.getStartTime()>0&&runtime.getStartTime()<=System.currentTimeMillis()&&runtime.getUptime()>=0,"process start time and uptime");
         long self=Thread.currentThread().getId();boolean dumped=false;
         for(java.lang.management.ThreadInfo info:java.lang.management.ManagementFactory.getThreadMXBean().dumpAllThreads(false,false))dumped|=info.getThreadId()==self&&info.getStackTrace().length>0;
         check(dumped,"dumpAllThreads includes the current thread with a stack");

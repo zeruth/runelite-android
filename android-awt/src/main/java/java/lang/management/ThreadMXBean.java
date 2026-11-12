@@ -58,15 +58,23 @@ public interface ThreadMXBean extends PlatformManagedObject {
     boolean isSynchronizerUsageSupported();
     ThreadInfo[] getThreadInfo(long[] ids, boolean lockedMonitors, boolean lockedSynchronizers);
 
-    // JDK 10
+    /**
+     * JDK 10. As on the JDK, the default throws for implementations that predate the method;
+     * the platform bean ({@code ManagementFactory.getThreadMXBean()}) overrides it.
+     */
     default ThreadInfo[] getThreadInfo(long[] ids, boolean lockedMonitors, boolean lockedSynchronizers, int maxDepth) {
-        throw new UnsupportedOperationException("java.lang.management.ThreadMXBean.getThreadInfo(long[], boolean, boolean, int)");
+        throw net.runelite.awt.AwtUnsupported.fail("java.lang.management.ThreadMXBean.getThreadInfo(long[], boolean, boolean, int)",
+                "the JDK default; implemented by the platform ThreadMXBean only");
     }
 
     ThreadInfo[] dumpAllThreads(boolean lockedMonitors, boolean lockedSynchronizers);
 
-    // JDK 10
+    /**
+     * JDK 10. As on the JDK, the default throws for implementations that predate the method;
+     * the platform bean ({@code ManagementFactory.getThreadMXBean()}) overrides it.
+     */
     default ThreadInfo[] dumpAllThreads(boolean lockedMonitors, boolean lockedSynchronizers, int maxDepth) {
-        throw new UnsupportedOperationException("java.lang.management.ThreadMXBean.dumpAllThreads(boolean, boolean, int)");
+        throw net.runelite.awt.AwtUnsupported.fail("java.lang.management.ThreadMXBean.dumpAllThreads(boolean, boolean, int)",
+                "the JDK default; implemented by the platform ThreadMXBean only");
     }
 }
