@@ -252,5 +252,8 @@ public final class TestSwingContracts {
 
         System.out.println("SUMMARY " + total + " checks, " + failures + " failures");
         if(failures!=0)throw new AssertionError(failures+" Swing contract checks failed");
+        // The patched run leaves a non-daemon AWT thread (SwingWorker/EDT of the JDK/shadow
+        // mix) that never shuts down; every check above has completed, so exit explicitly.
+        System.exit(0);
     }
 }

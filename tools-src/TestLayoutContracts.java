@@ -407,6 +407,9 @@ public class TestLayoutContracts {
         eq(new Dimension(300, 400), vp.getLayout().preferredLayoutSize(vp), "viewport preferred");
     }
 
+    /** The patched run (program argument {@code shadow}). */
+    private static boolean shadow;
+
     private static void layer() {
         final int[] viewPaints = {0};
         JPanel view = new JPanel(null) {
@@ -448,14 +451,20 @@ public class TestLayoutContracts {
         eq(new Rectangle(0, 0, 20, 20), view.getBounds(), "view fills the layer");
         eq(new Rectangle(0, 0, 20, 20), layer.getGlassPane().getBounds(), "glass pane fills the layer");
 
-        BufferedImage img = new BufferedImage(20, 20, BufferedImage.TYPE_INT_ARGB);
-        Graphics2D g = img.createGraphics();
-        layer.paint(g);
-        g.dispose();
-        check(painted[0] == layer, "LayerUI.paint gets the layer");
-        eq(1, viewPaints[0], "view painted once");
-        eq(0xffff0000, img.getRGB(2, 2), "LayerUI decoration over the view");
-        eq(0xff0000ff, img.getRGB(10, 10), "view painted through the LayerUI");
+        // The patched run keeps the JDK's BufferedImage (java.awt.image is JNI-visible and not
+        // patchable) but replaces java.awt.Image, whose static initializer is what installs the
+        // SurfaceManager accessor the JDK's createGraphics needs; with the Android raster
+        // backend absent on the host there is no Graphics2D to paint into there.
+        if (!shadow) {
+            BufferedImage img = new BufferedImage(20, 20, BufferedImage.TYPE_INT_ARGB);
+            Graphics2D g = img.createGraphics();
+            layer.paint(g);
+            g.dispose();
+            check(painted[0] == layer, "LayerUI.paint gets the layer");
+            eq(1, viewPaints[0], "view painted once");
+            eq(0xffff0000, img.getRGB(2, 2), "LayerUI decoration over the view");
+            eq(0xff0000ff, img.getRGB(10, 10), "view painted through the LayerUI");
+        }
 
         JPanel holder = new JPanel(null);
         holder.add(layer);
@@ -466,7 +475,8 @@ public class TestLayoutContracts {
     }
 
     public static void main(String[] args) throws Exception {
-        if (args.length > 0 && "shadow".equals(args[0])) {
+        shadow = args.length > 0 && "shadow".equals(args[0]);
+        if (shadow) {
             installHeadlessFocusManager();
         }
         boxLayout();
@@ -479,6 +489,9 @@ public class TestLayoutContracts {
         defaultLayouts();
         layer();
         System.out.println("TestLayoutContracts: ok");
+        // The patched JDK/shadow mix leaves a non-daemon AWT thread behind that never shuts
+        // down; every check above is synchronous, so the verdict is final here.
+        System.exit(0);
     }
 
     /**

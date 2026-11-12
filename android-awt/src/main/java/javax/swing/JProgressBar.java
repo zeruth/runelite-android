@@ -103,9 +103,6 @@ public class JProgressBar extends JComponent implements SwingConstants, javax.ac
     /** Resets the UI property to a value from the current look and feel. */
     public void updateUI() { setUI((javax.swing.plaf.ProgressBarUI) UIManager.getUI(this)); }
 
-    /** Returns "ProgressBarUI", the UIDefaults key of the delegate class. */
-    public String getUIClassID() { return "ProgressBarUI"; }
-
     /**
      * Subclasses that want to handle change events from the model
      * differently can override this to return an instance of a custom
