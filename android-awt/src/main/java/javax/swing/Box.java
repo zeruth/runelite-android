@@ -46,7 +46,19 @@ public class Box extends JComponent implements Accessible {
         public void changeShape(Dimension min, Dimension pref, Dimension max) {
             setMinimumSize(min); setPreferredSize(pref); setMaximumSize(max);
         }
-        @Override public AccessibleContext getAccessibleContext() { return null; }
+        @Override public AccessibleContext getAccessibleContext() {
+            if (accessibleContext == null) {
+                accessibleContext = new AccessibleBoxFiller();
+            }
+            return accessibleContext;
+        }
+
+        /** Accessibility support for fillers: role FILLER. */
+        protected class AccessibleBoxFiller extends AccessibleAWTComponent {
+            public javax.accessibility.AccessibleRole getAccessibleRole() {
+                return javax.accessibility.AccessibleRole.FILLER;
+            }
+        }
     }
 
     public Box(int axis) { setLayout(new BoxLayout(this, axis)); }
@@ -60,5 +72,17 @@ public class Box extends JComponent implements Accessible {
     public static Box createHorizontalBox() { return new Box(BoxLayout.X_AXIS); }
     public static Box createVerticalBox() { return new Box(BoxLayout.Y_AXIS); }
 
-    @Override public AccessibleContext getAccessibleContext() { return null; }
+    @Override public AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleBox();
+        }
+        return accessibleContext;
+    }
+
+    /** Accessibility support for boxes: role FILLER, with the box's children. */
+    protected class AccessibleBox extends AccessibleAWTContainer {
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.FILLER;
+        }
+    }
 }

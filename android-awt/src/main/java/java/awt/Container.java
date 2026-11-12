@@ -196,6 +196,73 @@ public class Container extends Component {
         for (Component c : removed) fireContainerEvent(java.awt.event.ContainerEvent.COMPONENT_REMOVED, c);
     }
 
+    // --- Accessibility support ---
+
+    /** Number of this container's children that are {@link javax.accessibility.Accessible}. */
+    int getAccessibleChildrenCount() {
+        synchronized (getTreeLock()) {
+            int count = 0;
+            for (Component child : children) {
+                if (child instanceof javax.accessibility.Accessible) count++;
+            }
+            return count;
+        }
+    }
+
+    /** The {@code i}th {@link javax.accessibility.Accessible} child, skipping the others. */
+    javax.accessibility.Accessible getAccessibleChild(int i) {
+        synchronized (getTreeLock()) {
+            int count = 0;
+            for (Component child : children) {
+                if (child instanceof javax.accessibility.Accessible) {
+                    if (count == i) return (javax.accessibility.Accessible) child;
+                    count++;
+                }
+            }
+            return null;
+        }
+    }
+
+    /** The accessible child under {@code p} (local coordinates), as the JDK resolves it. */
+    javax.accessibility.Accessible getAccessibleAt(Point p) {
+        synchronized (getTreeLock()) {
+            if (this instanceof javax.accessibility.Accessible) {
+                javax.accessibility.Accessible a = (javax.accessibility.Accessible) this;
+                javax.accessibility.AccessibleContext ac = a.getAccessibleContext();
+                if (ac != null) {
+                    int nchildren = ac.getAccessibleChildrenCount();
+                    for (int i = 0; i < nchildren; i++) {
+                        javax.accessibility.Accessible child = ac.getAccessibleChild(i);
+                        if (child == null) continue;
+                        javax.accessibility.AccessibleContext cac = child.getAccessibleContext();
+                        if (cac == null) continue;
+                        javax.accessibility.AccessibleComponent acmp = cac.getAccessibleComponent();
+                        if (acmp != null && acmp.isShowing()) {
+                            Point location = acmp.getLocation();
+                            Point np = new Point(p.x - location.x, p.y - location.y);
+                            if (acmp.contains(np)) return child;
+                        }
+                    }
+                }
+                return (javax.accessibility.Accessible) this;
+            } else {
+                Component ret = this;
+                if (!this.contains(p.x, p.y)) {
+                    ret = null;
+                } else {
+                    for (Component comp : children) {
+                        if (comp != null && comp.isShowing()) {
+                            Point location = comp.getLocation();
+                            if (comp.contains(p.x - location.x, p.y - location.y)) ret = comp;
+                        }
+                    }
+                }
+                if (ret instanceof javax.accessibility.Accessible) return (javax.accessibility.Accessible) ret;
+            }
+            return null;
+        }
+    }
+
     public int getComponentZOrder(Component comp) {
         if (comp == null) {
             return -1;
@@ -205,6 +272,69 @@ public class Container extends Component {
                 return -1;
             }
             return children.indexOf(comp);
+        }
+    }
+
+    /**
+     * Accessibility support for containers: the accessible children are the container's
+     * {@link javax.accessibility.Accessible} components, and child additions and removals are
+     * reported as {@link javax.accessibility.AccessibleContext#ACCESSIBLE_CHILD_PROPERTY}
+     * changes while anyone listens.
+     */
+    protected class AccessibleAWTContainer extends AccessibleAWTComponent {
+        private static final long serialVersionUID = 5081320404842566097L;
+
+        public int getAccessibleChildrenCount() {
+            return Container.this.getAccessibleChildrenCount();
+        }
+
+        public javax.accessibility.Accessible getAccessibleChild(int i) {
+            return Container.this.getAccessibleChild(i);
+        }
+
+        public javax.accessibility.Accessible getAccessibleAt(Point p) {
+            return Container.this.getAccessibleAt(p);
+        }
+
+        private volatile transient int propertyListenersCount = 0;
+
+        /** The handler that fires a property change event when children are added or removed. */
+        protected java.awt.event.ContainerListener accessibleContainerHandler = null;
+
+        protected class AccessibleContainerHandler implements java.awt.event.ContainerListener {
+            public void componentAdded(java.awt.event.ContainerEvent e) {
+                Component c = e.getChild();
+                if (c != null && c instanceof javax.accessibility.Accessible) {
+                    AccessibleAWTContainer.this.firePropertyChange(
+                        javax.accessibility.AccessibleContext.ACCESSIBLE_CHILD_PROPERTY,
+                        null, ((javax.accessibility.Accessible) c).getAccessibleContext());
+                }
+            }
+            public void componentRemoved(java.awt.event.ContainerEvent e) {
+                Component c = e.getChild();
+                if (c != null && c instanceof javax.accessibility.Accessible) {
+                    AccessibleAWTContainer.this.firePropertyChange(
+                        javax.accessibility.AccessibleContext.ACCESSIBLE_CHILD_PROPERTY,
+                        ((javax.accessibility.Accessible) c).getAccessibleContext(), null);
+                }
+            }
+        }
+
+        public void addPropertyChangeListener(java.beans.PropertyChangeListener listener) {
+            if (accessibleContainerHandler == null) {
+                accessibleContainerHandler = new AccessibleContainerHandler();
+            }
+            if (propertyListenersCount++ == 0) {
+                Container.this.addContainerListener(accessibleContainerHandler);
+            }
+            super.addPropertyChangeListener(listener);
+        }
+
+        public void removePropertyChangeListener(java.beans.PropertyChangeListener listener) {
+            if (--propertyListenersCount == 0) {
+                Container.this.removeContainerListener(accessibleContainerHandler);
+            }
+            super.removePropertyChangeListener(listener);
         }
     }
 
@@ -576,6 +706,17 @@ public class Container extends Component {
     /** @deprecated As of JDK version 1.1, replaced by {@code getInsets()}. */
     @Deprecated
     public Insets insets() { return new Insets(0, 0, 0, 0); }
+
+    /**
+     * Indicates if this container is a validate root: {@code revalidate()} of a descendant
+     * lays out from the nearest validate root rather than from the top of the tree.
+     *
+     * @return whether this container is a validate root
+     * @since 1.7
+     */
+    public boolean isValidateRoot() {
+        return false;
+    }
 
     @Override
     public void doLayout() {

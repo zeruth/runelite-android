@@ -33,89 +33,124 @@ package java.awt;
 import java.awt.datatransfer.Clipboard;
 import java.awt.event.AWTEventListener;
 import java.awt.event.AWTEventListenerProxy;
+import java.awt.event.InputEvent;
+import java.awt.event.KeyEvent;
 import java.awt.image.ColorModel;
 import java.awt.image.ImageObserver;
+import java.awt.image.ImageProducer;
+import java.beans.PropertyChangeEvent;
+import java.beans.PropertyChangeListener;
+import java.beans.PropertyChangeSupport;
+import java.lang.ref.SoftReference;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Properties;
 
+/**
+ * The AWT toolkit. Members follow the OpenJDK 8 {@code java.awt.Toolkit} contract; the members the
+ * JDK leaves abstract are implemented here over the Android backend, and the default toolkit is
+ * {@link net.runelite.awt.impl.HostToolkit}, which feeds in the host window state (insets, lock keys,
+ * desktop properties, the beeper).
+ *
+ * <p>Fixed values: {@link #getBestCursorSize} returns the size asked for and
+ * {@link #getMaximumCursorColors} is 0xFFFFFF (custom cursors become ARGB PointerIcon bitmaps of
+ * any size); because Android has no equivalent, {@link #getSystemSelection} is
+ * {@code null} (no primary selection), {@link #getPrintJob} returns {@code null} as if the user
+ * cancelled the dialog, {@link #sync} is a no-op (frames are presented by the host view),
+ * {@link #isFrameStateSupported} accepts the Windows toolkit's states (NORMAL, ICONIFIED,
+ * MAXIMIZED_BOTH), {@link #isAlwaysOnTopSupported}
+ * is {@code false} (the activity has no z-order over other apps), and
+ * {@link #getMenuShortcutKeyMask} is CTRL as on Windows and Linux.
+ */
 public abstract class Toolkit {
+    /** VK_KANA_LOCK; the shadow KeyEvent does not declare it. */
+    private static final int VK_KANA_LOCK = 0x0106;
+
     private static Toolkit defaultToolkit;
     private final EventQueue eventQueue = new EventQueue();
     private final Clipboard clipboard = new Clipboard("system");
+    private final Map<Object, SoftReference<Image>> imageCache = new HashMap<>();
+    private boolean dynamicLayout = true;
+
+    /** Desktop property values by name, as in the JDK. */
+    protected final Map<String, Object> desktopProperties = new HashMap<>();
+    /** Listeners of desktop property changes; the JDK fires them on the event dispatch thread. */
+    protected final PropertyChangeSupport desktopPropsSupport = new PropertyChangeSupport(this);
 
     protected Toolkit() {
     }
 
     public static synchronized Toolkit getDefaultToolkit() {
         if (defaultToolkit == null) {
-            defaultToolkit = new HeadlessToolkit();
+            defaultToolkit = new net.runelite.awt.impl.HostToolkit();
         }
         return defaultToolkit;
+    }
+
+    /** JDK classes call this from their static initializers; the backend loads its own library in AwtNative. */
+    static void loadLibraries() {
+    }
+
+    static EventQueue getEventQueue() {
+        return getDefaultToolkit().getSystemEventQueueImpl();
+    }
+
+    /**
+     * The JDK looks the key up in awt.properties. Android ships no AWT resource bundles; the
+     * callers pass the English awt.properties text as the default, so returning it gives the
+     * JDK's English result.
+     */
+    public static String getProperty(String key, String defaultValue) {
+        return defaultValue;
+    }
+
+    /**
+     * The nearest ancestor with a native window. The host draws every component into its window's
+     * backbuffer, so that ancestor is the enclosing Window; {@code null} for a detached component.
+     */
+    protected static Container getNativeContainer(Component c) {
+        Container parent = c.getParent();
+        while (parent != null && !(parent instanceof Window)) {
+            parent = parent.getParent();
+        }
+        return parent;
+    }
+
+    /**
+     * {@code null}, as the JDK's base class: {@link java.awt.dnd.DragSource} creates its touch
+     * recognizer itself, so no toolkit-specific recognizer exists.
+     */
+    public <T extends java.awt.dnd.DragGestureRecognizer> T createDragGestureRecognizer(
+            Class<T> abstractRecognizerClass, java.awt.dnd.DragSource ds, Component c, int srcActions,
+            java.awt.dnd.DragGestureListener dgl) {
+        return null;
+    }
+
+    /**
+     * The highlight's own style, else no attributes: the Android IME draws its composing span
+     * itself, so there is no platform highlight style to map to.
+     */
+    public java.util.Map<java.awt.font.TextAttribute, ?> mapInputMethodHighlight(
+            java.awt.im.InputMethodHighlight highlight) throws HeadlessException {
+        java.util.Map<java.awt.font.TextAttribute, ?> style = highlight.getStyle();
+        return style != null ? style : java.util.Collections.<java.awt.font.TextAttribute, Object>emptyMap();
     }
 
     public Clipboard getSystemClipboard() {
         return clipboard;
     }
 
-    public EventQueue getSystemEventQueue() {
-        return eventQueue;
-    }
-
-    protected final java.util.Map<String, Object> desktopProperties = new java.util.HashMap<String, Object>();
-    protected final java.beans.PropertyChangeSupport desktopPropsSupport = new java.beans.PropertyChangeSupport(this);
-
-    /**
-     * Obtains a value for the specified desktop property. There is no native
-     * desktop behind the Android toolkit, so only values a subclass loads or
-     * sets exist; any other name returns null, as an unknown name does on the JDK.
-     */
-    public final synchronized Object getDesktopProperty(String propertyName) {
-        if (desktopProperties.isEmpty()) {
-            initializeDesktopProperties();
-        }
-        Object value = desktopProperties.get(propertyName);
-        if (value == null) {
-            value = lazilyLoadDesktopProperty(propertyName);
-            if (value != null) {
-                setDesktopProperty(propertyName, value);
-            }
-        }
-        if (value instanceof RenderingHints) {
-            value = ((RenderingHints) value).clone();
-        }
-        return value;
-    }
-
-    protected final void setDesktopProperty(String name, Object newValue) {
-        Object oldValue;
-        synchronized (this) {
-            oldValue = desktopProperties.get(name);
-            desktopProperties.put(name, newValue);
-        }
-        if (oldValue != null || newValue != null) {
-            desktopPropsSupport.firePropertyChange(name, oldValue, newValue);
-        }
-    }
-
-    protected Object lazilyLoadDesktopProperty(String name) {
+    /** Android has no primary (middle-click) selection; the JDK returns {@code null} there too. */
+    public Clipboard getSystemSelection() {
         return null;
     }
 
-    protected void initializeDesktopProperties() {
+    public final EventQueue getSystemEventQueue() {
+        return getSystemEventQueueImpl();
     }
 
-    public void addPropertyChangeListener(String name, java.beans.PropertyChangeListener pcl) {
-        desktopPropsSupport.addPropertyChangeListener(name, pcl);
-    }
-
-    public void removePropertyChangeListener(String name, java.beans.PropertyChangeListener pcl) {
-        desktopPropsSupport.removePropertyChangeListener(name, pcl);
-    }
-
-    public java.beans.PropertyChangeListener[] getPropertyChangeListeners() {
-        return desktopPropsSupport.getPropertyChangeListeners();
-    }
-
-    public java.beans.PropertyChangeListener[] getPropertyChangeListeners(String propertyName) {
-        return desktopPropsSupport.getPropertyChangeListeners(propertyName);
+    protected EventQueue getSystemEventQueueImpl() {
+        return eventQueue;
     }
 
     public Dimension getScreenSize() {
@@ -127,10 +162,16 @@ public abstract class Toolkit {
         return net.runelite.awt.impl.HeadlessGraphicsConfiguration.getResolution();
     }
 
+    /** The JDK default: no insets. The host toolkit reports the system bars and the display cutout. */
+    public Insets getScreenInsets(GraphicsConfiguration gc) {
+        return new Insets(0, 0, 0, 0);
+    }
+
     public ColorModel getColorModel() {
         return new java.awt.image.DirectColorModel(32, 0x00FF0000, 0x0000FF00, 0x000000FF, 0xFF000000);
     }
 
+    @Deprecated
     public String[] getFontList() {
         return new String[]{Font.DIALOG, Font.SANS_SERIF, Font.SERIF, Font.MONOSPACED};
     }
@@ -143,7 +184,15 @@ public abstract class Toolkit {
      */
     @Deprecated
     public FontMetrics getFontMetrics(Font font) {
-        return net.runelite.awt.impl.BufferedImageFontMetrics.forFont(font);
+        // Through a Graphics rather than BufferedImageFontMetrics directly: Toolkit then names no
+        // android.*-backed class, so the host contracts can patch it over the JDK's.
+        return MetricsGraphics.INSTANCE.getFontMetrics(font);
+    }
+
+    private static final class MetricsGraphics {
+        /** getFontMetrics(Font) keeps no state, so one Graphics serves every thread. */
+        static final Graphics INSTANCE = new java.awt.image.BufferedImage(
+            1, 1, java.awt.image.BufferedImage.TYPE_INT_ARGB).createGraphics();
     }
 
     public Image createImage(int[] pixels, int width, int height) {
@@ -153,35 +202,69 @@ public abstract class Toolkit {
         return bi;
     }
 
-    /** Decode via ImageIO so callers that go through Toolkit (rather than
-     *  ImageIO directly) actually get a populated image. Real Swing/Toolkit
-     *  caches by filename + does async loading via ImageObserver; we just
-     *  return a fully-decoded BufferedImage synchronously. */
+    /**
+     * Like the JDK, repeated calls with the same name share one image; unlike the JDK the image is
+     * decoded synchronously through ImageIO, so it is complete on return. An unreadable file gives
+     * {@code null} where the JDK gives an image that reports ERROR to its observers.
+     */
     public Image getImage(String filename) {
         if (filename == null) return null;
-        try { return javax.imageio.ImageIO.read(new java.io.File(filename)); }
-        catch (Throwable ignored) { return null; }
+        return cached(filename, () -> javax.imageio.ImageIO.read(new java.io.File(filename)));
     }
 
     public Image getImage(java.net.URL url) {
         if (url == null) return null;
-        try { return javax.imageio.ImageIO.read(url); }
-        catch (Throwable ignored) { return null; }
+        return cached(url.toString(), () -> javax.imageio.ImageIO.read(url));
     }
 
-    public Image createImage(java.awt.image.ImageProducer producer) { return new java.awt.image.ProducerImage(producer); }
+    private interface Decoder {
+        Image decode() throws java.io.IOException;
+    }
 
-    public Image createImage(String filename) { return getImage(filename); }
-    public Image createImage(java.net.URL url) { return getImage(url); }
+    private Image cached(Object key, Decoder decoder) {
+        synchronized (imageCache) {
+            SoftReference<Image> ref = imageCache.get(key);
+            Image image = ref == null ? null : ref.get();
+            if (image != null) return image;
+        }
+        Image image = decode(decoder);
+        if (image != null) {
+            synchronized (imageCache) { imageCache.put(key, new SoftReference<>(image)); }
+        }
+        return image;
+    }
+
+    private static Image decode(Decoder decoder) {
+        try {
+            return decoder.decode();
+        } catch (java.io.IOException | RuntimeException unreadable) {
+            return null;
+        }
+    }
+
+    public Image createImage(ImageProducer producer) {
+        return new java.awt.image.ProducerImage(producer);
+    }
+
+    /** Not cached, as in the JDK; decoded synchronously like {@link #getImage(String)}. */
+    public Image createImage(String filename) {
+        if (filename == null) return null;
+        return decode(() -> javax.imageio.ImageIO.read(new java.io.File(filename)));
+    }
+
+    public Image createImage(java.net.URL url) {
+        if (url == null) return null;
+        return decode(() -> javax.imageio.ImageIO.read(url));
+    }
+
     public Image createImage(byte[] data) {
         if (data == null) return null;
-        try { return javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(data)); }
-        catch (Throwable ignored) { return null; }
+        return createImage(data, 0, data.length);
     }
+
     public Image createImage(byte[] data, int off, int len) {
         if (data == null) return null;
-        try { return javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(data, off, len)); }
-        catch (Throwable ignored) { return null; }
+        return decode(() -> javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(data, off, len)));
     }
 
     /** Creates a cursor from an image; the host maps it to a bitmap
@@ -219,27 +302,6 @@ public abstract class Toolkit {
     }
 
     /**
-     * Returns the screen insets of {@code gc}. Android's system bars are handled by
-     * the host activity around the game surface, so the AWT screen has none.
-     */
-    public Insets getScreenInsets(GraphicsConfiguration gc) {
-        return new Insets(0, 0, 0, 0);
-    }
-
-    /**
-     * Gets a {@code PrintJob} for printing on this platform. Android has no AWT print
-     * service, so the dialog is answered as cancelled: the spec's {@code null}.
-     *
-     * @throws NullPointerException if {@code frame} is null
-     */
-    public PrintJob getPrintJob(Frame frame, String jobtitle, java.util.Properties props) {
-        if (frame == null) {
-            throw new NullPointerException("frame must not be null");
-        }
-        return null;
-    }
-
-    /**
      * Gets a {@code PrintJob} with the given job and page attributes; delegates to the
      * {@code Properties} form, as 8u's default does.
      */
@@ -254,9 +316,6 @@ public abstract class Toolkit {
             return getPrintJob(frame, jobtitle, null);
         }
     }
-
-    public void sync() {}
-    public void beep() {}
 
     /** The states the Windows toolkit supports; a lone horizontal or vertical maximize is not one. */
     public boolean isFrameStateSupported(int state) {
@@ -356,6 +415,15 @@ public abstract class Toolkit {
         enabledOnToolkitMask = mask;
     }
 
+    /** The number of listeners wanting events of this mask, as the JDK's per-bit counter reports it. */
+    synchronized int countAWTEventListeners(long eventMask) {
+        int count = 0;
+        for (SelectiveListener selective : awtEventListeners) {
+            if ((selective.eventMask & eventMask) != 0) count++;
+        }
+        return count;
+    }
+
     /** True when some AWTEventListener wants events of this mask (Container uses it for ContainerEvents). */
     static boolean enabledOnToolkit(long eventMask) {
         return (enabledOnToolkitMask & eventMask) != 0;
@@ -439,6 +507,122 @@ public abstract class Toolkit {
         return (width == 0 || height == 0) ? flags | ImageObserver.ALLBITS : flags;
     }
 
-    private static final class HeadlessToolkit extends Toolkit {
+    /** Deliberate no-op: there is no window system command buffer; the host view presents every frame. */
+    public void sync() {
+    }
+
+    /** No-op on the base class; the host toolkit plays a tone. */
+    public void beep() {
+    }
+
+    @Deprecated
+    public int getMenuShortcutKeyMask() {
+        return InputEvent.CTRL_MASK;
+    }
+
+    // JDK 10
+    public int getMenuShortcutKeyMaskEx() {
+        return InputEvent.CTRL_DOWN_MASK;
+    }
+
+    /** {@code null}, the JDK's result when the user cancels the print dialog: Android has no AWT printing. */
+    public PrintJob getPrintJob(Frame frame, String jobtitle, Properties props) {
+        if (frame == null) throw new NullPointerException("frame must not be null");
+        return null;
+    }
+
+    public void setDynamicLayout(boolean dynamic) {
+        synchronized (this) { dynamicLayout = dynamic; }
+    }
+
+    protected boolean isDynamicLayoutSet() {
+        synchronized (this) { return dynamicLayout; }
+    }
+
+    public boolean isDynamicLayoutActive() {
+        return isDynamicLayoutSet() && Boolean.TRUE.equals(getDesktopProperty("awt.dynamicLayoutSupported"));
+    }
+
+    /** The JDK default: the lock keys are validated and their state is not available. */
+    public boolean getLockingKeyState(int keyCode) {
+        checkLockingKey(keyCode, "Toolkit.getLockingKeyState");
+        throw new UnsupportedOperationException("Toolkit.getLockingKeyState");
+    }
+
+    public void setLockingKeyState(int keyCode, boolean on) {
+        checkLockingKey(keyCode, "Toolkit.setLockingKeyState");
+        throw new UnsupportedOperationException("Toolkit.setLockingKeyState");
+    }
+
+    protected static void checkLockingKey(int keyCode, String member) {
+        if (keyCode != KeyEvent.VK_CAPS_LOCK && keyCode != KeyEvent.VK_NUM_LOCK
+                && keyCode != KeyEvent.VK_SCROLL_LOCK && keyCode != VK_KANA_LOCK) {
+            throw new IllegalArgumentException("invalid key for " + member);
+        }
+    }
+
+    /** Android mice report back and forward; honours the JDK's sun.awt.enableExtraMouseButtons switch. */
+    public boolean areExtraMouseButtonsEnabled() {
+        return Boolean.parseBoolean(System.getProperty("sun.awt.enableExtraMouseButtons", "true"));
+    }
+
+    public final synchronized Object getDesktopProperty(String propertyName) {
+        if (desktopProperties.isEmpty()) {
+            initializeDesktopProperties();
+        }
+        if ("awt.dynamicLayoutSupported".equals(propertyName)) {
+            return getDefaultToolkit().lazilyLoadDesktopProperty(propertyName);
+        }
+        Object value = desktopProperties.get(propertyName);
+        if (value == null) {
+            value = lazilyLoadDesktopProperty(propertyName);
+            if (value != null) {
+                setDesktopProperty(propertyName, value);
+            }
+        }
+        if (value instanceof RenderingHints) {
+            value = ((RenderingHints) value).clone();
+        }
+        return value;
+    }
+
+    /**
+     * Stores the value and, when it changed, notifies the listeners on the event dispatch thread,
+     * as the JDK's DesktopPropertyChangeSupport does.
+     */
+    protected final void setDesktopProperty(String name, Object newValue) {
+        Object oldValue;
+        synchronized (this) {
+            oldValue = desktopProperties.get(name);
+            desktopProperties.put(name, newValue);
+        }
+        if (oldValue == null && newValue == null || oldValue != null && oldValue.equals(newValue)) {
+            return;
+        }
+        PropertyChangeEvent event = new PropertyChangeEvent(this, name, oldValue, newValue);
+        EventQueue.invokeLater(() -> desktopPropsSupport.firePropertyChange(event));
+    }
+
+    protected Object lazilyLoadDesktopProperty(String name) {
+        return null;
+    }
+
+    protected void initializeDesktopProperties() {
+    }
+
+    public void addPropertyChangeListener(String name, PropertyChangeListener pcl) {
+        desktopPropsSupport.addPropertyChangeListener(name, pcl);
+    }
+
+    public void removePropertyChangeListener(String name, PropertyChangeListener pcl) {
+        desktopPropsSupport.removePropertyChangeListener(name, pcl);
+    }
+
+    public PropertyChangeListener[] getPropertyChangeListeners() {
+        return desktopPropsSupport.getPropertyChangeListeners();
+    }
+
+    public PropertyChangeListener[] getPropertyChangeListeners(String propertyName) {
+        return desktopPropsSupport.getPropertyChangeListeners(propertyName);
     }
 }

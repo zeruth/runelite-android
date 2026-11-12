@@ -36,7 +36,35 @@ import javax.swing.event.ListSelectionListener;
 import javax.swing.table.TableModel;
 import javax.swing.table.AbstractTableModel;
 
-public class JTable extends JComponent implements Scrollable, javax.swing.event.TableModelListener {
+public class JTable extends JComponent implements Scrollable, javax.swing.event.TableModelListener,
+        javax.accessibility.Accessible {
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJTable();
+        }
+        return accessibleContext;
+    }
+
+    /** Accessibility support for tables: role TABLE with one child per cell, row-major. */
+    protected class AccessibleJTable extends AccessibleJComponent {
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.TABLE;
+        }
+
+        public int getAccessibleChildrenCount() {
+            return getColumnCount() * getRowCount();
+        }
+
+        public javax.accessibility.Accessible getAccessibleChild(int i) {
+            int columns = getColumnCount();
+            if (i < 0 || columns == 0 || i >= columns * getRowCount()) {
+                return null;
+            }
+            int row = i / columns, column = i % columns;
+            return new net.runelite.awt.impl.AccessibleCell(JTable.this, i, getValueAt(row, column), isCellSelected(row, column));
+        }
+    }
     private static final long serialVersionUID = 1L;
     public static final int AUTO_RESIZE_OFF = 0;
     public static final int AUTO_RESIZE_NEXT_COLUMN = 1;

@@ -34,8 +34,26 @@ import java.awt.Component;
 import java.awt.Container;
 import javax.swing.border.Border;
 
-public class JScrollPane extends JComponent implements ScrollPaneConstants {
+public class JScrollPane extends JComponent implements ScrollPaneConstants, javax.accessibility.Accessible {
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJScrollPane();
+        }
+        return accessibleContext;
+    }
+
+    /** Accessibility support for scroll panes: role SCROLL_PANE. */
+    protected class AccessibleJScrollPane extends AccessibleJComponent {
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.SCROLL_PANE;
+        }
+    }
     private static final long serialVersionUID = 1L;
+
+    /** The JDK's: a revalidate inside the viewport relays the scroll pane, not its parents. */
+    @Override
+    public boolean isValidateRoot() { return true; }
 
     protected JViewport viewport;
     protected JScrollBar verticalScrollBar;

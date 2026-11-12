@@ -30,8 +30,24 @@
  */
 package java.awt;
 
-public class Panel extends Container {
+public class Panel extends Container implements javax.accessibility.Accessible {
     private static final long serialVersionUID = -2728009084054400034L;
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleAWTPanel();
+        }
+        return accessibleContext;
+    }
+
+    /** Accessibility support for panels: role PANEL. */
+    protected class AccessibleAWTPanel extends AccessibleAWTContainer {
+        private static final long serialVersionUID = -6409552226660031050L;
+
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.PANEL;
+        }
+    }
 
     // Real AWT Panel defaults to FlowLayout, but the patched RuneScape applet (Applet
     // extends Panel) expects setBounds()-positioned children to stay where it put them,
