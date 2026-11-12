@@ -128,6 +128,16 @@ does the behaviour depend on the display, the audio device or the file system? Y
 reimplementation behind a ported facade. A class that is half and half (`Component`, `Window`,
 `BufferedImage`) is ported, with the peer calls routed to a backend interface rather than removed.
 
+### The event dispatch thread
+
+`EventQueue` runs every `invokeLater`/`invokeAndWait` task on one serial thread, `AWT-InvokeLater`,
+and `EventQueue.isDispatchThread()` / `SwingUtilities.isEventDispatchThread()` answer true on that
+thread only, as on the JDK. The old rule, true on any thread whose name starts with `AWT-Invoke`
+(device probes and bridges used it to impersonate the EDT from a thread of their own), is kept behind
+`-Dnet.runelite.awt.edtByName=true` (`System.setProperty` before `java.awt.EventQueue` loads). Never
+widen the answer beyond those threads: RuneLite's HTTP interceptor rejects blocking calls made on the
+EDT, so a thread wrongly reported as the EDT breaks jav_config loading and login.
+
 ## 7. Native entry points
 
 A per-pixel loop that is too slow in Java goes into the Rust crate `android-awt/rust`
