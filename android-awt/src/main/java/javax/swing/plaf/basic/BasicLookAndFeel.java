@@ -57,6 +57,7 @@ public abstract class BasicLookAndFeel extends LookAndFeel {
         // measures 0 wide. The shadow JLabel sizes itself and does not ask for a delegate.
         Object[] uiDefaults = {
                   "LabelUI", basicPackageName + "BasicLabelUI",
+             "OptionPaneUI", basicPackageName + "BasicOptionPaneUI",
                    "TreeUI", basicPackageName + "BasicTreeUI",
                   "TableUI", basicPackageName + "BasicTableUI",
             "TableHeaderUI", basicPackageName + "BasicTableHeaderUI",
@@ -101,7 +102,7 @@ public abstract class BasicLookAndFeel extends LookAndFeel {
 
     /**
      * The JDK's Basic per-component defaults for the delegates the shadow has
-     * ported (the Tree and Table sections). The JDK's gif node icons are not
+     * ported (the Tree, OptionPane and Table sections). The JDK's gif node icons are not
      * bundled; DefaultTreeCellRenderer draws no icon when they are absent. The
      * JDK's lazy sun.swing.icon.SortArrowIcon is not ported either;
      * DefaultTableCellHeaderRenderer draws its own arrow in
@@ -138,6 +139,27 @@ public abstract class BasicLookAndFeel extends LookAndFeel {
             "Tree.drawsFocusBorderAroundIcon", Boolean.FALSE,
             "Tree.lineTypeDashed", Boolean.FALSE,
             "Tree.paintLines", Boolean.TRUE,
+
+            // OptionPane as in the JDK's Basic table. The error/information/
+            // warning/question gif icons are not bundled, so a pane without
+            // its own icon shows none. The texts are the JDK's English
+            // basic.properties entries, which the shadow does not bundle.
+            "OptionPane.font", dialogPlain12,
+            "OptionPane.background", table.get("control"),
+            "OptionPane.foreground", table.get("controlText"),
+            "OptionPane.messageForeground", table.get("controlText"),
+            "OptionPane.border", new javax.swing.plaf.BorderUIResource.EmptyBorderUIResource(10, 10, 12, 10),
+            "OptionPane.messageAreaBorder", new javax.swing.plaf.BorderUIResource.EmptyBorderUIResource(0, 0, 0, 0),
+            "OptionPane.buttonAreaBorder", new javax.swing.plaf.BorderUIResource.EmptyBorderUIResource(6, 0, 0, 0),
+            "OptionPane.minimumSize", new javax.swing.plaf.DimensionUIResource(262, 90),
+            "OptionPane.windowBindings", new Object[] {"ESCAPE", "close"},
+            "OptionPane.yesButtonText", "Yes",
+            "OptionPane.noButtonText", "No",
+            "OptionPane.okButtonText", "OK",
+            "OptionPane.cancelButtonText", "Cancel",
+            "OptionPane.titleText", "Select an Option",
+            "OptionPane.inputDialogTitle", "Input",
+            "OptionPane.messageDialogTitle", "Message",
 
             "Table.font", dialogPlain12,
             "Table.foreground", controlText,
