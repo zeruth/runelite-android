@@ -108,8 +108,12 @@ public class TestSwingSelectionControls {
         sized.setSelectedIndex(1);
         sized.setSelectedIndex(-1);
         check(sized.getSelectedIndex() == 1, "setSelectedIndex(-1) keeps the selection");
+        // 8u (and the shadow) hands null to setSelectedIndex(-1) and so keeps the selection; the
+        // host JDK 21 clears it instead. JList is not patched here, so this checks the host's.
         sized.setSelectedValue(null, false);
-        check(sized.getSelectedIndex() == 1, "setSelectedValue(null) keeps the selection");
+        boolean jdk8 = System.getProperty("java.specification.version").startsWith("1.");
+        check(sized.getSelectedIndex() == (jdk8 ? 1 : -1), "setSelectedValue(null) follows the host JDK");
+        sized.setSelectedIndex(1);
         sized.setSelectedValue("absent", true);
         check(sized.getSelectedIndex() == 1, "setSelectedValue(absent) keeps the selection");
         sized.setSelectedIndex(7);
