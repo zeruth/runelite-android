@@ -1,0 +1,24 @@
+--------- beginning of main
+11-12 05:19:01.100  4321  4400 I RlHubStatus: HUB download internal=example-plugin size=123456
+11-12 05:19:03.200  4321  4400 I RlHubStatus: HUB converting internal=example-plugin
+11-12 05:19:07.300  4321  4400 I RlHubStatus: HUB converted internal=example-plugin ms=4100
+11-12 05:19:07.900  4321  4400 I ExternalPluginManager: Loading external plugin "example-plugin" jar "Qm9ndXNIYXNo"
+11-12 05:19:08.000  4321  4400 I RlHubStatus: HUB loaded internal=example-plugin plugins=Example Plugin|Example Overlay
+11-12 05:19:10.000  4321  4402 W ClientThread: Exception in invoke
+11-12 05:19:10.000  4321  4402 W ClientThread: java.lang.IllegalStateException: overlay not ready
+11-12 05:19:10.000  4321  4402 W ClientThread: 	at com.example.plugin.ExampleOverlay.render(ExampleOverlay.java:42)
+11-12 05:19:10.000  4321  4402 W ClientThread: 	at net.runelite.client.ui.overlay.OverlayRenderer.safeRender(OverlayRenderer.java:900)
+11-12 05:19:10.500  4321  4402 W ClientThread: Exception in invoke
+11-12 05:19:10.500  4321  4402 W ClientThread: java.lang.IllegalStateException: overlay not ready
+11-12 05:19:10.500  4321  4402 W ClientThread: 	at com.example.plugin.ExampleOverlay.render(ExampleOverlay.java:42)
+11-12 05:19:10.500  4321  4402 W ClientThread: 	at net.runelite.client.ui.overlay.OverlayRenderer.safeRender(OverlayRenderer.java:900)
+11-12 05:19:11.000  4321  4403 E SwingPanel: Uncaught exception on the EDT
+11-12 05:19:11.000  4321  4403 E SwingPanel: java.lang.UnsupportedOperationException: java.awt.Toolkit.getSystemSelection
+11-12 05:19:11.000  4321  4403 E SwingPanel: 	at java.awt.Toolkit.getSystemSelection(Toolkit.java:120)
+11-12 05:19:11.000  4321  4403 E SwingPanel: 	at com.example.plugin.ExamplePanel.copy(ExamplePanel.java:77)
+11-12 05:19:12.000  4321  4404 W EventBus: Uncaught exception in event subscriber
+11-12 05:19:12.000  4321  4404 W EventBus: java.lang.UnsupportedOperationException
+11-12 05:19:12.000  4321  4404 W EventBus: 	at java.util.Collections$UnmodifiableCollection.add(Collections.java:1067)
+11-12 05:19:12.000  4321  4404 W EventBus: 	at net.runelite.client.plugins.xptracker.XpTrackerPlugin.onStatChanged(XpTrackerPlugin.java:10)
+11-12 05:19:13.000  4321  4321 W net.runelite.mp: Rejecting re-init on previously-failed class java.lang.Class<com.example.plugin.Chime>: java.lang.NoClassDefFoundError: Failed resolution of: Ljavax/sound/midi/MidiSystem;
+11-12 05:19:14.000  1200  1250 E SystemServer: java.lang.NoSuchMethodError: another process entirely
