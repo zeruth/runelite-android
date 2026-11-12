@@ -56,6 +56,8 @@ import javax.swing.plaf.ComponentInputMapUIResource;
  * has to open it (BasicMenuUI leaves these maps alone when a look and feel installs it).
  */
 public class JMenu extends JMenuItem implements javax.accessibility.Accessible {
+    private static final String uiClassID = "MenuUI";
+    public String getUIClassID() { return uiClassID; }
 
     public javax.accessibility.AccessibleContext getAccessibleContext() {
         if (accessibleContext == null) {

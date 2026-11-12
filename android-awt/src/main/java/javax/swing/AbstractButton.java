@@ -368,11 +368,19 @@ public abstract class AbstractButton extends JComponent {
         if (model != null) model.setEnabled(enabled);
     }
     private final javax.swing.event.EventListenerList buttonListeners = new javax.swing.event.EventListenerList();
-    private final ActionListener modelActionListener = e -> {
+    private final ActionListener modelActionListener = e -> fireActionPerformed(e);
+
+    /**
+     * Notifies the action listeners with an event whose source is this button;
+     * the command falls back to the button's action command.
+     */
+    protected void fireActionPerformed(java.awt.event.ActionEvent e) {
+        String command = e.getActionCommand();
+        if (command == null) command = getActionCommand();
         java.awt.event.ActionEvent event = new java.awt.event.ActionEvent(this,
-            java.awt.event.ActionEvent.ACTION_PERFORMED, getActionCommand(), e.getWhen(), e.getModifiers());
+            java.awt.event.ActionEvent.ACTION_PERFORMED, command, e.getWhen(), e.getModifiers());
         for (ActionListener listener : getActionListeners()) listener.actionPerformed(event);
-    };
+    }
     private final ItemListener modelItemListener = e -> {
         java.awt.event.ItemEvent event = new java.awt.event.ItemEvent(this,
             java.awt.event.ItemEvent.ITEM_STATE_CHANGED, this, e.getStateChange());

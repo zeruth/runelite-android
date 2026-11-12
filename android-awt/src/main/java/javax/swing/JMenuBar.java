@@ -35,6 +35,10 @@ import java.awt.Component;
 import java.awt.Dimension;
 
 public class JMenuBar extends JComponent implements javax.accessibility.Accessible, MenuElement {
+    private static final String uiClassID = "MenuBarUI";
+    public javax.swing.plaf.MenuBarUI getUI() { return (javax.swing.plaf.MenuBarUI) ui; }
+    public void setUI(javax.swing.plaf.MenuBarUI ui) { super.setUI(ui); }
+    public String getUIClassID() { return uiClassID; }
     private static final long serialVersionUID = 1L;
 
     public javax.accessibility.AccessibleContext getAccessibleContext() {

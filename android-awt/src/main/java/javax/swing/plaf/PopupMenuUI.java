@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2001, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2013, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -22,6 +22,7 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
+
 package javax.swing.plaf;
 
 import java.awt.event.MouseEvent;
@@ -37,6 +38,11 @@ import javax.swing.PopupFactory;
  */
 public abstract class PopupMenuUI extends ComponentUI {
     /**
+     * Returns whether or not the given {@code MouseEvent} is the popup menu
+     * trigger event for the platform
+     *
+     * @param e a {@code MouseEvent}
+     * @return true if the {@code MouseEvent e} is the popup menu trigger
      * @since 1.3
      */
     public boolean isPopupTrigger(MouseEvent e) {

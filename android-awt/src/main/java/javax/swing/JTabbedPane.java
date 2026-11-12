@@ -35,6 +35,10 @@ import java.awt.Component;
 import javax.swing.event.ChangeListener;
 
 public class JTabbedPane extends JComponent implements SwingConstants, javax.accessibility.Accessible {
+    private static final String uiClassID = "TabbedPaneUI";
+    public javax.swing.plaf.TabbedPaneUI getUI() { return (javax.swing.plaf.TabbedPaneUI) ui; }
+    public void setUI(javax.swing.plaf.TabbedPaneUI ui) { super.setUI(ui); }
+    public String getUIClassID() { return uiClassID; }
 
     public javax.accessibility.AccessibleContext getAccessibleContext() {
         if (accessibleContext == null) {
