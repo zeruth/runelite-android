@@ -33,7 +33,6 @@ package java.awt;
 public class Dialog extends Window {
     private static final long serialVersionUID = 5036553639616394035L;
 
-<<<<<<< HEAD
     public javax.accessibility.AccessibleContext getAccessibleContext() {
         if (accessibleContext == null) {
             accessibleContext = new AccessibleAWTDialog();
@@ -67,7 +66,6 @@ public class Dialog extends Window {
      * @since 1.6
      */
     public static enum ModalityType {
->>>>>>> up
         MODELESS, DOCUMENT_MODAL, APPLICATION_MODAL, TOOLKIT_MODAL
     }
 
