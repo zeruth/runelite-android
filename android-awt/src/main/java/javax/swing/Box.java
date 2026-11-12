@@ -45,6 +45,20 @@ public class Box extends JComponent implements Accessible {
         }
         public void changeShape(Dimension min, Dimension pref, Dimension max) {
             setMinimumSize(min); setPreferredSize(pref); setMaximumSize(max);
+            revalidate();
+        }
+
+        /**
+         * Paints this Filler: through the UI delegate when one is set,
+         * otherwise fills the bounds with the background when opaque.
+         */
+        @Override protected void paintComponent(java.awt.Graphics g) {
+            if (ui != null) {
+                super.paintComponent(g);
+            } else if (isOpaque()) {
+                g.setColor(getBackground());
+                g.fillRect(0, 0, getWidth(), getHeight());
+            }
         }
         @Override public AccessibleContext getAccessibleContext() {
             if (accessibleContext == null) {
@@ -61,7 +75,27 @@ public class Box extends JComponent implements Accessible {
         }
     }
 
-    public Box(int axis) { setLayout(new BoxLayout(this, axis)); }
+    public Box(int axis) { super.setLayout(new BoxLayout(this, axis)); }
+
+    /**
+     * Throws an AWTError, since a Box can use only a BoxLayout.
+     */
+    @Override public void setLayout(java.awt.LayoutManager l) {
+        throw new java.awt.AWTError("Illegal request");
+    }
+
+    /**
+     * Paints this Box: through the UI delegate when one is set, otherwise
+     * fills the bounds with the background when opaque.
+     */
+    @Override protected void paintComponent(java.awt.Graphics g) {
+        if (ui != null) {
+            super.paintComponent(g);
+        } else if (isOpaque()) {
+            g.setColor(getBackground());
+            g.fillRect(0, 0, getWidth(), getHeight());
+        }
+    }
 
     public static Component createHorizontalStrut(int width) { return new Filler(new Dimension(width, 0), new Dimension(width, 0), new Dimension(width, Short.MAX_VALUE)); }
     public static Component createVerticalStrut(int height) { return new Filler(new Dimension(0, height), new Dimension(0, height), new Dimension(Short.MAX_VALUE, height)); }
