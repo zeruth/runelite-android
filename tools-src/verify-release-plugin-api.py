@@ -7,7 +7,11 @@ import struct
 import zipfile
 
 
-PREFIXES = ("joptsimple/", "com/google/protobuf/")
+# The host libraries hub plugins link by name (android/build.gradle.kts verifyReleasePluginApi
+# passes their jars): R8 must keep every public/protected member, including the guava-jre
+# default methods and the Discord binding types DiscordService exposes.
+PREFIXES = ("joptsimple/", "com/google/protobuf/", "com/google/common/", "com/google/gson/",
+            "okhttp3/", "okio/", "org/slf4j/", "net/runelite/discord/")
 # Runtime D8 can introduce these interfaces even when APK code never names them.
 RUNTIME_CLASSES = ("j$/util/Collection", "j$/util/concurrent/Flow$Publisher",
                    "j$/util/concurrent/Flow$Subscriber", "j$/util/concurrent/Flow$Subscription")

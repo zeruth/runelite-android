@@ -44,8 +44,9 @@ USER_AGENT = 'runelite-android hub-compat-scan'
 
 # Host-provided libraries: group, artifact. The first block is what android/build.gradle.kts
 # names for plugins; the second is runelite-client's runtime dependencies that the APK ships
-# anyway (and R8 keeps for externals). Versions resolve from the gradle cache, newest first
-# unless android/build.gradle.kts pins one inline.
+# anyway (and R8 keeps for externals). Versions are the ones the APK resolves: an inline pin
+# in android/build.gradle.kts, else libs.versions.toml, else the newest in the gradle cache
+# (which also holds the build tooling's okio 3 / slf4j 2, not what the APK ships).
 DEFAULT_LIBS = [
     ('com.google.guava', 'guava'),
     ('com.google.guava', 'failureaccess'),
@@ -65,6 +66,10 @@ DEFAULT_LIBS = [
     ('org.apache.commons', 'commons-lang3'),
     ('org.apache.commons', 'commons-text'),
     ('net.sf.jopt-simple', 'jopt-simple'),
+    ('com.google.protobuf', 'protobuf-javalite'),
+    ('net.runelite', 'discord'),
+    ('ch.qos.logback', 'logback-classic'),
+    ('ch.qos.logback', 'logback-core'),
 ]
 
 # Invokedynamic bootstraps D8 desugars away; android.jar has no such classes, the dex
@@ -362,15 +367,30 @@ def scan_jar_classes(classes):
     return dict((c.name, c) for c in classes)
 
 
+def _nest_accessor(referrer, owner, name):
+    """javac's synthetic accessors (access$NNN) and the private-constructor accessors a
+    nestmate calls (<init> taking the synthetic Outer$1 tag) only ever link inside one
+    shaded library's own classes."""
+    if name.startswith('access$'):
+        return True
+    return name == '<init>' and referrer.split('$', 1)[0] == owner.split('$', 1)[0]
+
+
 def unresolved_references(surface, classes):
     """Resolve every reference of the given plugin classes. Returns
     {(kind, owner, name, desc): referencing-class-count} where kind is 'class',
     'field' or 'method'; 'ownerMissing' is folded into the kind for members whose
-    owner class is absent altogether ('field!' / 'method!')."""
+    owner class is absent altogether ('field!' / 'method!'), and 'method~' marks a
+    synthetic accessor that the plugin's own shaded copy of a host class defines
+    (intra-jar version skew, not a host gap)."""
     overlay = scan_jar_classes(classes)
     resolver = Resolver(surface, overlay)
     out = {}
     for c in classes:
+        if c.name in surface:
+            # Parent-first loading: the host's copy of a class the plugin also shades is the
+            # one that loads, so the shaded copy's own references never link.
+            continue
         for ref in c.class_refs:
             if not resolver.has_class(ref):
                 key = ('class', ref, '', '')
@@ -386,6 +406,9 @@ def unresolved_references(surface, classes):
                 if ancestor is not None:
                     owner, missing = ancestor, True
             kind = ('field' if field else 'method') + ('!' if missing else '')
+            if (not missing and not field and owner in overlay and _nest_accessor(c.name, owner, name)
+                    and _lookup_member(overlay.get, owner, name, desc, field, set())):
+                kind = 'method~'
             key = (kind, owner, name, desc)
             out[key] = out.get(key, 0) + 1
     return out
@@ -425,6 +448,8 @@ BUCKETS = [
     # Not in #62-#72, kept apart so they do not pollute those lists.
     'runelite',
     'other jdk',
+    # Synthetic accessors a plugin's shaded library copy calls on itself (kind 'method~').
+    'intra-jar',
 ]
 
 _RULES = [(re.compile(p), b) for p, b in [
@@ -635,9 +660,41 @@ def find_module_jar(module, prefix):
     return _newest(libs, r'^%s-(.+)\.jar$' % re.escape(prefix))
 
 
-def pinned_lib_versions():
-    """Versions android/build.gradle.kts states inline ("group:artifact:version")."""
+def catalog_lib_versions(path=None):
+    """[libraries] versions of libs.versions.toml, inline or through version.ref."""
+    path = path or os.path.join(ROOT, 'libs.versions.toml')
     pins = {}
+    if not os.path.exists(path):
+        return pins
+    versions = {}
+    section = None
+    with open(path, encoding='utf8') as fh:
+        for line in fh:
+            line = line.split('#', 1)[0].strip()
+            if line.startswith('['):
+                section = line
+                continue
+            m = re.match(r'([\w.\-]+)\s*=\s*(.+)$', line)
+            if not m:
+                continue
+            key, value = m.group(1), m.group(2).strip()
+            if section == '[versions]':
+                versions[key] = value.strip('"')
+            elif section == '[libraries]':
+                inline = re.match(r'"([\w.\-]+):([\w.\-]+):([\w.\-]+)"', value)
+                module = re.search(r'module\s*=\s*"([\w.\-]+):([\w.\-]+)"', value)
+                ref = re.search(r'version\.ref\s*=\s*"([\w.\-]+)"', value)
+                if inline:
+                    pins[(inline.group(1), inline.group(2))] = inline.group(3)
+                elif module and ref and ref.group(1) in versions:
+                    pins[(module.group(1), module.group(2))] = versions[ref.group(1)]
+    return pins
+
+
+def pinned_lib_versions():
+    """Versions the APK resolves: the catalog, overridden by what android/build.gradle.kts
+    states inline ("group:artifact:version")."""
+    pins = catalog_lib_versions()
     with open(os.path.join(ROOT, 'android', 'build.gradle.kts'), encoding='utf8') as fh:
         for g, a, v in re.findall(r'"([\w.\-]+):([\w.\-]+):([\w.\-]+)"', fh.read()):
             pins[(g, a)] = v
@@ -782,13 +839,13 @@ def build_report(results, manifest_jars, display, counts, meta):
             failed.append({'internalName': internal, 'error': result['error']})
         per_bucket = {}
         for kind, owner, name, desc, n in result['unresolved']:
-            bucket = classify(owner)
+            bucket = 'intra-jar' if kind.endswith('~') else classify(owner)
             per_bucket[bucket] = per_bucket.get(bucket, 0) + 1
             key = sig_key(kind, owner, name, desc)
             entry = signatures.get(key)
             if entry is None:
                 entry = signatures[key] = {
-                    'kind': kind.rstrip('!'),
+                    'kind': kind.rstrip('!~'),
                     'owner': owner,
                     'name': name,
                     'descriptor': desc,
@@ -854,6 +911,8 @@ def render_markdown(report, top_plugins=5, max_per_owner=60):
         w('- `%s`' % s)
     w('')
     w('An unresolved signature is a class, field or method a plugin references that none of the host sources (nor the plugin jar itself) defines. `installs` sums the install counts of the plugins referencing it; a signature marked *(class missing)* has no owner class at all.')
+    w('')
+    w('Classes a plugin shades that the host also provides are not scanned: the plugin loader is parent-first, so the host copy loads and the shaded copy never links. The `intra-jar` bucket holds synthetic accessors (`access$NNN`, nestmate `<init>`) that a shaded copy defines for itself but the host copy of the same class lacks.')
     w('')
     w('## Buckets')
     w('')

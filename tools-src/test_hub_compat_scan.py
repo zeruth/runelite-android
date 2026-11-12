@@ -274,6 +274,45 @@ class ResolutionTest(SurfaceFixture):
         got = scan.unresolved_references(self.surface, classes)
         self.assertEqual(set(got), {('method', 'java/awt/Container', 'removeAll', '()V')})
 
+    def test_shaded_copy_of_host_class_is_not_scanned(self):
+        # The host's java/awt/Container loads instead, so what the shaded copy calls never links.
+        shaded = ClassWriter('java/awt/Container', superclass='java/awt/Component')
+        shaded.method_ref('java/awt/Component', 'invalidateTree', '()V')
+        shaded.klass('java/awt/peer/ContainerPeer')
+        got = scan.unresolved_references(self.surface, [scan.parse_class(shaded.build())])
+        self.assertEqual(got, {})
+
+    def test_synthetic_accessors_of_shaded_copy_are_intra_jar(self):
+        # A nested class only the plugin's shaded library has calls accessors that its own
+        # copy of the host-provided outer class defines.
+        outer = ClassWriter('java/awt/Container', superclass='java/awt/Component')
+        outer.method('access$000', '(Ljava/awt/Container;)I')
+        outer.method('<init>', '(Ljava/awt/Container$1;)V')
+        outer.method('validateUnconditionally', '()V')
+        inner = ClassWriter('java/awt/Container$Helper')
+        inner.method_ref('java/awt/Container', 'access$000', '(Ljava/awt/Container;)I')
+        inner.method_ref('java/awt/Container', '<init>', '(Ljava/awt/Container$1;)V')
+        inner.method_ref('java/awt/Container', 'validateUnconditionally', '()V')
+        inner.method_ref('java/awt/Container', 'access$100', '()V')  # not in the shaded copy either
+        tag = ClassWriter('java/awt/Container$1')
+        other = ClassWriter('com/example/User')
+        other.method_ref('java/awt/Container', '<init>', '(Ljava/awt/Container$1;)V')  # not a nestmate
+        classes = [scan.parse_class(w.build()) for w in (outer, inner, tag, other)]
+        got = scan.unresolved_references(self.surface, classes)
+        self.assertEqual(got, {
+            ('method~', 'java/awt/Container', 'access$000', '(Ljava/awt/Container;)I'): 1,
+            ('method~', 'java/awt/Container', '<init>', '(Ljava/awt/Container$1;)V'): 1,
+            ('method', 'java/awt/Container', 'validateUnconditionally', '()V'): 1,
+            ('method', 'java/awt/Container', 'access$100', '()V'): 1,
+            ('method', 'java/awt/Container', '<init>', '(Ljava/awt/Container$1;)V'): 1,
+        })
+        report = scan.build_report({'p': {'classes': 3, 'unresolved': [list(k) + [n] for k, n in got.items()]}},
+                                   [], [], {}, {})
+        intra = [e for e in report['unresolved'] if e['bucket'] == 'intra-jar']
+        self.assertEqual(sorted(e['name'] for e in intra), ['<init>', 'access$000'])
+        self.assertTrue(all(e['kind'] == 'method' for e in intra))
+        self.assertEqual(report['buckets']['intra-jar'], {'signatures': 2, 'plugins': 1})
+
     def test_jar_source_and_plugin_jar_reader(self):
         data = jar_bytes(host_classes())
         path = os.path.join(self.tmp.name, 'host.jar')
@@ -354,6 +393,22 @@ class HubFormatTest(unittest.TestCase):
             path, fresh = scan.ensure_jar('http://invalid.invalid', jar, tmp)
             self.assertFalse(fresh)
             self.assertTrue(path.endswith(scan.jar_file_name(jar)))
+
+
+class CatalogTest(unittest.TestCase):
+    def test_catalog_versions_inline_and_by_ref(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, 'libs.versions.toml')
+            with open(path, 'w', encoding='utf8') as fh:
+                fh.write('[versions]\nslf4j = "1.7.25" # pinned\n\n[libraries]\n'
+                         'guava = "com.google.guava:guava:23.2-jre"\n'
+                         'slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }\n'
+                         'bom = { module = "com.google.firebase:firebase-bom" }\n'
+                         '[plugins]\nx = { id = "a.b", version = "1" }\n')
+            self.assertEqual(scan.catalog_lib_versions(path), {
+                ('com.google.guava', 'guava'): '23.2-jre',
+                ('org.slf4j', 'slf4j-api'): '1.7.25',
+            })
 
 
 class ReportTest(unittest.TestCase):

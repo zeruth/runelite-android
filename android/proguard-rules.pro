@@ -96,6 +96,10 @@
 -keep class net.runelite.cache.** { *; }
 -keep class net.runelite.rs.** { *; }
 -keep class net.runelite.http.api.** { *; }
+# RuneLite's Discord RPC binding (net.runelite:discord). DiscordService's public signatures
+# name its types (getCurrentUser() returns DiscordUser) and hub plugins call them by those
+# names; JNA also maps the Structure fields by name.
+-keep class net.runelite.discord.** { *; }
 
 # Mixin annotations specifically — referenced by string-name during injection.
 # Annotation classes live in the `:mixins` module under net.runelite.mixins.annotations
@@ -161,7 +165,9 @@
 
 # Guava is used for plugin classpath scanning, ClassPath reflection, and
 # ImmutableMap/List builders that the patched RuneLite client calls into.
-# Same generic-signature concern as Guice — keep the whole tree.
+# Same generic-signature concern as Guice — keep the whole tree. The APK ships the
+# JRE flavour, whose java.util.function default methods hub plugins call though the
+# host never does; verifyReleasePluginApi checks they survive.
 -keep class com.google.common.** { *; }
 
 # Hub plugins load after R8 runs and link against the host's protobuf runtime.

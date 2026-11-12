@@ -2,6 +2,7 @@ import java.security.KeyStore
 import java.security.MessageDigest
 import java.security.cert.X509Certificate
 import java.util.Properties
+import org.gradle.api.attributes.java.TargetJvmEnvironment
 
 // Android target is opt-in: it requires the Android SDK plus either ANDROID_HOME (or
 // ANDROID_SDK_ROOT) or an sdk.dir entry in local.properties. When opted in, you also
@@ -89,9 +90,17 @@ tasks.register("writeReleaseVersion") {
     }
 }
 
+// Guava's JRE flavour: hub plugins compile against runelite-client's guava-jre and call the
+// default methods guava-android leaves out (Multiset.forEachEntry, Multimap.forEach, the
+// java.util.function Cache/LoadingCache members). minSdk 26 has java.util.function and
+// streams natively. Guava's module metadata picks the flavour from
+// org.gradle.jvm.environment, which AGP sets to android, so the version string alone would
+// still resolve the android jar; the constraint in the dependencies block below asks for
+// the standard-jvm variant.
+val guavaJre = "com.google.guava:guava:33.6.0-jre"
 configurations.all {
     resolutionStrategy.force(
-        "com.google.guava:guava:33.6.0-android",
+        guavaJre,
         // Guava's own placeholder for the ListenableFuture split artifact. AGP 9 no longer adds
         // dependency constraints (android.dependency.useConstraints defaults to false), so the
         // real listenablefuture:1.0 some transitive dependency asks for surfaced as a duplicate
@@ -99,6 +108,23 @@ configurations.all {
         "com.google.guava:listenablefuture:9999.0-empty-to-avoid-conflict-with-guava"
     )
 }
+
+// Hub plugins link these by name against the host, as they do against runelite-client's
+// classpath on desktop, so the APK ships exactly the versions runelite-client resolves:
+// okhttp/okio through http-api (okhttp 3.14.9 -> okio 1.17.2), slf4j/logback from the
+// catalog. okio 2+ is Kotlin and drops the okio 1.x Buffer.writableSegment(int) and
+// AsyncTimeout.exit(boolean)/exit(IOException) that okio 1.x classes shaded in plugin jars
+// call. Only the app's own classpaths: AGP's tool configurations (lint, R8) bring their own.
+// tools-src/hub-compat-scan.py takes the host versions from these pins and the catalog.
+val hostLibraryPins = listOf(
+    "com.squareup.okhttp3:okhttp:3.14.9",
+    "com.squareup.okio:okio:1.17.2",
+    "org.slf4j:slf4j-api:${libs.versions.slf4j.get()}",
+    "ch.qos.logback:logback-classic:${libs.versions.logback.get()}",
+    "ch.qos.logback:logback-core:${libs.versions.logback.get()}",
+)
+configurations.matching { it.name.endsWith("CompileClasspath") || it.name.endsWith("RuntimeClasspath") }
+    .configureEach { resolutionStrategy.force(*hostLibraryPins.toTypedArray()) }
 
 // Built-in Kotlin takes its jvmTarget from android.compileOptions.targetCompatibility (17 below),
 // so there is no kotlin { } block to configure here.
@@ -207,7 +233,13 @@ if (androidSdkAvailable) {
         // Fallback for ClientPreparer's BaseDexClassLoader.addDexPath call (hidden API).
         "implementation"("org.lsposed.hiddenapibypass:hiddenapibypass:4.3")
 
-        "implementation"("com.google.guava:guava:33.6.0-android")
+        "implementation"(guavaJre)
+        constraints.add("implementation", guavaJre) {
+            attributes {
+                attribute(TargetJvmEnvironment.TARGET_JVM_ENVIRONMENT_ATTRIBUTE,
+                    objects.named(TargetJvmEnvironment::class.java, TargetJvmEnvironment.STANDARD_JVM))
+            }
+        }
     }
 }
 
@@ -220,12 +252,20 @@ if (androidSdkAvailable) {
             val apk = layout.buildDirectory.dir("outputs/apk/release").get().asFile
                 .listFiles { file -> file.extension == "apk" }?.singleOrNull()
                 ?: error("Expected exactly one release APK")
+            // The libraries hub plugins link by name; tools-src/verify-release-plugin-api.py
+            // lists the same packages in PREFIXES.
+            val pluginApiModules = setOf(
+                "net.sf.jopt-simple:jopt-simple", "com.google.protobuf:protobuf-javalite",
+                "com.google.guava:guava", "com.google.guava:failureaccess", "com.google.code.gson:gson",
+                "com.squareup.okhttp3:okhttp", "com.squareup.okio:okio", "org.slf4j:slf4j-api",
+                "net.runelite:discord"
+            )
             val libraries = configurations.getByName("releaseRuntimeClasspath").incoming.artifactView {
                 attributes.attribute(org.gradle.api.attributes.Attribute.of("artifactType", String::class.java), "jar")
                 componentFilter { id -> id is org.gradle.api.artifacts.component.ModuleComponentIdentifier &&
-                    (id.module == "jopt-simple" || id.module == "protobuf-javalite") }
+                    "${id.group}:${id.module}" in pluginApiModules }
             }.files.files
-                .filter { it.extension == "jar" && (it.name.startsWith("jopt-simple-") || it.name.startsWith("protobuf-javalite-")) }
+                .filter { it.extension == "jar" }
             val python = providers.environmentVariable("PYTHON").orNull
                 ?: if (System.getProperty("os.name").startsWith("Windows")) "python" else "python3"
             commandLine(listOf(python, rootProject.file("tools-src/verify-release-plugin-api.py").absolutePath,
