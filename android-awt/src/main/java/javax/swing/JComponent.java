@@ -71,12 +71,13 @@ public class JComponent extends Container {
             int id = attached ? javax.swing.event.AncestorEvent.ANCESTOR_ADDED : javax.swing.event.AncestorEvent.ANCESTOR_REMOVED;
             javax.swing.event.AncestorEvent event = new javax.swing.event.AncestorEvent(this, id,
                 e.getChanged() instanceof Container ? (Container)e.getChanged() : getParent(), e.getChangedParent());
-            for (AncestorListener listener : ancestorListeners.getListeners(AncestorListener.class)) {
+            for (AncestorListener listener : listenerList.getListeners(AncestorListener.class)) {
                 if (attached) listener.ancestorAdded(event); else listener.ancestorRemoved(event);
             }
         });
     }
-    private final javax.swing.event.EventListenerList ancestorListeners = new javax.swing.event.EventListenerList();
+    /** A list of event listeners for this component; subclasses keep theirs here, as in the JDK. */
+    protected javax.swing.event.EventListenerList listenerList = new javax.swing.event.EventListenerList();
     public Border getBorder() { return border; }
     // Border drives getInsets(), which every layout manager reads — a border change is a
     // layout change.
@@ -133,9 +134,105 @@ public class JComponent extends Container {
     public float getAlignmentY() { return alignmentY; }
     public void setAlignmentY(float f) { this.alignmentY = f; }
 
-    public void addAncestorListener(AncestorListener l) { ancestorListeners.add(AncestorListener.class, l); }
-    public void removeAncestorListener(AncestorListener l) { ancestorListeners.remove(AncestorListener.class, l); }
-    public AncestorListener[] getAncestorListeners() { return ancestorListeners.getListeners(AncestorListener.class); }
+    public void addAncestorListener(AncestorListener l) { listenerList.add(AncestorListener.class, l); }
+    public void removeAncestorListener(AncestorListener l) { listenerList.remove(AncestorListener.class, l); }
+    public AncestorListener[] getAncestorListeners() { return listenerList.getListeners(AncestorListener.class); }
+
+    /**
+     * The listeners of the given type: AncestorListener and PropertyChangeListener from their
+     * own registries, anything a subclass added to {@link #listenerList}, else Component's.
+     */
+    @SuppressWarnings("unchecked")
+    @Override
+    public <T extends java.util.EventListener> T[] getListeners(Class<T> listenerType) {
+        T[] result;
+        if (listenerType == AncestorListener.class) {
+            result = (T[]) getAncestorListeners();
+        } else if (listenerType == PropertyChangeListener.class) {
+            result = (T[]) getPropertyChangeListeners();
+        } else {
+            result = listenerList.getListeners(listenerType);
+        }
+        if (result.length == 0) {
+            return super.getListeners(listenerType);
+        }
+        return result;
+    }
+
+    /** Delegates to the UI so a round button's corners are not hits, as in the JDK. */
+    @Override
+    public boolean contains(int x, int y) {
+        return (ui != null) ? ui.contains(this, x, y) : super.contains(x, y);
+    }
+
+    /** @deprecated As of JDK 5, replaced by {@code Component.setBounds(int, int, int, int)}. */
+    @Deprecated
+    @Override
+    public void reshape(int x, int y, int w, int h) {
+        super.reshape(x, y, w, h);
+    }
+
+    @Override
+    public int getBaseline(int width, int height) {
+        // check size.
+        super.getBaseline(width, height);
+        if (ui != null) {
+            return ui.getBaseline(this, width, height);
+        }
+        return -1;
+    }
+
+    @Override
+    public java.awt.Component.BaselineResizeBehavior getBaselineResizeBehavior() {
+        if (ui != null) {
+            return ui.getBaselineResizeBehavior(this);
+        }
+        return java.awt.Component.BaselineResizeBehavior.OTHER;
+    }
+
+    private boolean printing;
+
+    /**
+     * Prints this component: paints it with the print hooks (printComponent, printBorder,
+     * printChildren) in place of the paint ones, firing "paintingForPrint" around it.
+     */
+    @Override
+    public void print(java.awt.Graphics g) {
+        printing = true;
+        firePropertyChange("paintingForPrint", false, true);
+        try {
+            paint(g);
+        } finally {
+            printing = false;
+            firePropertyChange("paintingForPrint", true, false);
+        }
+    }
+
+    /** Unlike Component.printAll this prints whether or not the component is showing, as in the JDK. */
+    @Override
+    public void printAll(java.awt.Graphics g) {
+        print(g);
+    }
+
+    /** Whether a print operation is in progress on this component. */
+    public final boolean isPaintingForPrint() { return printing; }
+
+    protected void printComponent(java.awt.Graphics g) { paintComponent(g); }
+    protected void printChildren(java.awt.Graphics g) { paintChildren(g); }
+    protected void printBorder(java.awt.Graphics g) { paintBorder(g); }
+
+    /**
+     * The JDK paints the region synchronously into the window. The Android host owns the
+     * surface and draws a tree when its repaint generation moves, so this requests that
+     * repaint; the region is on screen at the host's next frame, not on return.
+     */
+    public void paintImmediately(int x, int y, int w, int h) {
+        repaint(0, x, y, w, h);
+    }
+
+    public void paintImmediately(java.awt.Rectangle r) {
+        paintImmediately(r.x, r.y, r.width, r.height);
+    }
 
     public javax.swing.plaf.ComponentUI getUI() { return ui; }
     public void setUI(javax.swing.plaf.ComponentUI ui) { javax.swing.plaf.ComponentUI old=this.ui;if(old!=null)old.uninstallUI(this);this.ui=ui;if(ui!=null)ui.installUI(this);firePropertyChange("UI",old,ui);revalidate();repaint(); }
@@ -984,9 +1081,15 @@ public class JComponent extends Container {
             g.fillRect(0, 0, getWidth(), getHeight());
             if (saved != null) g.setColor(saved);
         }
-        paintComponent(g);
-        paintBorder(g);
-        paintChildren(g);
+        if (printing) {
+            printComponent(g);
+            printBorder(g);
+            printChildren(g);
+        } else {
+            paintComponent(g);
+            paintBorder(g);
+            paintChildren(g);
+        }
     }
 
     protected void paintComponent(java.awt.Graphics g) {
