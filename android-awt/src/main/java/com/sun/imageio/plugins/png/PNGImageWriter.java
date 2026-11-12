@@ -159,15 +159,17 @@ final class IDATOutputStream extends ImageOutputStreamImpl {
     private long startPos;
     private CRC crc = new CRC();
 
-    Deflater def = new Deflater(Deflater.BEST_COMPRESSION);
+    Deflater def;
     byte[] buf = new byte[512];
 
     private int bytesRemaining;
 
-    public IDATOutputStream(ImageOutputStream stream, int chunkLength)
-        throws IOException {
+    // JDK 9+ (9): jdk17u src/java.desktop/share/classes/com/sun/imageio/plugins/png/PNGImageWriter.java
+    public IDATOutputStream(ImageOutputStream stream, int chunkLength,
+                            int deflaterLevel) throws IOException {
         this.stream = stream;
         this.chunkLength = chunkLength;
+        this.def = new Deflater(deflaterLevel);
         startChunk();
     }
 
@@ -264,18 +266,79 @@ final class IDATOutputStream extends ImageOutputStreamImpl {
 }
 
 
+// JDK 9+ (9): Deflate compression with a quality setting, from
+// jdk17u src/java.desktop/share/classes/com/sun/imageio/plugins/png/PNGImageWriter.java
 class PNGImageWriteParam extends ImageWriteParam {
+
+    /** Default quality level = 0.5 ie medium compression */
+    private static final float DEFAULT_QUALITY = 0.5f;
+
+    private static final String[] compressionNames = {"Deflate"};
+    private static final float[] qualityVals = { 0.00F, 0.30F, 0.75F, 1.00F };
+    private static final String[] qualityDescs = {
+        "High compression",   // 0.00 -> 0.30
+        "Medium compression", // 0.30 -> 0.75
+        "Low compression"     // 0.75 -> 1.00
+    };
 
     public PNGImageWriteParam(Locale locale) {
         super();
         this.canWriteProgressive = true;
         this.locale = locale;
+        this.canWriteCompressed = true;
+        this.compressionTypes = compressionNames;
+        this.compressionType = compressionTypes[0];
+        this.compressionMode = MODE_DEFAULT;
+        this.compressionQuality = DEFAULT_QUALITY;
+    }
+
+    /**
+     * Removes any previous compression quality setting.
+     *
+     * <p> The default implementation resets the compression quality
+     * to <code>0.5F</code>.
+     *
+     * @exception IllegalStateException if the compression mode is not
+     * <code>MODE_EXPLICIT</code>.
+     */
+    @Override
+    public void unsetCompression() {
+        super.unsetCompression();
+        this.compressionType = compressionTypes[0];
+        this.compressionQuality = DEFAULT_QUALITY;
+    }
+
+    /**
+     * Returns <code>true</code> since the PNG plug-in only supports
+     * lossless compression.
+     *
+     * @return <code>true</code>.
+     */
+    @Override
+    public boolean isCompressionLossless() {
+        return true;
+    }
+
+    @Override
+    public String[] getCompressionQualityDescriptions() {
+        super.getCompressionQualityDescriptions();
+        return qualityDescs.clone();
+    }
+
+    @Override
+    public float[] getCompressionQualityValues() {
+        super.getCompressionQualityValues();
+        return qualityVals.clone();
     }
 }
 
 /**
  */
 public class PNGImageWriter extends ImageWriter {
+
+    // JDK 9+ (9): the default deflate level the 9+ writer uses (8u: BEST_COMPRESSION).
+    /** Default compression level = 4 ie medium compression */
+    private static final int DEFAULT_COMPRESSION_LEVEL = 4;
 
     ImageOutputStream stream = null;
 
@@ -924,8 +987,11 @@ public class PNGImageWriter extends ImageWriter {
     }
 
     // Use sourceXOffset, etc.
-    private void write_IDAT(RenderedImage image) throws IOException {
-        IDATOutputStream ios = new IDATOutputStream(stream, 32768);
+    private void write_IDAT(RenderedImage image, int deflaterLevel)
+        throws IOException
+    {
+        IDATOutputStream ios = new IDATOutputStream(stream, 32768,
+                                                    deflaterLevel);
         try {
             if (metadata.IHDR_interlaceMethod == 1) {
                 for (int i = 0; i < 7; i++) {
@@ -1100,7 +1166,23 @@ public class PNGImageWriter extends ImageWriter {
             metadata = new PNGMetadata();
         }
 
+        // JDK 9+ (9): reset compression level to default:
+        int deflaterLevel = DEFAULT_COMPRESSION_LEVEL;
+
         if (param != null) {
+            switch(param.getCompressionMode()) {
+            case ImageWriteParam.MODE_DISABLED:
+                deflaterLevel = Deflater.NO_COMPRESSION;
+                break;
+            case ImageWriteParam.MODE_EXPLICIT:
+                float quality = param.getCompressionQuality();
+                if (quality >= 0f && quality <= 1f) {
+                    deflaterLevel = 9 - Math.round(9f * quality);
+                }
+                break;
+            default:
+            }
+
             // Use Adam7 interlacing if set in write param
             switch (param.getProgressiveMode()) {
             case ImageWriteParam.MODE_DEFAULT:
@@ -1155,7 +1237,7 @@ public class PNGImageWriter extends ImageWriter {
 
             writeUnknownChunks();
 
-            write_IDAT(im);
+            write_IDAT(im, deflaterLevel);
 
             if (abortRequested()) {
                 processWriteAborted();
