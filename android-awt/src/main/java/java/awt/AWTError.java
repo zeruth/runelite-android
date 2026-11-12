@@ -34,7 +34,7 @@ public class AWTError extends Error {
     /*
      * JDK 1.1 serialVersionUID
      */
-     private static final long serialVersionUID = -1819846354050686206L;
+    private static final long serialVersionUID = -1819846354050686206L;
 
     /**
      * Constructs an instance of <code>AWTError</code> with the specified

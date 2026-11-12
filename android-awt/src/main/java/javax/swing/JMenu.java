@@ -30,9 +30,51 @@
  */
 package javax.swing;
 
-public class JMenu extends JMenuItem {
+public class JMenu extends JMenuItem implements javax.accessibility.Accessible {
     private static final String uiClassID = "MenuUI";
     public String getUIClassID() { return uiClassID; }
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJMenu();
+        }
+        return accessibleContext;
+    }
+
+    /**
+     * Accessibility support for menus: role MENU; the children are the accessible items of
+     * the menu's popup, not of the menu component itself.
+     */
+    protected class AccessibleJMenu extends AccessibleJMenuItem {
+        public int getAccessibleChildrenCount() {
+            int count = 0;
+            for (java.awt.Component child : getPopupMenu().getComponents()) {
+                if (child instanceof javax.accessibility.Accessible) count++;
+            }
+            return count;
+        }
+
+        public javax.accessibility.Accessible getAccessibleChild(int i) {
+            int count = 0;
+            for (java.awt.Component child : getPopupMenu().getComponents()) {
+                if (child instanceof javax.accessibility.Accessible) {
+                    if (count == i) {
+                        if (child instanceof JComponent) {
+                            // The popup is not the items' accessible parent; the menu is.
+                            ((javax.accessibility.Accessible) child).getAccessibleContext().setAccessibleParent(JMenu.this);
+                        }
+                        return (javax.accessibility.Accessible) child;
+                    }
+                    count++;
+                }
+            }
+            return null;
+        }
+
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.MENU;
+        }
+    }
     private static final long serialVersionUID = 1L;
     private final JPopupMenu popup = new JPopupMenu();
     public JMenu() {

@@ -32,23 +32,18 @@ import javax.swing.JOptionPane;
  *
  * @author Scott Violet
  */
+
 public abstract class OptionPaneUI extends ComponentUI
 {
     /**
      * Requests the component representing the default value to have
      * focus.
-     *
-     * @param op a {@code JOptionPane}
      */
     public abstract void selectInitialValue(JOptionPane op);
 
     /**
      * Returns true if the user has supplied instances of Component for
      * either the options or message.
-     *
-     * @param op a {@code JOptionPane}
-     * @return {@code true} if the given {@code JOptionPane} contains user
-     *         created {@code Component}s
      */
     public abstract boolean containsCustomComponents(JOptionPane op);
 }

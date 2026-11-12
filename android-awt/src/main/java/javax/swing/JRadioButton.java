@@ -30,9 +30,23 @@
  */
 package javax.swing;
 
-public class JRadioButton extends JToggleButton {
+public class JRadioButton extends JToggleButton implements javax.accessibility.Accessible {
     private static final String uiClassID = "RadioButtonUI";
     public String getUIClassID() { return uiClassID; }
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJRadioButton();
+        }
+        return accessibleContext;
+    }
+
+    /** Accessibility support for radio buttons: role RADIO_BUTTON. */
+    protected class AccessibleJRadioButton extends AccessibleJToggleButton {
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.RADIO_BUTTON;
+        }
+    }
     private static final long serialVersionUID = 1L;
 
     public JRadioButton() { this(null, null, false); }

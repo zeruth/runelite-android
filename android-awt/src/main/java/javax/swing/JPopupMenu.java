@@ -33,11 +33,25 @@ package javax.swing;
 import java.awt.Component;
 import javax.swing.event.PopupMenuListener;
 
-public class JPopupMenu extends JComponent implements MenuElement {
+public class JPopupMenu extends JComponent implements javax.accessibility.Accessible, MenuElement {
     private static final String uiClassID = "PopupMenuUI";
     public javax.swing.plaf.PopupMenuUI getUI() { return (javax.swing.plaf.PopupMenuUI) ui; }
     public void setUI(javax.swing.plaf.PopupMenuUI ui) { super.setUI(ui); }
     public String getUIClassID() { return uiClassID; }
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJPopupMenu();
+        }
+        return accessibleContext;
+    }
+
+    /** Accessibility support for popup menus: role POPUP_MENU. */
+    protected class AccessibleJPopupMenu extends AccessibleJComponent {
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.POPUP_MENU;
+        }
+    }
     private static final long serialVersionUID = 1L;
 
     public static class Separator extends JSeparator {
@@ -89,6 +103,45 @@ public class JPopupMenu extends JComponent implements MenuElement {
     public String getLabel() { return label; }
     public java.awt.Component getComponent() { return this; }
     public void menuSelectionChanged(boolean included) { if(!included)setVisible(false); }
+
+    /** As in 8u, a popup takes no mouse action of its own; the manager routes to its items. */
+    public void processMouseEvent(java.awt.event.MouseEvent event, MenuElement path[], MenuSelectionManager manager) {}
+
+    public void processKeyEvent(java.awt.event.KeyEvent e, MenuElement path[], MenuSelectionManager manager) {
+        javax.swing.event.MenuKeyEvent mke = new javax.swing.event.MenuKeyEvent(e.getComponent(), e.getID(),
+                e.getWhen(), e.getModifiers(), e.getKeyCode(), e.getKeyChar(), path, manager);
+        processMenuKeyEvent(mke);
+        if (mke.isConsumed()) {
+            e.consume();
+        }
+    }
+
+    private void processMenuKeyEvent(javax.swing.event.MenuKeyEvent e) {
+        Object[] listeners = listenerList.getListenerList();
+        for (int i = listeners.length - 2; i >= 0; i -= 2) {
+            if (listeners[i] == javax.swing.event.MenuKeyListener.class) {
+                javax.swing.event.MenuKeyListener l = (javax.swing.event.MenuKeyListener) listeners[i + 1];
+                switch (e.getID()) {
+                case java.awt.event.KeyEvent.KEY_PRESSED: l.menuKeyPressed(e); break;
+                case java.awt.event.KeyEvent.KEY_RELEASED: l.menuKeyReleased(e); break;
+                case java.awt.event.KeyEvent.KEY_TYPED: l.menuKeyTyped(e); break;
+                default: break;
+                }
+            }
+        }
+    }
+
+    public void addMenuKeyListener(javax.swing.event.MenuKeyListener l) {
+        listenerList.add(javax.swing.event.MenuKeyListener.class, l);
+    }
+
+    public void removeMenuKeyListener(javax.swing.event.MenuKeyListener l) {
+        listenerList.remove(javax.swing.event.MenuKeyListener.class, l);
+    }
+
+    public javax.swing.event.MenuKeyListener[] getMenuKeyListeners() {
+        return listenerList.getListeners(javax.swing.event.MenuKeyListener.class);
+    }
     public void addPopupMenuListener(PopupMenuListener l) { if (l != null) popupListeners.add(l); }
     public void removePopupMenuListener(PopupMenuListener l) { popupListeners.remove(l); }
     @Override public void setVisible(boolean visible) {

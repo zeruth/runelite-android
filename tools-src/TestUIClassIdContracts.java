@@ -4,10 +4,14 @@ import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.List;
 import javax.swing.JComponent;
+import javax.swing.JInternalFrame;
 import javax.swing.plaf.ButtonUI;
 import javax.swing.plaf.ColorChooserUI;
 import javax.swing.plaf.ComboBoxUI;
+import javax.swing.plaf.DesktopIconUI;
+import javax.swing.plaf.DesktopPaneUI;
 import javax.swing.plaf.FileChooserUI;
+import javax.swing.plaf.InternalFrameUI;
 import javax.swing.plaf.LabelUI;
 import javax.swing.plaf.LayerUI;
 import javax.swing.plaf.ListUI;
@@ -28,6 +32,8 @@ import javax.swing.plaf.TabbedPaneUI;
 import javax.swing.plaf.TableHeaderUI;
 import javax.swing.plaf.TableUI;
 import javax.swing.plaf.TextUI;
+import javax.swing.plaf.ToolBarUI;
+import javax.swing.plaf.ToolTipUI;
 import javax.swing.plaf.TreeUI;
 import javax.swing.plaf.ViewportUI;
 
@@ -44,10 +50,11 @@ public class TestUIClassIdContracts {
         check("javax.swing.JToggleButton", "ToggleButtonUI", ButtonUI.class, ButtonUI.class);
         check("javax.swing.JCheckBox", "CheckBoxUI", ButtonUI.class, ButtonUI.class);
         check("javax.swing.JRadioButton", "RadioButtonUI", ButtonUI.class, ButtonUI.class);
-        check("javax.swing.JMenuItem", "MenuItemUI", null, MenuItemUI.class);
-        check("javax.swing.JMenu", "MenuUI", null, MenuItemUI.class);
-        check("javax.swing.JCheckBoxMenuItem", "CheckBoxMenuItemUI", null, MenuItemUI.class);
-        check("javax.swing.JRadioButtonMenuItem", "RadioButtonMenuItemUI", null, MenuItemUI.class);
+        // Menu items declare setUI(MenuItemUI) but inherit AbstractButton's getUI, typed ButtonUI.
+        check("javax.swing.JMenuItem", "MenuItemUI", ButtonUI.class, MenuItemUI.class);
+        check("javax.swing.JMenu", "MenuUI", ButtonUI.class, MenuItemUI.class);
+        check("javax.swing.JCheckBoxMenuItem", "CheckBoxMenuItemUI", ButtonUI.class, MenuItemUI.class);
+        check("javax.swing.JRadioButtonMenuItem", "RadioButtonMenuItemUI", ButtonUI.class, MenuItemUI.class);
         check("javax.swing.JLabel", "LabelUI", LabelUI.class, LabelUI.class);
         check("javax.swing.JPanel", "PanelUI", PanelUI.class, PanelUI.class);
         check("javax.swing.JSeparator", "SeparatorUI", SeparatorUI.class, SeparatorUI.class);
@@ -77,6 +84,14 @@ public class TestUIClassIdContracts {
         check("javax.swing.JTextArea", "TextAreaUI", TextUI.class, TextUI.class);
         check("javax.swing.JEditorPane", "EditorPaneUI", TextUI.class, TextUI.class);
         check("javax.swing.JTextPane", "TextPaneUI", TextUI.class, TextUI.class);
+        // JToolTip declares getUI only; setUI stays JComponent's protected one.
+        check("javax.swing.JToolTip", "ToolTipUI", ToolTipUI.class, null);
+        check("javax.swing.JToolBar", "ToolBarUI", ToolBarUI.class, ToolBarUI.class);
+        check("javax.swing.JToolBar$Separator", "ToolBarSeparatorUI", SeparatorUI.class, SeparatorUI.class);
+        check("javax.swing.JDesktopPane", "DesktopPaneUI", DesktopPaneUI.class, DesktopPaneUI.class);
+        check("javax.swing.JInternalFrame", "InternalFrameUI", InternalFrameUI.class, InternalFrameUI.class);
+        check(new JInternalFrame.JDesktopIcon(new JInternalFrame()), "DesktopIconUI",
+                DesktopIconUI.class, DesktopIconUI.class);
         // JLayer keeps JComponent's id: its LayerUI is set per instance, never looked up.
         check("javax.swing.JLayer", "ComponentUI", LayerUI.class, LayerUI.class);
 
@@ -91,9 +106,21 @@ public class TestUIClassIdContracts {
     }
 
     private static void check(String className, String id, Class<?> getUIType, Class<?> setUIType) {
+        JComponent component;
         try {
-            Class<?> type = Class.forName(className);
-            JComponent component = (JComponent) type.getConstructor().newInstance();
+            component = (JComponent) Class.forName(className).getConstructor().newInstance();
+        } catch (Throwable t) {
+            Throwable cause = t instanceof java.lang.reflect.InvocationTargetException ? t.getCause() : t;
+            failures.add(className + ": " + cause);
+            return;
+        }
+        check(component, id, getUIType, setUIType);
+    }
+
+    private static void check(JComponent component, String id, Class<?> getUIType, Class<?> setUIType) {
+        Class<?> type = component.getClass();
+        String className = type.getName();
+        try {
             String actual = component.getUIClassID();
             if (!id.equals(actual)) failures.add(className + ".getUIClassID = " + actual + ", JDK " + id);
             if (getUIType != null) {

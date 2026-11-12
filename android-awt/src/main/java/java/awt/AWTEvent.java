@@ -69,14 +69,32 @@ public abstract class AWTEvent extends EventObject {
         return id;
     }
 
+    /** Retargets the event, as the JDK's focus and lightweight dispatchers do. */
+    public void setSource(Object newSource) {
+        if (source == newSource) {
+            return;
+        }
+        source = newSource;
+    }
+
     public String paramString() {
         return "";
     }
 
+    /** JDK format: the source is named by its component name when it has one. */
     @Override
     public String toString() {
-        String name = (source != null) ? source.getClass().getName() : "null";
-        return getClass().getName() + "[" + paramString() + "] on " + name;
+        String srcName = null;
+        if (source instanceof Component) {
+            srcName = ((Component) source).getName();
+        } else if (source instanceof MenuComponent) {
+            srcName = ((MenuComponent) source).getName();
+        }
+        // The shadow's unnamed components answer "" where the JDK answers null.
+        if (srcName != null && srcName.isEmpty()) {
+            srcName = null;
+        }
+        return getClass().getName() + "[" + paramString() + "] on " + (srcName != null ? srcName : source);
     }
 
     protected void consume() {

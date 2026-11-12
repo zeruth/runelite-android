@@ -38,6 +38,22 @@ import javax.swing.text.JTextComponent;
 public class JTextField extends JTextComponent {
     private static final String uiClassID = "TextFieldUI";
     public String getUIClassID() { return uiClassID; }
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJTextField();
+        }
+        return accessibleContext;
+    }
+
+    /** Accessibility support for text fields: a TEXT context that is SINGLE_LINE. */
+    protected class AccessibleJTextField extends AccessibleJTextComponent {
+        public javax.accessibility.AccessibleStateSet getAccessibleStateSet() {
+            javax.accessibility.AccessibleStateSet states = super.getAccessibleStateSet();
+            states.add(javax.accessibility.AccessibleState.SINGLE_LINE);
+            return states;
+        }
+    }
     private static final long serialVersionUID = 353936840712925302L;
 
     public static final String notifyAction = "notify-field-accept";

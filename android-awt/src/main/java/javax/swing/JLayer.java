@@ -136,7 +136,7 @@ public final class JLayer<V extends Component>
             super.remove(oldView);
         }
         if (view != null) {
-            addChild(view, getComponentCount());
+            super.addImpl(view, null, getComponentCount());
         }
         this.view = view;
         firePropertyChange("view", oldView, view);
@@ -192,7 +192,7 @@ public final class JLayer<V extends Component>
         }
         if (glassPane != null) {
             glassPane.setVisible(isGlassPaneVisible);
-            addChild(glassPane, 0);
+            super.addImpl(glassPane, null, 0);
         }
         this.glassPane = glassPane;
         firePropertyChange("glassPane", oldGlassPane, glassPane);
@@ -245,36 +245,19 @@ public final class JLayer<V extends Component>
         }
     }
 
-    // The shadow Container has no addImpl funnel, so each public add form is closed here the
-    // way the JDK's addImpl override closes them all; setView/setGlassPane add through addChild.
-    public Component add(Component comp) {
-        throw addNotSupported();
-    }
-
-    public Component add(Component comp, int index) {
-        throw addNotSupported();
-    }
-
-    public Component add(String name, Component comp) {
-        throw addNotSupported();
-    }
-
-    public void add(Component comp, Object constraints) {
-        throw addNotSupported();
-    }
-
-    public void add(Component comp, Object constraints, int index) {
-        throw addNotSupported();
-    }
-
-    private static UnsupportedOperationException addNotSupported() {
-        return new UnsupportedOperationException(
+    /**
+     * This method is not supported by {@code JLayer}
+     * and always throws {@code UnsupportedOperationException}
+     *
+     * @throws UnsupportedOperationException this method is not supported
+     *
+     * @see #setView(Component)
+     * @see #setGlassPane(JPanel)
+     */
+    protected void addImpl(Component comp, Object constraints, int index) {
+        throw new UnsupportedOperationException(
                 "Adding components to JLayer is not supported, " +
                         "use setView() or setGlassPane() instead");
-    }
-
-    private void addChild(Component comp, int index) {
-        super.add(comp, null, index);
     }
 
     /**

@@ -105,14 +105,23 @@ public class VetoableChangeSupport implements Serializable {
         if (listener == null || propertyName == null) {
             return;
         }
-        add(propertyName, listener);
+        add(propertyName, unwrap(listener));
     }
 
     public void removeVetoableChangeListener(String propertyName, VetoableChangeListener listener) {
         if (listener == null || propertyName == null) {
             return;
         }
-        remove(propertyName, listener);
+        remove(propertyName, unwrap(listener));
+    }
+
+    // A proxy handed to the named overloads would otherwise be stored wrapped and
+    // come back double-wrapped from getVetoableChangeListeners().
+    private static VetoableChangeListener unwrap(VetoableChangeListener listener) {
+        while (listener instanceof VetoableChangeListenerProxy) {
+            listener = ((VetoableChangeListenerProxy) listener).getListener();
+        }
+        return listener;
     }
 
     public synchronized VetoableChangeListener[] getVetoableChangeListeners(String propertyName) {

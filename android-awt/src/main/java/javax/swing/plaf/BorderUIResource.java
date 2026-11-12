@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2013, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2014, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -25,45 +25,30 @@
 
 package javax.swing.plaf;
 
-import java.awt.Color;
 import java.awt.Component;
+import java.awt.Insets;
+import java.awt.Color;
 import java.awt.Font;
 import java.awt.Graphics;
-import java.awt.Insets;
-import java.beans.ConstructorProperties;
 import java.io.Serializable;
-import javax.swing.Icon;
-import javax.swing.border.BevelBorder;
-import javax.swing.border.Border;
-import javax.swing.border.CompoundBorder;
-import javax.swing.border.EmptyBorder;
-import javax.swing.border.EtchedBorder;
-import javax.swing.border.LineBorder;
-import javax.swing.border.MatteBorder;
-import javax.swing.border.TitledBorder;
+import java.beans.ConstructorProperties;
 
-/*
+import javax.swing.Icon;
+import javax.swing.border.*;
+
+/**
  * A Border wrapper class which implements UIResource.  UI
  * classes which set border properties should use this class
  * to wrap any borders specified as defaults.
  *
  * This class delegates all method invocations to the
  * Border "delegate" object specified at construction.
- * <p>
- * <strong>Warning:</strong>
- * Serialized objects of this class will not be compatible with
- * future Swing releases. The current serialization support is
- * appropriate for short term storage or RMI between applications running
- * the same version of Swing.  As of 1.4, support for long term storage
- * of all JavaBeans&trade;
- * has been added to the <code>java.beans</code> package.
- * Please see {@link java.beans.XMLEncoder}.
  *
  * @see javax.swing.plaf.UIResource
  * @author Amy Fowler
  *
  */
-@SuppressWarnings("serial") // Same-version serialization only
+@SuppressWarnings("serial")
 public class BorderUIResource implements Border, UIResource, Serializable
 {
     static Border etched;

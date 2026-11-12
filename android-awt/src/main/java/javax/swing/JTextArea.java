@@ -36,6 +36,22 @@ import javax.swing.text.JTextComponent;
 public class JTextArea extends JTextComponent {
     private static final String uiClassID = "TextAreaUI";
     public String getUIClassID() { return uiClassID; }
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJTextArea();
+        }
+        return accessibleContext;
+    }
+
+    /** Accessibility support for text areas: a TEXT context that is MULTI_LINE. */
+    protected class AccessibleJTextArea extends AccessibleJTextComponent {
+        public javax.accessibility.AccessibleStateSet getAccessibleStateSet() {
+            javax.accessibility.AccessibleStateSet states = super.getAccessibleStateSet();
+            states.add(javax.accessibility.AccessibleState.MULTI_LINE);
+            return states;
+        }
+    }
     private static final long serialVersionUID = 4255143196853147601L;
 
     private int rows, columns, tabSize = 8;

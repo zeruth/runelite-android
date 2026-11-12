@@ -30,9 +30,23 @@
  */
 package javax.swing;
 
-public class JButton extends AbstractButton {
+public class JButton extends AbstractButton implements javax.accessibility.Accessible {
     private static final String uiClassID = "ButtonUI";
     public String getUIClassID() { return uiClassID; }
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJButton();
+        }
+        return accessibleContext;
+    }
+
+    /** Accessibility support for buttons: role PUSH_BUTTON. */
+    protected class AccessibleJButton extends AccessibleAbstractButton {
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.PUSH_BUTTON;
+        }
+    }
     private static final long serialVersionUID = -1602050342864801480L;
 
     public JButton() { this(null, null); }

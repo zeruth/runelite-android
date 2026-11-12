@@ -50,6 +50,11 @@ import javax.accessibility.AccessibleContext;
  * A renderer component must override isShowing() and unconditionally return
  * true to work correctly because the Swing paint does nothing for components
  * with isShowing false.
+ * <p>
+ * The pane is invisible, so {@link RepaintManager} drops repaints raised by a
+ * renderer while it is being configured, and it is never a validate root's way
+ * up: a renderer stamp cannot schedule a host frame or a layout pass of the
+ * list that owns it.
  *
  * @author Hans Muller
  */
@@ -78,6 +83,18 @@ public class CellRendererPane extends Container implements Accessible {
      * Shouldn't be called.
      */
     public void update(Graphics g) { }
+
+    /**
+     * If the specified component is already a child of this then we don't
+     * bother doing anything - stacking order doesn't matter for cell
+     * renderer components (CellRendererPane doesn't paint anyway).
+     */
+    protected void addImpl(Component x, Object constraints, int index) {
+        if (x.getParent() == this) {
+            return;
+        }
+        super.addImpl(x, constraints, index);
+    }
 
     /**
      * Paint a cell renderer component c on graphics object g.  Before the component
@@ -113,8 +130,6 @@ public class CellRendererPane extends Container implements Accessible {
             return;
         }
 
-        // The shadow Container has no addImpl hook, so the JDK's "already a child"
-        // short-circuit lives here: re-adding would move c to the end of the list.
         if (c.getParent() != this) {
             this.add(c);
         }
@@ -179,15 +194,31 @@ public class CellRendererPane extends Container implements Accessible {
 
     /**
      * Gets the AccessibleContext associated with this CellRendererPane.
-     * The shadow's AccessibleContext has no role model, so this is a plain context
-     * rather than the JDK's AccessibleCellRendererPane (role PANEL).
+     * For CellRendererPanes, the AccessibleContext takes the form of an
+     * AccessibleCellRendererPane.
      *
-     * @return an AccessibleContext associated with this CellRendererPane
+     * @return an AccessibleCellRendererPane that serves as the
+     *         AccessibleContext of this CellRendererPane
      */
     public AccessibleContext getAccessibleContext() {
         if (accessibleContext == null) {
-            accessibleContext = new AccessibleContext() { };
+            accessibleContext = new AccessibleCellRendererPane();
         }
         return accessibleContext;
+    }
+
+    /**
+     * This class implements accessibility support for the
+     * {@code CellRendererPane} class.
+     */
+    protected class AccessibleCellRendererPane extends AccessibleAWTContainer {
+        /**
+         * Get the role of this object.
+         *
+         * @return an instance of AccessibleRole describing the role of the object
+         */
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.PANEL;
+        }
     }
 }

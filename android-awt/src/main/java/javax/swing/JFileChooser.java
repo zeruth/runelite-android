@@ -34,10 +34,24 @@ import java.awt.Component;
 import java.io.File;
 import javax.swing.filechooser.FileFilter;
 
-public class JFileChooser extends JComponent {
+public class JFileChooser extends JComponent implements javax.accessibility.Accessible {
     private static final String uiClassID = "FileChooserUI";
     public javax.swing.plaf.FileChooserUI getUI() { return (javax.swing.plaf.FileChooserUI) ui; }
     public String getUIClassID() { return uiClassID; }
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJFileChooser();
+        }
+        return accessibleContext;
+    }
+
+    /** Accessibility support for file choosers: role FILE_CHOOSER. */
+    protected class AccessibleJFileChooser extends AccessibleJComponent {
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.FILE_CHOOSER;
+        }
+    }
     private static final long serialVersionUID = 1L;
 
     public static final int OPEN_DIALOG = 0;

@@ -29,9 +29,23 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 package javax.swing;
-public class JCheckBoxMenuItem extends JMenuItem {
+public class JCheckBoxMenuItem extends JMenuItem implements javax.accessibility.Accessible {
     private static final String uiClassID = "CheckBoxMenuItemUI";
     public String getUIClassID() { return uiClassID; }
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJCheckBoxMenuItem();
+        }
+        return accessibleContext;
+    }
+
+    /** Accessibility support for check box menu items: role CHECK_BOX. */
+    protected class AccessibleJCheckBoxMenuItem extends AccessibleJMenuItem {
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.CHECK_BOX;
+        }
+    }
     private static final long serialVersionUID=1L;
     public JCheckBoxMenuItem() { setModel(new JToggleButton.ToggleButtonModel()); }
     public JCheckBoxMenuItem(String text) { this(text,null,false); }
