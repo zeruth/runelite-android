@@ -63,16 +63,6 @@ public class JViewport extends JComponent {
     }
 
     /**
-     * The shared ViewportLayout keeps the host sizing of {@link #doLayout}: the view
-     * tracks the viewport width unless it is a Scrollable that says otherwise, so
-     * sidebar panels wrap instead of scrolling sideways. Any other manager (a
-     * subclass's createLayoutManager, or setLayout) lays the view out itself.
-     */
-    private boolean hostLayout() {
-        return getLayout() == null || getLayout() == ViewportLayout.SHARED_INSTANCE;
-    }
-
-    /**
      * Converts a size in pixel coordinates to view coordinates.
      *
      * @param size a <code>Dimension</code> object using pixel coordinates
@@ -157,12 +147,12 @@ public class JViewport extends JComponent {
         for (ChangeListener listener : new java.util.ArrayList<>(changeListeners)) listener.stateChanged(event);
     }
 
-    @Override
-    public void doLayout() {
-        if (!hostLayout()) {
-            super.doLayout();
-            return;
-        }
+    /**
+     * The host sizing the shared {@link ViewportLayout} applies: the view tracks the
+     * viewport width unless it is a Scrollable that says otherwise, so sidebar panels
+     * wrap instead of scrolling sideways.
+     */
+    void layoutHostView() {
         if (view != null && getWidth() > 0 && getHeight() > 0) {
             // Size the view to its preferred height (or at least viewport height) so
             // scrollable content can grow; horizontal stays clamped to viewport.
@@ -179,26 +169,6 @@ public class JViewport extends JComponent {
             applyScroll(true);
         }
     }
-    /**
-     * ViewportLayout's sizing: the view's preferred size (its Scrollable viewport size when it
-     * has one). Without a layout manager this fell through to Component's "current size", so
-     * a viewport kept whatever height it was last given — quest-helper's assist picker, laid
-     * out at the quest list's height, reported that back as preferred and never shrank.
-     */
-    @Override
-    public Dimension getPreferredSize() {
-        if (isPreferredSizeSet() || !hostLayout()) return super.getPreferredSize();
-        if (view == null) return new Dimension();
-        if (view instanceof Scrollable) return ((Scrollable) view).getPreferredScrollableViewportSize();
-        return view.getPreferredSize();
-    }
-
-    @Override
-    public Dimension getMinimumSize() {
-        if (isMinimumSizeSet() || !hostLayout()) return super.getMinimumSize();
-        return new Dimension(4, 4);
-    }
-
     public void setExtentSize(Dimension newExtent) { if(newExtent==null)throw new NullPointerException("extent");if(!newExtent.equals(getSize())){setSize(newExtent);fireStateChanged();} }
     public int getScrollMode() { return scrollMode; }
     public void setScrollMode(int mode) { this.scrollMode = mode; }

@@ -16,6 +16,7 @@ import javax.swing.ScrollPaneLayout;
 import javax.swing.Spring;
 import javax.swing.SpringLayout;
 import javax.swing.SwingUtilities;
+import javax.swing.ViewportLayout;
 import javax.swing.plaf.LayerUI;
 
 /**
@@ -143,6 +144,27 @@ public class TestLayoutContracts {
         eq(new Rectangle(30, 20, 158, 118), sp.getViewportBorderBounds(), "viewport border bounds");
     }
 
+    private static void defaultLayouts() {
+        JScrollPane sp = new JScrollPane(new JPanel());
+        check(sp.getLayout() instanceof ScrollPaneLayout.UIResource, "JScrollPane default layout: " + sp.getLayout());
+        check(((ScrollPaneLayout) sp.getLayout()).getViewport() == sp.getViewport(), "default layout synced");
+        check(sp.getViewport().getLayout() instanceof ViewportLayout, "JViewport default layout: " + sp.getViewport().getLayout());
+
+        // A ViewportLayout of one's own is the JDK policy: a non-Scrollable view keeps its
+        // preferred size while larger than the viewport and fills it once smaller.
+        JViewport vp = new JViewport();
+        vp.setLayout(new ViewportLayout());
+        JPanel view = fixed(0, 0, 300, 400, 300, 400);
+        vp.setView(view);
+        vp.setSize(200, 150);
+        vp.doLayout();
+        eq(new Dimension(300, 400), view.getSize(), "view at preferred size");
+        vp.setSize(500, 600);
+        vp.doLayout();
+        eq(new Dimension(500, 600), view.getSize(), "view fills a larger viewport");
+        eq(new Dimension(300, 400), vp.getLayout().preferredLayoutSize(vp), "viewport preferred");
+    }
+
     private static void layer() {
         final int[] viewPaints = {0};
         JPanel view = new JPanel(null) {
@@ -205,6 +227,7 @@ public class TestLayoutContracts {
         springs();
         springLayout();
         scrollPaneLayout();
+        defaultLayouts();
         layer();
         System.out.println("TestLayoutContracts: ok");
     }

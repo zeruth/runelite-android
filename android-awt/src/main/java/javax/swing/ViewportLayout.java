@@ -52,7 +52,24 @@ import java.io.Serializable;
 public class ViewportLayout implements LayoutManager, Serializable
 {
     // Single instance used by JViewport.
-    static ViewportLayout SHARED_INSTANCE = new ViewportLayout();
+    static ViewportLayout SHARED_INSTANCE = new ViewportLayout(true);
+
+    /*
+     * Android: the instance JViewport installs by default sizes the view with the
+     * host policy of JViewport.layoutHostView (a non-Scrollable view tracks the
+     * viewport width, so sidebar panels wrap instead of scrolling sideways, and
+     * every pass re-clamps and fires). A ViewportLayout a plugin creates is the
+     * JDK policy below.
+     */
+    private final boolean host;
+
+    public ViewportLayout() {
+        this(false);
+    }
+
+    private ViewportLayout(boolean host) {
+        this.host = host;
+    }
 
     /**
      * Adds the specified component to the layout. Not used by this class.
@@ -119,6 +136,10 @@ public class ViewportLayout implements LayoutManager, Serializable
         Component view = vp.getView();
         Scrollable scrollableView = null;
 
+        if (host) {
+            vp.layoutHostView();
+            return;
+        }
         if (view == null) {
             return;
         }

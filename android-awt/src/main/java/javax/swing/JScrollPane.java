@@ -31,6 +31,7 @@
 package javax.swing;
 
 import java.awt.Component;
+import java.awt.Container;
 import javax.swing.border.Border;
 
 public class JScrollPane extends JComponent implements ScrollPaneConstants {
@@ -169,6 +170,9 @@ public class JScrollPane extends JComponent implements ScrollPaneConstants {
     }
 
     private void init() {
+        // As in the JDK the layout comes first, so the viewport, bars and corners
+        // added below reach it through addLayoutComponent.
+        setLayout(new HostLayout());
         setOpaque(true);
         setViewport(createViewport());
         setVerticalScrollBar(createVerticalScrollBar());
@@ -195,12 +199,14 @@ public class JScrollPane extends JComponent implements ScrollPaneConstants {
      * Sets the layout manager, which must be a {@code ScrollPaneLayout} (or null);
      * it is synced with this pane's viewport, scrollbars, headers and corners.
      * <p>
-     * Unlike the JDK, a new pane starts with no layout manager: the default layout
-     * leaves scrolling gestures and indicators to the native host and only reserves
-     * room for scrollbars that carry a UI delegate. A {@code ScrollPaneLayout} set
-     * here lays the pane out exactly as on the desktop.
+     * A new pane starts, as in the JDK, with a {@code ScrollPaneLayout.UIResource}.
+     * While a scrollbar has no UI delegate that default layout leaves scrolling
+     * gestures and indicators to the native host and only reserves room for the
+     * bars that do carry one; once both bars have a delegate it is the JDK layout.
+     * A plain {@code ScrollPaneLayout} set here lays the pane out exactly as on
+     * the desktop.
      *
-     * @param layout the {@code ScrollPaneLayout}, or null for the host layout
+     * @param layout the {@code ScrollPaneLayout}, or null
      * @throws ClassCastException if {@code layout} is not a {@code ScrollPaneLayout}
      */
     @Override
@@ -248,12 +254,37 @@ public class JScrollPane extends JComponent implements ScrollPaneConstants {
         return borderR;
     }
 
-    @Override
-    public void doLayout() {
-        if (getLayout() != null) {
-            super.doLayout();
-            return;
+    /**
+     * The default layout: a real ScrollPaneLayout (plugins cast {@code getLayout()} to
+     * one), whose placement is the host's while a scrollbar has no UI delegate. A
+     * delegate-less bar is never a child here and draws nothing, so the JDK placement
+     * would reserve an empty strip for it beside the native scroll indicator.
+     */
+    private static final class HostLayout extends ScrollPaneLayout.UIResource {
+        private static final long serialVersionUID = 1L;
+
+        private static boolean host(Container parent) {
+            if (!(parent instanceof JScrollPane)) return false;
+            JScrollPane sp = (JScrollPane) parent;
+            return sp.verticalScrollBar != null && sp.verticalScrollBar.getUI() == null
+                || sp.horizontalScrollBar != null && sp.horizontalScrollBar.getUI() == null;
         }
+
+        @Override public void layoutContainer(Container parent) {
+            if (host(parent)) ((JScrollPane) parent).layoutHost();
+            else super.layoutContainer(parent);
+        }
+
+        @Override public java.awt.Dimension preferredLayoutSize(Container parent) {
+            return host(parent) ? ((JScrollPane) parent).hostPreferredSize() : super.preferredLayoutSize(parent);
+        }
+
+        @Override public java.awt.Dimension minimumLayoutSize(Container parent) {
+            return host(parent) ? ((JScrollPane) parent).hostMinimumSize() : super.minimumLayoutSize(parent);
+        }
+    }
+
+    private void layoutHost() {
         if(viewport==null)return;
         java.awt.Insets in=getInsets();int width=Math.max(0,getWidth()-in.left-in.right),height=Math.max(0,getHeight()-in.top-in.bottom);
         int headerHeight=columnHeader==null||columnHeader.getView()==null?0:Math.min(height,columnHeader.getView().getPreferredSize().height);
@@ -309,9 +340,7 @@ public class JScrollPane extends JComponent implements ScrollPaneConstants {
     private void layoutCorner(String key,int x,int y,int width,int height){Component component=corners.get(key);if(component!=null)component.setBounds(x,y,width,height);}
 
     /** ScrollPaneLayout's sizing: insets + the viewport's preferred size + the column header. */
-    @Override
-    public java.awt.Dimension getPreferredSize() {
-        if (isPreferredSizeSet() || getLayout() != null) return super.getPreferredSize();
+    private java.awt.Dimension hostPreferredSize() {
         java.awt.Insets in = getInsets();
         java.awt.Dimension d = viewport == null ? new java.awt.Dimension() : viewport.getPreferredSize();
         int w = d.width, h = d.height;
@@ -326,9 +355,7 @@ public class JScrollPane extends JComponent implements ScrollPaneConstants {
         return new java.awt.Dimension(w + in.left + in.right, h + in.top + in.bottom);
     }
 
-    @Override
-    public java.awt.Dimension getMinimumSize() {
-        if (isMinimumSizeSet() || getLayout() != null) return super.getMinimumSize();
+    private java.awt.Dimension hostMinimumSize() {
         java.awt.Insets in = getInsets();
         java.awt.Dimension d = viewport == null ? new java.awt.Dimension() : viewport.getMinimumSize();
         return new java.awt.Dimension(d.width + in.left + in.right, d.height + in.top + in.bottom);
