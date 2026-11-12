@@ -179,35 +179,7 @@ public abstract class LookAndFeel
      */
     public static void installProperty(JComponent c,
                                        String propertyName, Object propertyValue) {
-        // The JDK routes this through the package-private
-        // JComponent.setUIProperty, which the shadow JComponent does not have
-        // yet; the public setter of the property is what that method calls,
-        // minus the "set by the client" bookkeeping.
-        String setter = "set" + Character.toUpperCase(propertyName.charAt(0)) + propertyName.substring(1);
-        try {
-            for (java.lang.reflect.Method method : c.getClass().getMethods()) {
-                Class<?>[] parameters = method.getParameterTypes();
-                if (method.getName().equals(setter) && parameters.length == 1) {
-                    if (parameters[0].isPrimitive() && propertyValue == null) {
-                        throw new NullPointerException(propertyName);
-                    }
-                    method.invoke(c, propertyValue);
-                    return;
-                }
-            }
-        } catch (IllegalAccessException e) {
-            throw new IllegalArgumentException("property \"" + propertyName + "\" cannot be set using this method", e);
-        } catch (java.lang.reflect.InvocationTargetException e) {
-            Throwable cause = e.getCause();
-            if (cause instanceof RuntimeException) {
-                throw (RuntimeException) cause;
-            }
-            throw new IllegalArgumentException("property \"" + propertyName + "\" cannot be set using this method", cause);
-        } catch (IllegalArgumentException e) {
-            // Method.invoke reports a value of the wrong type this way.
-            throw new ClassCastException(e.getMessage());
-        }
-        throw new IllegalArgumentException("property \"" + propertyName + "\" cannot be set using this method");
+        c.setUIProperty(propertyName, propertyValue);
     }
 
 

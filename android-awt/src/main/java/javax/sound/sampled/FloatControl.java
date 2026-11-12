@@ -30,55 +30,105 @@
  */
 package javax.sound.sampled;
 
-public class FloatControl extends Control {
+public abstract class FloatControl extends Control {
+
+    private final float minimum;
+    private final float maximum;
+    private final float precision;
+    private final int updatePeriod;
+    private final String units;
+    private final String minLabel;
+    private final String maxLabel;
+    private final String midLabel;
+    private float value;
+
+    protected FloatControl(Type type, float minimum, float maximum, float precision, int updatePeriod,
+                           float initialValue, String units, String minLabel, String midLabel, String maxLabel) {
+        super(type);
+        if (minimum > maximum) {
+            throw new IllegalArgumentException("Minimum value " + minimum
+                + " exceeds maximum value " + maximum + ".");
+        }
+        if (initialValue < minimum) {
+            throw new IllegalArgumentException("Initial value " + initialValue
+                + " smaller than allowable minimum value " + minimum + ".");
+        }
+        if (initialValue > maximum) {
+            throw new IllegalArgumentException("Initial value " + initialValue
+                + " exceeds allowable maximum value " + maximum + ".");
+        }
+        this.minimum = minimum;
+        this.maximum = maximum;
+        this.precision = precision;
+        this.updatePeriod = updatePeriod;
+        this.value = initialValue;
+        this.units = units;
+        this.minLabel = minLabel;
+        this.midLabel = midLabel;
+        this.maxLabel = maxLabel;
+    }
+
+    protected FloatControl(Type type, float minimum, float maximum, float precision, int updatePeriod,
+                           float initialValue, String units) {
+        this(type, minimum, maximum, precision, updatePeriod, initialValue, units, "", "", "");
+    }
+
+    public void setValue(float newValue) {
+        if (newValue > maximum) {
+            throw new IllegalArgumentException("Requested value " + newValue
+                + " exceeds allowable maximum value " + maximum + ".");
+        }
+        if (newValue < minimum) {
+            throw new IllegalArgumentException("Requested value " + newValue
+                + " smaller than allowable minimum value " + minimum + ".");
+        }
+        value = newValue;
+    }
+
+    public float getValue() { return value; }
+    public float getMaximum() { return maximum; }
+    public float getMinimum() { return minimum; }
+    public String getUnits() { return units; }
+    public String getMinLabel() { return minLabel; }
+    public String getMidLabel() { return midLabel; }
+    public String getMaxLabel() { return maxLabel; }
+    public float getPrecision() { return precision; }
+    public int getUpdatePeriod() { return updatePeriod; }
+
+    /**
+     * Changes the value from {@code from} to {@code to}. Like the JDK's default, the ramp is not
+     * interpolated: the target value is applied at once (the JDK documents the same for
+     * controls that do not support shifting).
+     */
+    public void shift(float from, float to, int microseconds) {
+        if (from < minimum) {
+            throw new IllegalArgumentException("Requested value " + from
+                + " smaller than allowable minimum value " + minimum + ".");
+        }
+        if (from > maximum) {
+            throw new IllegalArgumentException("Requested value " + from
+                + " exceeds allowable maximum value " + maximum + ".");
+        }
+        setValue(to);
+    }
+
+    @Override
+    public String toString() {
+        return getType() + " with current value: " + getValue() + " " + units
+            + " (range: " + minimum + " - " + maximum + ")";
+    }
+
     public static class Type extends Control.Type {
         public static final Type MASTER_GAIN = new Type("Master Gain");
+        public static final Type AUX_SEND = new Type("AUX Send");
+        public static final Type AUX_RETURN = new Type("AUX Return");
+        public static final Type REVERB_SEND = new Type("Reverb Send");
+        public static final Type REVERB_RETURN = new Type("Reverb Return");
         public static final Type VOLUME = new Type("Volume");
         public static final Type PAN = new Type("Pan");
         public static final Type BALANCE = new Type("Balance");
         public static final Type SAMPLE_RATE = new Type("Sample Rate");
 
         protected Type(String name) { super(name); }
-    }
-
-    private float value;
-    private final float min, max;
-    private final String units;
-    private final float precision;
-    private final int updatePeriod;
-    private String minLabel = "", midLabel = "", maxLabel = "";
-
-    public FloatControl(Type type, float min, float max, float precision, int updatePeriod, float initialValue, String units) {
-        super(type);
-        this.min = min; this.max = max;
-        this.value = initialValue;
-        this.units = units;
-        this.precision = precision;
-        this.updatePeriod = updatePeriod;
-    }
-
-    public FloatControl(Type type, float min, float max, float precision, int updatePeriod, float initialValue,
-                        String units, String minLabel, String midLabel, String maxLabel) {
-        this(type, min, max, precision, updatePeriod, initialValue, units);
-        this.minLabel = minLabel; this.midLabel = midLabel; this.maxLabel = maxLabel;
-    }
-
-    public void setValue(float newValue) {
-        if (newValue < min || newValue > max) throw new IllegalArgumentException("value out of range");
-        this.value = newValue;
-    }
-
-    public float getValue() { return value; }
-    public float getMinimum() { return min; }
-    public float getMaximum() { return max; }
-    public String getUnits() { return units; }
-    public float getPrecision() { return precision; }
-    public int getUpdatePeriod() { return updatePeriod; }
-    public String getMinLabel() { return minLabel; }
-    public String getMidLabel() { return midLabel; }
-    public String getMaxLabel() { return maxLabel; }
-    public void shift(float from, float to, int microseconds) {
-        if (from < min || from > max) throw new IllegalArgumentException("value out of range");
-        setValue(to);
     }
 }

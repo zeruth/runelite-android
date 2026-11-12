@@ -33,7 +33,21 @@ package javax.swing;
 import java.awt.FlowLayout;
 import java.awt.LayoutManager;
 
-public class JPanel extends JComponent {
+public class JPanel extends JComponent implements javax.accessibility.Accessible {
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJPanel();
+        }
+        return accessibleContext;
+    }
+
+    /** Accessibility support for panels: role PANEL. */
+    protected class AccessibleJPanel extends AccessibleJComponent {
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.PANEL;
+        }
+    }
     private static final long serialVersionUID = 1L;
 
     public JPanel() { this(new FlowLayout(), true); }
