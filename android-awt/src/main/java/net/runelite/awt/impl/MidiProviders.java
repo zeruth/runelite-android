@@ -60,13 +60,15 @@ import java.util.List;
  * No soundbank ships in the APK (0 bytes): {@code SoftSynthesizer} generates the JDK's emergency
  * soundbank on first use and caches it as {@code .gervill/soundbank-emg.sf2} under
  * {@code user.home}, or under {@code java.io.tmpdir} where ART leaves the home empty.
- * {@code TestMidiContracts} prints the size of that SF2 ("emergency soundbank: ... bytes") and
- * checks it is byte for byte the JDK's size; it lives on disk, not in the APK.
+ * {@code TestMidiContracts} serializes {@code EmergencySoundbank.createSoundbank()} to memory with
+ * the same {@code SF2Soundbank.save} the cache uses, prints its size ("emergency soundbank: ...
+ * bytes") and requires the JDK's size: 1,878,120 bytes, 129 instruments, on JDK 21. The cache
+ * lives on disk, not in the APK.
  * <p>
- * APK size budget: MIDI adds code only, no assets. That is the 132 {@code com.sun.media.sound}
- * sources (about 1.7 MB of Java, Gervill being most of it), so at most 0.5 MB of dex before R8
- * strips the classes nothing reaches. {@code :android-awt:assembleDebug} must not grow the AAR's
- * {@code classes.jar} past that, and the module must ship no {@code assets/} directory.
+ * APK size budget: MIDI adds code only; the module has no {@code assets/} directory. Measured as
+ * host-compiled class files: {@code javax.sound.midi} 48 KB, {@code com.sun.media.sound} 743 KB
+ * (Gervill plus the sampled codecs and file readers of the sampled port), about 0.8 MB before
+ * dexing and before R8 drops what the app never reaches.
  */
 public final class MidiProviders {
     private static final List<MidiDeviceProvider> DEVICES = Collections.unmodifiableList(
