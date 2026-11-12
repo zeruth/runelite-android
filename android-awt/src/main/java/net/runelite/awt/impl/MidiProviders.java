@@ -65,10 +65,11 @@ import java.util.List;
  * bytes") and requires the JDK's size: 1,878,120 bytes, 129 instruments, on JDK 21. The cache
  * lives on disk, not in the APK.
  * <p>
- * APK size budget: MIDI adds code only; the module has no {@code assets/} directory. Measured as
- * host-compiled class files: {@code javax.sound.midi} 48 KB, {@code com.sun.media.sound} 743 KB
- * (Gervill plus the sampled codecs and file readers of the sampled port), about 0.8 MB before
- * dexing and before R8 drops what the app never reaches.
+ * APK size budget: MIDI adds code only; the module has no {@code assets/} directory. Measured on
+ * the debug javac output {@code assembleDebug} packs unchanged into the AAR's {@code classes.jar}
+ * (a library AAR is not dexed): {@code javax.sound.midi} 57 KB, {@code com.sun.media.sound} 906 KB
+ * (Gervill plus the sampled codecs and file readers of the sampled port), 0.97 MB uncompressed.
+ * The budget is 1 MB uncompressed for those packages; the app's dex and R8 only shrink it.
  */
 public final class MidiProviders {
     private static final List<MidiDeviceProvider> DEVICES = Collections.unmodifiableList(
