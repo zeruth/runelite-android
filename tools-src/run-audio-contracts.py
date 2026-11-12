@@ -50,7 +50,8 @@ def main():
             raise RuntimeError(f'Command failed ({result.returncode}): {command[0]}')
         return result.stdout
 
-    sources = [source/'PooledSourceDataLine.java', source/'AndroidAudioBridge.java', source/'TrackControls.java', repo/'tools-src'/f'{args.test}.java', runner]
+    sources = [source/'PooledSourceDataLine.java', source/'AndroidAudioBridge.java', source/'TrackControls.java',
+               source/'AndroidTargetDataLine.java', repo/'tools-src'/f'{args.test}.java', runner]
     if (source/'LegacySourceDataLine.java').is_file(): sources.append(source/'LegacySourceDataLine.java')
     if args.release_host: sources = [repo/'tools-src'/f'{args.test}.java', runner]
     if args.package:
