@@ -30,139 +30,128 @@
  */
 package java.lang.management;
 
-import net.runelite.awt.AwtUnsupported;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import javax.management.MBeanServer;
+import javax.management.MBeanServerFactory;
 
+/**
+ * The platform MXBeans of the running ART process (see {@code ArtManagement} for where each
+ * value comes from) and the in-process platform MBean server they are registered in. Android
+ * has no remote JMX connector, so the {@code MBeanServerConnection} overloads and proxies are
+ * absent.
+ */
 public class ManagementFactory {
+    public static final String CLASS_LOADING_MXBEAN_NAME = "java.lang:type=ClassLoading";
+    public static final String COMPILATION_MXBEAN_NAME = "java.lang:type=Compilation";
+    public static final String MEMORY_MXBEAN_NAME = "java.lang:type=Memory";
+    public static final String OPERATING_SYSTEM_MXBEAN_NAME = "java.lang:type=OperatingSystem";
+    public static final String RUNTIME_MXBEAN_NAME = "java.lang:type=Runtime";
+    public static final String THREAD_MXBEAN_NAME = "java.lang:type=Threading";
+    public static final String GARBAGE_COLLECTOR_MXBEAN_DOMAIN_TYPE = "java.lang:type=GarbageCollector";
+    public static final String MEMORY_MANAGER_MXBEAN_DOMAIN_TYPE = "java.lang:type=MemoryManager";
+    public static final String MEMORY_POOL_MXBEAN_DOMAIN_TYPE = "java.lang:type=MemoryPool";
+
+    private static final List<Class<? extends PlatformManagedObject>> SINGLETONS = Collections.unmodifiableList(
+            Arrays.<Class<? extends PlatformManagedObject>>asList(ClassLoadingMXBean.class, CompilationMXBean.class,
+                    MemoryMXBean.class, OperatingSystemMXBean.class, com.sun.management.OperatingSystemMXBean.class,
+                    RuntimeMXBean.class, ThreadMXBean.class));
+    private static final List<Class<? extends PlatformManagedObject>> MULTIPLE = Collections.unmodifiableList(
+            Arrays.<Class<? extends PlatformManagedObject>>asList(GarbageCollectorMXBean.class,
+                    MemoryManagerMXBean.class, MemoryPoolMXBean.class));
+    private static MBeanServer platformServer;
+
     private ManagementFactory() {}
 
-    /** In-process management registry; Android does not expose a remote JMX connector. */
-    public static javax.management.MBeanServer getPlatformMBeanServer() {
-        return net.runelite.awt.impl.StubMBeanServer.INSTANCE;
-    }
-
-    public static RuntimeMXBean getRuntimeMXBean() {
-        return new StubRuntimeMXBean();
-    }
-
-    public static java.util.List<MemoryPoolMXBean> getMemoryPoolMXBeans() {
-        // ART exposes total heap usage, but no managed pool with peak/reset semantics.
-        return java.util.Collections.emptyList();
-    }
-
-    public static java.util.List<GarbageCollectorMXBean> getGarbageCollectorMXBeans() {
-        return java.util.Collections.singletonList(GC);
+    public static ClassLoadingMXBean getClassLoadingMXBean() {
+        return ArtManagement.CLASS_LOADING;
     }
 
     public static MemoryMXBean getMemoryMXBean() {
-        return new StubMemoryMXBean();
+        return ArtManagement.MEMORY;
     }
 
     public static ThreadMXBean getThreadMXBean() {
-        return THREADS;
+        return ArtManagement.THREADS;
     }
 
+    public static RuntimeMXBean getRuntimeMXBean() {
+        return ArtManagement.RUNTIME;
+    }
+
+    public static CompilationMXBean getCompilationMXBean() {
+        return ArtManagement.COMPILATION;
+    }
+
+    /** Also a {@code com.sun.management.OperatingSystemMXBean}, as on the JDK. */
     public static OperatingSystemMXBean getOperatingSystemMXBean() {
-        return new StubOperatingSystemMXBean();
+        return ArtManagement.OPERATING_SYSTEM;
     }
 
-    public static ClassLoadingMXBean getClassLoadingMXBean() {
-        return new StubClassLoadingMXBean();
+    /** The ART (Java) heap and the native heap. */
+    public static List<MemoryPoolMXBean> getMemoryPoolMXBeans() {
+        return ArtManagement.POOLS;
     }
 
-    public static java.util.List<java.lang.management.MemoryManagerMXBean> getMemoryManagerMXBeans() {
-        return java.util.Collections.singletonList(GC);
+    public static List<MemoryManagerMXBean> getMemoryManagerMXBeans() {
+        return Collections.<MemoryManagerMXBean>unmodifiableList(ArtManagement.COLLECTORS);
     }
 
-    private static final long START_TIME = System.currentTimeMillis();
-    private static final long START_NANOS = System.nanoTime();
-    private static final ThreadMXBean THREADS = new StubThreadMXBean();
-    private static final GarbageCollectorMXBean GC = new ArtGarbageCollector();
-
-    private static final class ArtGarbageCollector implements GarbageCollectorMXBean {
-        @Override public String getName() { return "ART"; }
-        @Override public boolean isValid() { return true; }
-        @Override public String[] getMemoryPoolNames() { return new String[0]; }
-        private long statistic(String name) {
-            String value = android.os.Debug.getRuntimeStat(name);
-            if (value == null) return -1;
-            try { return Long.parseLong(value); } catch (NumberFormatException unavailable) { return -1; }
-        }
-        @Override public long getCollectionCount() { return statistic("art.gc.gc-count"); }
-        @Override public long getCollectionTime() { return statistic("art.gc.gc-time"); }
+    public static List<GarbageCollectorMXBean> getGarbageCollectorMXBeans() {
+        return ArtManagement.COLLECTORS;
     }
 
-    private static final class StubRuntimeMXBean implements RuntimeMXBean {
-        @Override public String getName() { return android.os.Process.myPid() + "@android"; }
-        @Override public String getVmName() { return "Dalvik"; }
-        @Override public String getVmVendor() { return "Android"; }
-        @Override public String getVmVersion() { return android.os.Build.VERSION.RELEASE; }
-        @Override public String getSpecName() { return "Java Virtual Machine Specification"; }
-        @Override public String getSpecVendor() { return "Oracle"; }
-        @Override public String getSpecVersion() { return "1.8"; }
-        @Override public String getManagementSpecVersion() { return "2.0"; }
-        @Override public String getClassPath() { return System.getProperty("java.class.path", ""); }
-        @Override public String getLibraryPath() { return System.getProperty("java.library.path", ""); }
-        @Override public boolean isBootClassPathSupported() { return false; }
-        @Override public String getBootClassPath() { throw AwtUnsupported.fail("java.lang.management.RuntimeMXBean.getBootClassPath()", "isBootClassPathSupported() is false on ART"); }
-        @Override public java.util.List<String> getInputArguments() { return java.util.Collections.emptyList(); }
-        @Override public long getUptime() { return (System.nanoTime() - START_NANOS) / 1_000_000; }
-        @Override public long getStartTime() { return START_TIME; }
-        @Override public java.util.Map<String, String> getSystemProperties() {
-            java.util.Map<String, String> m = new java.util.HashMap<>();
-            for (java.util.Map.Entry<Object, Object> e : System.getProperties().entrySet()) {
-                m.put(e.getKey().toString(), e.getValue() == null ? "" : e.getValue().toString());
+    /** The in-process server holding every platform MXBean under its {@code getObjectName()}. */
+    public static synchronized MBeanServer getPlatformMBeanServer() {
+        if (platformServer == null) {
+            MBeanServer server = MBeanServerFactory.createMBeanServer();
+            for (PlatformManagedObject bean : ArtManagement.all()) {
+                try {
+                    server.registerMBean(bean, bean.getObjectName());
+                } catch (Exception impossible) {
+                    // A fresh server and distinct platform names: registration cannot fail.
+                    throw new IllegalStateException("registering " + bean.getObjectName(), impossible);
+                }
             }
-            return m;
+            platformServer = server;
         }
-        @Override public java.util.Map<String, String> getKeyMap() { return getSystemProperties(); }
+        return platformServer;
     }
 
-    private static final class StubMemoryMXBean implements MemoryMXBean {
-        @Override public MemoryUsage getHeapMemoryUsage() {
-            Runtime runtime = Runtime.getRuntime(); long committed = runtime.totalMemory();
-            return new MemoryUsage(-1, committed - runtime.freeMemory(), committed, runtime.maxMemory());
+    /**
+     * The platform MXBean implementing {@code mxbeanInterface}, which must be a singleton
+     * platform interface (getting a GarbageCollectorMXBean this way is an error, as on the JDK).
+     */
+    public static <T extends PlatformManagedObject> T getPlatformMXBean(Class<T> mxbeanInterface) {
+        if (!SINGLETONS.contains(mxbeanInterface)) {
+            throw new IllegalArgumentException(mxbeanInterface.getName()
+                    + (MULTIPLE.contains(mxbeanInterface) ? " can have more than one instance"
+                    : " is not a platform management interface"));
         }
-        @Override public MemoryUsage getNonHeapMemoryUsage() {
-            return new MemoryUsage(-1, android.os.Debug.getNativeHeapAllocatedSize(), android.os.Debug.getNativeHeapSize(), -1);
+        for (PlatformManagedObject bean : ArtManagement.all()) {
+            if (mxbeanInterface.isInstance(bean)) return mxbeanInterface.cast(bean);
         }
-        @Override public int getObjectPendingFinalizationCount() { return 0; }
-        @Override public boolean isVerbose() { return false; }
-        @Override public void setVerbose(boolean value) {}
-        @Override public void gc() { System.gc(); }
+        return null;
     }
 
-    private static final class StubThreadMXBean implements ThreadMXBean {
-        private int peak;
-        private synchronized java.util.Set<Thread> snapshot() {
-            java.util.Set<Thread> threads = Thread.getAllStackTraces().keySet(); peak = Math.max(peak, threads.size()); return threads;
+    public static <T extends PlatformManagedObject> List<T> getPlatformMXBeans(Class<T> mxbeanInterface) {
+        if (!SINGLETONS.contains(mxbeanInterface) && !MULTIPLE.contains(mxbeanInterface)) {
+            throw new IllegalArgumentException(mxbeanInterface.getName() + " is not a platform management interface");
         }
-        @Override public int getThreadCount() { return snapshot().size(); }
-        @Override public int getPeakThreadCount() { snapshot(); return peak; }
-        @Override public long getTotalStartedThreadCount() { throw AwtUnsupported.fail("java.lang.management.ThreadMXBean.getTotalStartedThreadCount()", "ART does not expose it"); }
-        @Override public int getDaemonThreadCount() { int count = 0; for (Thread thread : snapshot()) if (thread.isDaemon()) count++; return count; }
-        @Override public long[] getAllThreadIds() { return snapshot().stream().mapToLong(Thread::getId).toArray(); }
-        @Override public long getCurrentThreadCpuTime() { return android.os.Debug.threadCpuTimeNanos(); }
-        @Override public long getCurrentThreadUserTime() { return -1; }
-        @Override public long getThreadCpuTime(long id) { if (id <= 0) throw new IllegalArgumentException("invalid thread id"); return id == Thread.currentThread().getId() ? getCurrentThreadCpuTime() : -1; }
-        @Override public long getThreadUserTime(long id) { return -1; }
-        @Override public boolean isThreadCpuTimeSupported() { return false; }
-        @Override public boolean isThreadCpuTimeEnabled() { return false; }
-        @Override public void setThreadCpuTimeEnabled(boolean enable) {}
+        List<T> beans = new ArrayList<>();
+        for (PlatformManagedObject bean : ArtManagement.all()) {
+            if (mxbeanInterface.isInstance(bean)) beans.add(mxbeanInterface.cast(bean));
+        }
+        return Collections.unmodifiableList(beans);
     }
 
-    private static final class StubOperatingSystemMXBean implements OperatingSystemMXBean {
-        @Override public String getName() { return "Android"; }
-        @Override public String getArch() { return android.os.Build.SUPPORTED_ABIS.length > 0 ? android.os.Build.SUPPORTED_ABIS[0] : "unknown"; }
-        @Override public String getVersion() { return android.os.Build.VERSION.RELEASE; }
-        @Override public int getAvailableProcessors() { return Runtime.getRuntime().availableProcessors(); }
-        @Override public double getSystemLoadAverage() { return -1.0; }
-    }
-
-    private static final class StubClassLoadingMXBean implements ClassLoadingMXBean {
-        @Override public long getTotalLoadedClassCount() { throw AwtUnsupported.fail("java.lang.management.ClassLoadingMXBean.getTotalLoadedClassCount()", "ART does not expose it"); }
-        @Override public int getLoadedClassCount() { return android.os.Debug.getLoadedClassCount(); }
-        @Override public long getUnloadedClassCount() { throw AwtUnsupported.fail("java.lang.management.ClassLoadingMXBean.getUnloadedClassCount()", "ART does not expose it"); }
-        @Override public boolean isVerbose() { return false; }
-        @Override public void setVerbose(boolean value) {}
+    public static Set<Class<? extends PlatformManagedObject>> getPlatformManagementInterfaces() {
+        Set<Class<? extends PlatformManagedObject>> interfaces = new HashSet<>(SINGLETONS);
+        interfaces.addAll(MULTIPLE);
+        return Collections.unmodifiableSet(interfaces);
     }
 }
