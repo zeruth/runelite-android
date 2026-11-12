@@ -48,7 +48,49 @@ public class JViewport extends JComponent {
     private int scrollMode = BLIT_SCROLL_MODE;
     private final Point viewPosition = new Point();
 
-    public JViewport() {}
+    public JViewport() {
+        setLayout(createLayoutManager());
+    }
+
+    /**
+     * Subclassers can override this to install a different layout manager (or
+     * <code>null</code>) in the constructor.
+     *
+     * @return a new <code>LayoutManager</code> object
+     */
+    protected java.awt.LayoutManager createLayoutManager() {
+        return ViewportLayout.SHARED_INSTANCE;
+    }
+
+    /**
+     * The shared ViewportLayout keeps the host sizing of {@link #doLayout}: the view
+     * tracks the viewport width unless it is a Scrollable that says otherwise, so
+     * sidebar panels wrap instead of scrolling sideways. Any other manager (a
+     * subclass's createLayoutManager, or setLayout) lays the view out itself.
+     */
+    private boolean hostLayout() {
+        return getLayout() == null || getLayout() == ViewportLayout.SHARED_INSTANCE;
+    }
+
+    /**
+     * Converts a size in pixel coordinates to view coordinates.
+     *
+     * @param size a <code>Dimension</code> object using pixel coordinates
+     * @return a <code>Dimension</code> object converted to view coordinates
+     */
+    public Dimension toViewCoordinates(Dimension size) {
+        return new Dimension(size);
+    }
+
+    /**
+     * Converts a point in pixel coordinates to view coordinates.
+     *
+     * @param p a <code>Point</code> object using pixel coordinates
+     * @return a <code>Point</code> object converted to view coordinates
+     */
+    public Point toViewCoordinates(Point p) {
+        return new Point(p);
+    }
 
     public Component getView() { return view; }
     public void setView(Component view) {
@@ -117,6 +159,10 @@ public class JViewport extends JComponent {
 
     @Override
     public void doLayout() {
+        if (!hostLayout()) {
+            super.doLayout();
+            return;
+        }
         if (view != null && getWidth() > 0 && getHeight() > 0) {
             // Size the view to its preferred height (or at least viewport height) so
             // scrollable content can grow; horizontal stays clamped to viewport.
@@ -141,7 +187,7 @@ public class JViewport extends JComponent {
      */
     @Override
     public Dimension getPreferredSize() {
-        if (isPreferredSizeSet()) return super.getPreferredSize();
+        if (isPreferredSizeSet() || !hostLayout()) return super.getPreferredSize();
         if (view == null) return new Dimension();
         if (view instanceof Scrollable) return ((Scrollable) view).getPreferredScrollableViewportSize();
         return view.getPreferredSize();
@@ -149,7 +195,7 @@ public class JViewport extends JComponent {
 
     @Override
     public Dimension getMinimumSize() {
-        if (isMinimumSizeSet()) return super.getMinimumSize();
+        if (isMinimumSizeSet() || !hostLayout()) return super.getMinimumSize();
         return new Dimension(4, 4);
     }
 

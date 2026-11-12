@@ -48,7 +48,7 @@ public class JScrollPane extends JComponent implements ScrollPaneConstants {
     private final java.util.Map<String,Component> corners=new java.util.HashMap<>();
     private final java.beans.PropertyChangeListener barUIChanged = event -> {
         JScrollBar bar = (JScrollBar) event.getSource();
-        if (bar.getUI() != null && bar.getParent() != this) add(bar);
+        if (bar.getUI() != null && bar.getParent() != this) add(bar, barKey(bar));
         else if (bar.getUI() == null && bar.getParent() == this) remove(bar);
         revalidate(); repaint();
     };
@@ -191,8 +191,69 @@ public class JScrollPane extends JComponent implements ScrollPaneConstants {
         });
     }
 
+    /**
+     * Sets the layout manager, which must be a {@code ScrollPaneLayout} (or null);
+     * it is synced with this pane's viewport, scrollbars, headers and corners.
+     * <p>
+     * Unlike the JDK, a new pane starts with no layout manager: the default layout
+     * leaves scrolling gestures and indicators to the native host and only reserves
+     * room for scrollbars that carry a UI delegate. A {@code ScrollPaneLayout} set
+     * here lays the pane out exactly as on the desktop.
+     *
+     * @param layout the {@code ScrollPaneLayout}, or null for the host layout
+     * @throws ClassCastException if {@code layout} is not a {@code ScrollPaneLayout}
+     */
+    @Override
+    public void setLayout(java.awt.LayoutManager layout) {
+        if (layout instanceof ScrollPaneLayout) {
+            super.setLayout(layout);
+            ((ScrollPaneLayout) layout).syncWithScrollPane(this);
+        } else if (layout == null) {
+            super.setLayout(layout);
+        } else {
+            String s = "layout of JScrollPane must be a ScrollPaneLayout";
+            throw new ClassCastException(s);
+        }
+    }
+
+    /**
+     * Returns the bounds of the viewport's border, the viewport's bounds grown by
+     * the viewport border insets.
+     *
+     * @return a {@code Rectangle} object specifying the viewport border
+     */
+    public java.awt.Rectangle getViewportBorderBounds() {
+        java.awt.Rectangle borderR = new java.awt.Rectangle(getSize());
+        java.awt.Insets insets = getInsets();
+        borderR.x = insets.left;
+        borderR.y = insets.top;
+        borderR.width -= insets.left + insets.right;
+        borderR.height -= insets.top + insets.bottom;
+        if (columnHeader != null && columnHeader.isVisible()) {
+            int colHeadHeight = columnHeader.getHeight();
+            borderR.y += colHeadHeight;
+            borderR.height -= colHeadHeight;
+        }
+        if (rowHeader != null && rowHeader.isVisible()) {
+            int rowHeadWidth = rowHeader.getWidth();
+            borderR.x += rowHeadWidth;
+            borderR.width -= rowHeadWidth;
+        }
+        if (verticalScrollBar != null && verticalScrollBar.isVisible()) {
+            borderR.width -= verticalScrollBar.getWidth();
+        }
+        if (horizontalScrollBar != null && horizontalScrollBar.isVisible()) {
+            borderR.height -= horizontalScrollBar.getHeight();
+        }
+        return borderR;
+    }
+
     @Override
     public void doLayout() {
+        if (getLayout() != null) {
+            super.doLayout();
+            return;
+        }
         if(viewport==null)return;
         java.awt.Insets in=getInsets();int width=Math.max(0,getWidth()-in.left-in.right),height=Math.max(0,getHeight()-in.top-in.bottom);
         int headerHeight=columnHeader==null||columnHeader.getView()==null?0:Math.min(height,columnHeader.getView().getPreferredSize().height);
@@ -250,7 +311,7 @@ public class JScrollPane extends JComponent implements ScrollPaneConstants {
     /** ScrollPaneLayout's sizing: insets + the viewport's preferred size + the column header. */
     @Override
     public java.awt.Dimension getPreferredSize() {
-        if (isPreferredSizeSet()) return super.getPreferredSize();
+        if (isPreferredSizeSet() || getLayout() != null) return super.getPreferredSize();
         java.awt.Insets in = getInsets();
         java.awt.Dimension d = viewport == null ? new java.awt.Dimension() : viewport.getPreferredSize();
         int w = d.width, h = d.height;
@@ -267,7 +328,7 @@ public class JScrollPane extends JComponent implements ScrollPaneConstants {
 
     @Override
     public java.awt.Dimension getMinimumSize() {
-        if (isMinimumSizeSet()) return super.getMinimumSize();
+        if (isMinimumSizeSet() || getLayout() != null) return super.getMinimumSize();
         java.awt.Insets in = getInsets();
         java.awt.Dimension d = viewport == null ? new java.awt.Dimension() : viewport.getMinimumSize();
         return new java.awt.Dimension(d.width + in.left + in.right, d.height + in.top + in.bottom);
@@ -283,7 +344,7 @@ public class JScrollPane extends JComponent implements ScrollPaneConstants {
         }
         this.viewport = viewport;
         if (viewport != null) {
-            add(viewport, 0);
+            add(viewport, VIEWPORT, 0);
             viewport.addChangeListener(viewportListener);
         }
         syncScrollBarsWithViewport();
@@ -303,11 +364,16 @@ public class JScrollPane extends JComponent implements ScrollPaneConstants {
         if (bar == null) return;
         bar.removePropertyChangeListener("UI", barUIChanged);
         if (bar.getParent() == this) remove(bar);
+        // A bar without a UI is never a child, but a synced ScrollPaneLayout still holds it.
+        else if (getLayout() != null) getLayout().removeLayoutComponent(bar);
     }
     private void attachBar(JScrollBar bar) {
         if (bar == null) return;
         bar.addPropertyChangeListener("UI", barUIChanged);
-        if (bar.getUI() != null) add(bar);
+        if (bar.getUI() != null) add(bar, barKey(bar));
+    }
+    private String barKey(JScrollBar bar) {
+        return bar == verticalScrollBar ? VERTICAL_SCROLLBAR : HORIZONTAL_SCROLLBAR;
     }
     public void setVerticalScrollBar(JScrollBar sb) {
         if (verticalScrollBar == sb) return;
@@ -335,7 +401,7 @@ public class JScrollPane extends JComponent implements ScrollPaneConstants {
     public Border getViewportBorder() { return viewportBorder; }
     public void setViewportBorder(Border viewportBorder) { this.viewportBorder = viewportBorder; }
     public JViewport getRowHeader() { return rowHeader; }
-    public void setRowHeader(JViewport header) { JViewport old=rowHeader;if(old!=null)remove(old);rowHeader=header;if(header!=null)add(header);firePropertyChange("rowHeader",old,header);revalidate();repaint(); }
+    public void setRowHeader(JViewport header) { JViewport old=rowHeader;if(old!=null)remove(old);rowHeader=header;if(header!=null)add(header,ROW_HEADER);firePropertyChange("rowHeader",old,header);revalidate();repaint(); }
     public void setRowHeaderView(Component view) { if(rowHeader==null)setRowHeader(new JViewport());rowHeader.setView(view);revalidate(); }
     public void setColumnHeaderView(Component view) {
         if (columnHeader == null) setColumnHeader(new JViewport());
@@ -345,12 +411,12 @@ public class JScrollPane extends JComponent implements ScrollPaneConstants {
     public void setColumnHeader(JViewport header) {
         if (columnHeader != null) remove(columnHeader);
         columnHeader = header;
-        if (header != null) add(header);
+        if (header != null) add(header, COLUMN_HEADER);
         revalidate(); repaint();
     }
     private String cornerKey(String key) { if(UPPER_LEADING_CORNER.equals(key))return UPPER_LEFT_CORNER;if(UPPER_TRAILING_CORNER.equals(key))return UPPER_RIGHT_CORNER;if(LOWER_LEADING_CORNER.equals(key))return LOWER_LEFT_CORNER;if(LOWER_TRAILING_CORNER.equals(key))return LOWER_RIGHT_CORNER;return key; }
     public Component getCorner(String key) { return corners.get(cornerKey(key)); }
-    public void setCorner(String key,Component corner) { key=cornerKey(key);if(!UPPER_LEFT_CORNER.equals(key)&&!UPPER_RIGHT_CORNER.equals(key)&&!LOWER_LEFT_CORNER.equals(key)&&!LOWER_RIGHT_CORNER.equals(key))throw new IllegalArgumentException("invalid corner");Component old=corners.remove(key);if(old!=null)remove(old);if(corner!=null){corners.put(key,corner);add(corner);}firePropertyChange(key,old,corner);revalidate();repaint(); }
+    public void setCorner(String key,Component corner) { key=cornerKey(key);if(!UPPER_LEFT_CORNER.equals(key)&&!UPPER_RIGHT_CORNER.equals(key)&&!LOWER_LEFT_CORNER.equals(key)&&!LOWER_RIGHT_CORNER.equals(key))throw new IllegalArgumentException("invalid corner");Component old=corners.remove(key);if(old!=null)remove(old);if(corner!=null){corners.put(key,corner);add(corner,key);}firePropertyChange(key,old,corner);revalidate();repaint(); }
     public void setWheelScrollingEnabled(boolean enable) { boolean old=wheelScrollingEnabled;wheelScrollingEnabled=enable;firePropertyChange("wheelScrollingEnabled",old,enable); }
     public boolean isWheelScrollingEnabled() { return wheelScrollingEnabled; }
 }

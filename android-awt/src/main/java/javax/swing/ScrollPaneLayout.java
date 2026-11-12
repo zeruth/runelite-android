@@ -220,6 +220,11 @@ public class ScrollPaneLayout
      */
     public void addLayoutComponent(String s, Component c)
     {
+        // The JDK's Container only calls this with a String constraint; the
+        // shadow Container also calls it for an unnamed add, which the JDK skips.
+        if (s == null) {
+            return;
+        }
         if (s.equals(VIEWPORT)) {
             viewport = (JViewport)addSingletonComponent(viewport, c);
         }
