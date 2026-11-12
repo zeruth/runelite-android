@@ -196,6 +196,13 @@ public class JComponent extends Container {
             }
         });
     }
+    private boolean requestFocusEnabled = true;
+    /**
+     * Whether a mouse press should give this component the focus. As on the JDK it is a hint
+     * for the UI delegates' mouse handlers; programmatic requestFocus ignores it.
+     */
+    public void setRequestFocusEnabled(boolean requestFocusEnabled) { this.requestFocusEnabled = requestFocusEnabled; }
+    public boolean isRequestFocusEnabled() { return requestFocusEnabled; }
     public Border getBorder() { return border; }
     // Border drives getInsets(), which every layout manager reads — a border change is a
     // layout change.
@@ -1090,6 +1097,33 @@ public class JComponent extends Container {
     boolean isFocusTraversalKeysSetByClient(int id) {
         return id == java.awt.KeyboardFocusManager.FORWARD_TRAVERSAL_KEYS ? focusTraversalKeysForwardSet
             : id == java.awt.KeyboardFocusManager.BACKWARD_TRAVERSAL_KEYS && focusTraversalKeysBackwardSet;
+    }
+
+    private static java.util.Set<java.awt.AWTKeyStroke> managingFocusForwardTraversalKeys;
+    private static java.util.Set<java.awt.AWTKeyStroke> managingFocusBackwardTraversalKeys;
+
+    /**
+     * The forward traversal keys of a component that manages focus itself
+     * (JTable, JTextArea): ctrl TAB, so a plain TAB stays with the component.
+     */
+    static synchronized java.util.Set<java.awt.AWTKeyStroke> getManagingFocusForwardTraversalKeys() {
+        if (managingFocusForwardTraversalKeys == null) {
+            managingFocusForwardTraversalKeys = new java.util.HashSet<java.awt.AWTKeyStroke>(1);
+            managingFocusForwardTraversalKeys.add(KeyStroke.getKeyStroke(
+                    java.awt.event.KeyEvent.VK_TAB, java.awt.event.InputEvent.CTRL_MASK));
+        }
+        return managingFocusForwardTraversalKeys;
+    }
+
+    /** The backward counterpart of {@link #getManagingFocusForwardTraversalKeys}: ctrl shift TAB. */
+    static synchronized java.util.Set<java.awt.AWTKeyStroke> getManagingFocusBackwardTraversalKeys() {
+        if (managingFocusBackwardTraversalKeys == null) {
+            managingFocusBackwardTraversalKeys = new java.util.HashSet<java.awt.AWTKeyStroke>(1);
+            managingFocusBackwardTraversalKeys.add(KeyStroke.getKeyStroke(
+                    java.awt.event.KeyEvent.VK_TAB,
+                    java.awt.event.InputEvent.SHIFT_MASK | java.awt.event.InputEvent.CTRL_MASK));
+        }
+        return managingFocusBackwardTraversalKeys;
     }
 
     /**
