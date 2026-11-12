@@ -468,6 +468,20 @@ class DependencyReportTest(unittest.TestCase):
                 ('com.google.firebase', 'firebase-bom'): '34.19.0',
             })
 
+    def test_metadata_only_jar_is_not_a_library(self):
+        # okio 3's root artifact carries Kotlin metadata only; the classes are in okio-jvm.
+        with tempfile.TemporaryDirectory() as tmp:
+            meta = os.path.join(tmp, 'okio-3.9.0.jar')
+            with zipfile.ZipFile(meta, 'w') as archive:
+                archive.writestr('META-INF/MANIFEST.MF', 'Manifest-Version: 1.0\n')
+                archive.writestr('commonMain/default/manifest', '')
+            jvm = os.path.join(tmp, 'okio-jvm-3.9.0.jar')
+            with zipfile.ZipFile(jvm, 'w') as archive:
+                archive.writestr('okio/Buffer.class', b'\xca\xfe\xba\xbe')
+            self.assertFalse(scan._has_classes(meta))
+            self.assertTrue(scan._has_classes(jvm))
+            self.assertFalse(scan._has_classes(None))
+
 
 class ReportTest(unittest.TestCase):
     def test_build_report_and_markdown(self):

@@ -775,6 +775,16 @@ def dependency_report_versions(path):
     return out
 
 
+def _has_classes(jar):
+    if not jar:
+        return False
+    try:
+        with zipfile.ZipFile(jar) as archive:
+            return any(n.endswith('.class') for n in archive.namelist())
+    except (OSError, zipfile.BadZipFile):
+        return False
+
+
 def default_libs(dependency_report=None):
     """Host library jars at the versions the APK ships: the dependency report when given,
     else the pins of pinned_lib_versions(), else the newest in the gradle cache."""
@@ -784,12 +794,16 @@ def default_libs(dependency_report=None):
     out = []
     for group, artifact in DEFAULT_LIBS:
         version = pins.get((group, artifact))
-        p = find_gradle_lib(group, artifact, version)
-        if p is None and version:
-            # Kotlin multiplatform libraries (okio 3) publish a metadata-only artifact and
-            # put the JVM classes in <artifact>-jvm at the same version.
-            p = find_gradle_lib(group, artifact + '-jvm', version)
-        p = p or find_gradle_lib(group, artifact)
+        # Kotlin multiplatform libraries (okio 3) publish a metadata-only root artifact and
+        # put the JVM classes in <artifact>-jvm at the same version, so -jvm comes first and
+        # a jar without classes never stands in for the library.
+        p = None
+        if version:
+            p = next((c for c in (find_gradle_lib(group, artifact + '-jvm', version),
+                                  find_gradle_lib(group, artifact, version)) if _has_classes(c)), None)
+        if p is None:
+            p = find_gradle_lib(group, artifact)
+            p = p if _has_classes(p) else None
         if p:
             out.append(p)
         else:
