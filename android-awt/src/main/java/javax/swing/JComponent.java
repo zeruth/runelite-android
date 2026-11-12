@@ -56,7 +56,6 @@ public class JComponent extends Container {
     }
 
     private Border border;
-    private String toolTipText;
     private boolean doubleBuffered = true;
     private boolean opaque;
     private float alignmentX = 0.5f;
@@ -83,8 +82,37 @@ public class JComponent extends Container {
     // layout change.
     public void setBorder(Border border) { Border old = this.border; this.border = border; firePropertyChange("border", old, border); revalidate(); repaint(); }
 
-    public String getToolTipText() { return toolTipText; }
-    public void setToolTipText(String text) { String old = this.toolTipText; this.toolTipText = text; firePropertyChange(TOOL_TIP_TEXT_KEY, old, text); }
+    /**
+     * Registers the text to display in a tool tip. As in the JDK the text is
+     * kept as the {@link #TOOL_TIP_TEXT_KEY} client property, and a component
+     * with text is registered with the {@link ToolTipManager}.
+     */
+    public void setToolTipText(String text) {
+        String oldText = getToolTipText();
+        putClientProperty(TOOL_TIP_TEXT_KEY, text);
+        firePropertyChange(TOOL_TIP_TEXT_KEY, oldText, text);
+        ToolTipManager toolTipManager = ToolTipManager.sharedInstance();
+        if (text != null) {
+            if (oldText == null) {
+                toolTipManager.registerComponent(this);
+            }
+        } else {
+            toolTipManager.unregisterComponent(this);
+        }
+    }
+    public String getToolTipText() { return (String) getClientProperty(TOOL_TIP_TEXT_KEY); }
+    /** The tip for a mouse position; components with per-region tips (tabs, cells) override it. */
+    public String getToolTipText(java.awt.event.MouseEvent event) { return getToolTipText(); }
+    /** Where the tip goes in this component's coordinates, or {@code null} for under the pointer. */
+    public java.awt.Point getToolTipLocation(java.awt.event.MouseEvent event) { return null; }
+    /** Where a component popup menu opens, or {@code null} for the look and feel's choice. */
+    public java.awt.Point getPopupLocation(java.awt.event.MouseEvent event) { return null; }
+    /** The tip ToolTipManager shows for this component; override to customize it. */
+    public JToolTip createToolTip() {
+        JToolTip tip = new JToolTip();
+        tip.setComponent(this);
+        return tip;
+    }
 
     // Sizing is inherited from Component — JComponent used to keep parallel `preferred` /
     // `minimum` / `maximum` fields, but that made `isPreferredSizeSet()` (which reads
