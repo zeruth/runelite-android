@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Files java.awt.Desktop.open/edit/print may hand to another app: user.home is filesDir,
+     java.io.tmpdir is cacheDir. Granted per intent only, never exported. -->
+<paths>
+    <files-path name="home" path="." />
+    <cache-path name="tmp" path="." />
+</paths>
