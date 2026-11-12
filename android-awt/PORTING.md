@@ -208,23 +208,46 @@ checklist accounts for.
 
 Not every JDK 9+ gap is a shadow class. Where the injected game client calls a `java.*` member
 that `android.jar` lacks or that misbehaves on ART, and the owning class is one Android already
-defines (so it cannot be shadowed, section 4), the on-device client preparation
-(`android/src/androidMain/kotlin/net/runelite/mp/client/ClientTransforms.kt`, run in order by
-`ClientPreparer.build`) rewrites the call site to a static helper in
-`android/src/androidMain/kotlin/net/runelite/mp/util`. These rewrites apply to the downloaded
-client jar only; hub plugins go through `PluginDexer` (`PluginClassTransform`, then D8, section
-11) and see none of them. Each row
-is one rewrite; a retargeting table in the dexer replaces them row by row.
+defines (so it cannot be shadowed, section 4), the call site is rewritten to a static shim.
+
+**Member retargets** are one table, `JdkRetargets`
+(`android/src/androidMain/java/net/runelite/mp/compat/jdk`), applied by one ASM pass,
+`net.runelite.mp.compat.JdkRetargeter`, to both the injected client (`DesugarApisTask` in
+`ClientTransforms.kt`) and every hub jar (`PluginClassTransform`, ahead of `IndyLowering` and
+`PluginDexer`'s D8). A row is (owner, name,
+descriptor, dispatch) to a static shim in `net.runelite.mp.compat.jdk`; an instance call becomes a
+static call with the receiver first, so the operand stack is unchanged, and method handles
+(method references) are retargeted the same way. Types the table relocates (`Runtime$Version` to
+`RuntimeVersion`) are renamed in the whole class. Hub jars additionally move `java.util.regex` to
+the desktop engine (`net.runelite.mp.compat.regex`, which has the JDK 9 `Matcher` members itself,
+so the table's `Matcher` rows apply to the client only) and route the `String` regex methods
+through `DesktopRegexStrings`. The rows are the `retarget` disposition of `docs/jdk-api-gaps.json`
+plus the JDK 11 `String` members; every other gap there is left to D8 backports and
+desugar_jdk_libs. Adding a row: write the shim against JDK 8 (the shims are compiled with
+`--release 8` by `tools-src/run-runtime-contracts.py`), add a case to
+`tools-src/TestJdkShimContracts.java` comparing it with the JDK member, and bump `FORMAT` in
+`PluginDexer` and `TRANSFORM_VERSION` in `ClientPreparer` so cached conversions are redone. The
+`jdkRetargetCheck` task in `android/build.gradle.kts` fails the build when android-awt or the app
+itself calls a row's member, since nothing retargets their bytecode.
+
+| Row (JDK member) | Shim | Why |
+|---|---|---|
+| `String.repeat/strip/stripLeading/stripTrailing/isBlank/lines` | `JdkStrings` | JDK 11; the table pins the JDK's semantics whatever D8's backports or libcore do |
+| `Files.readString` ×2, `Files.writeString` ×2 | `JdkFiles` | JDK 11; Android has them from API 36.1, desugar_jdk_libs not at all |
+| `Runtime.version()` and the type `Runtime$Version` | `JdkRuntime`, `RuntimeVersion` | JDK 9; absent on ART. ART answers feature 8 |
+| `ConcurrentHashMap.keySet()KeySetView` | `JdkConcurrent` | android.jar keeps the Java 7 `keySet()Set` descriptor |
+| `Matcher.appendReplacement/appendTail(StringBuilder)`, `replaceAll/replaceFirst(Function)`, `results()` | `JdkRegex` | JDK 9, API 34 (client only) |
+| `MethodHandles.privateLookupIn` | `JdkInvoke` | JDK 9, API 33; built reflectively |
+| `ProcessHandle$Info.command()` (receiver as `Object`) | `JdkProcess` | the command goes into the login packet; cut at a NUL. The `java.lang.ProcessHandle` shadow already answers the NUL-free `/proc/self/exe`, so the row is a guard |
+
+The other rewrites are not member retargets and stay in `ClientTransforms.kt`, client jar only:
 
 | Shim member | Pass (`ClientTransforms.kt`) | Bytecode matched | Rewritten to | Why |
 |---|---|---|---|---|
 | `IndyConcat.concat(String, Object[], Object[]) String` | `DesugarStringConcatTask` (`ConcatRewriter.visitInvokeDynamicInsn`) | `INVOKEDYNAMIC` with bootstrap `StringConcatFactory.makeConcatWithConstants` | arguments spilled to locals and boxed into `Object[]`, `LDC` recipe, bootstrap constants into `Object[]` (a `ConstantDynamic` over `ConstantBootstraps.invoke` + `H_INVOKESTATIC` becomes the direct static call), then `INVOKESTATIC IndyConcat.concat` | D8 rejects const-dynamic (`UnsupportedFeature(const-dynamic)`), and the client's concat constants are CONDYs; a `toString()` placeholder would leak a NUL into the login packet |
-| `IndyConcat.replaceAllJava8(Matcher, Function) String` | `DesugarApisTask` | `INVOKEVIRTUAL java/util/regex/Matcher.replaceAll(Ljava/util/function/Function;)Ljava/lang/String;` | `INVOKESTATIC IndyConcat.replaceAllJava8(Ljava/util/regex/Matcher;Ljava/util/function/Function;)Ljava/lang/String;` (receiver becomes the first argument) | `Matcher.replaceAll(Function)` (JDK 9) is absent from `android.jar` at minSdk 26 |
-| `IndyConcat.privateLookupInJava8(Class, Lookup) Lookup` | `DesugarApisTask` | `INVOKESTATIC java/lang/invoke/MethodHandles.privateLookupIn(Ljava/lang/Class;Ljava/lang/invoke/MethodHandles$Lookup;)…Lookup;` | `INVOKESTATIC IndyConcat.privateLookupInJava8` with the same descriptor | `MethodHandles.privateLookupIn` (JDK 9) is absent at minSdk 26; the shim builds the lookup reflectively |
-| `StringShim.stripNul(String) String` | `DesugarLambdasTask` (first pass collects, `rewriteClass` patches) | every method with descriptor `(Ljava/lang/String;I)V` whose body calls `String.indexOf(I)I` and does `NEW java/lang/IllegalArgumentException` (the client's NUL-terminated string writer, `xi.cq`) | prologue `ALOAD 1; INVOKESTATIC StringShim.stripNul; ASTORE 1` at method entry | the writer throws on a NUL; any NUL an Android API slips into the machine-info packet would crash login with "error_game_crash" |
+| `JdkStrings.stripNul(String) String` | `DesugarLambdasTask` (first pass collects, `rewriteClass` patches) | every method with descriptor `(Ljava/lang/String;I)V` whose body calls `String.indexOf(I)I` and does `NEW java/lang/IllegalArgumentException` (the client's NUL-terminated string writer, `xi.cq`) | prologue `ALOAD 1; INVOKESTATIC JdkStrings.stripNul; ASTORE 1` at method entry | the writer throws on a NUL; any NUL an Android API slips into the machine-info packet would crash login with "error_game_crash" |
 | `UnsafeShim.<constant>` fields | `DesugarLambdasTask` (`LambdaRewriter.visitFieldInsn`) | `GETSTATIC sun/misc/Unsafe.{ADDRESS_SIZE, INVALID_FIELD_OFFSET, ARRAY_*_BASE_OFFSET, ARRAY_*_INDEX_SCALE}` | `GETSTATIC UnsafeShim.<same name and descriptor>` (seeded from a live `Unsafe` in `<clinit>`) | ART's `sun.misc.Unsafe` lacks the static constants |
 | `UnsafeShim` off-heap methods | `DesugarLambdasTask` (`LambdaRewriter.visitMethodInsn`) | `INVOKEVIRTUAL sun/misc/Unsafe` `allocateMemory(J)J`, `reallocateMemory(JJ)J`, `freeMemory(J)V`, `setMemory(JJB)V` / `(Ljava/lang/Object;JJB)V`, `copyMemory(JJJ)V` / `(Ljava/lang/Object;JLjava/lang/Object;JJ)V`, `get/put{Byte,Short,Char,Int,Long,Float,Double}(J…)` | arguments spilled to locals, `POP` of the `Unsafe` receiver, arguments reloaded, `INVOKESTATIC UnsafeShim.<same name and descriptor>` | the off-heap members are hidden API on API 30+; the shim emulates off-heap memory with synthetic addresses into `ByteBuffer`s. Heap-array forms stay on ART's `Unsafe` |
-| `ProcessHandleShim.sanitizedCommand(Object) Optional` | `DesugarLambdasTask` (`LambdaRewriter.visitMethodInsn`) | `INVOKEINTERFACE java/lang/ProcessHandle$Info.command()Ljava/util/Optional;` | `INVOKESTATIC ProcessHandleShim.sanitizedCommand(Ljava/lang/Object;)Ljava/util/Optional;` (the receiver passes as `Object`) | the command goes into the login packet; the shim cuts it at a NUL. The `java.lang.ProcessHandle` shadow in this module (the one `java.lang` class shadowed, `shadowClasses` in `build.gradle.kts`) already answers the NUL-free `/proc/self/exe` path, so the row is a guard and can fold into the table as "keep, no retarget" |
 
 `DesugarLambdasTask` itself (every `LambdaMetafactory.metafactory` indy becomes a generated
 `runelite/desugar/LambdaN` class, impl methods and their types widened to public) is a language
@@ -236,8 +259,8 @@ ART at API 26 has `invoke-custom` but none of the JDK bootstrap classes, and no
 `const-method-handle` before API 28, so every bootstrap must be gone before the dex reaches the
 device: either D8 9.5 (`--min-api 26`) desugars it, or an ASM pass lowers it first. The client jar
 goes through `ClientTransforms.kt` before its D8; a hub jar goes through `PluginClassTransform`
-(`android/src/androidMain/java/net/runelite/mp/plugins`, desktop regex relocation then
-`IndyLowering`) before `PluginDexer`'s D8. `python tools-src/indy-inventory.py` lists the kinds
+(`android/src/androidMain/java/net/runelite/mp/plugins`, `JdkRetargeter` with the desktop regex
+relocation, section 10, then `IndyLowering`) before `PluginDexer`'s D8. `python tools-src/indy-inventory.py` lists the kinds
 and their call-site counts in `build/hub-cache` (filled by `hub-compat-scan.py`) and the injected
 client (`data/`, else `net.runelite:injected-client` at `project.build.version` in the Gradle
 cache); a kind it prints that is not a row here needs a row and a fixture.

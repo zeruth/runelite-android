@@ -1102,15 +1102,33 @@ D8_BACKPORTS = {
     'java/lang/Record': None,
 }
 
-# The app's own retargeting shims: (owner or package prefix ending in '/', member name or
-# None for all, what rewrites it). StringShim only strips NULs at the client's string
-# writer and stands in for no JDK member, so it has no row.
+# The app's own retargeting layer: (owner or package prefix ending in '/', member name or
+# None for all, what rewrites it). JdkRetargeter applies the JdkRetargets table to the
+# injected client (ClientTransforms) and to hub jars (PluginDexer); the regex relocation is
+# hub-only. Specific rows come before the package-wide regex row so they win the lookup.
+_RETARGET = 'JdkRetargeter -> net.runelite.mp.compat.jdk.'
 SHIMS = [
-    ('java/util/regex/', None, 'DesktopRegexTransformer -> net.runelite.mp.compat.regex (hub jars)'),
-    ('java/lang/String', 'splitWithDelimiters', 'DesktopRegexTransformer -> DesktopRegexStrings (hub jars)'),
-    ('java/util/regex/Matcher', 'replaceAll', 'DesugarApisTask -> IndyConcat.replaceAllJava8 (client)'),
-    ('java/lang/invoke/MethodHandles', 'privateLookupIn', 'DesugarApisTask -> IndyConcat.privateLookupInJava8 (client)'),
-    ('java/lang/ProcessHandle$Info', 'command', 'ClientTransforms -> ProcessHandleShim.sanitizedCommand (client)'),
+    ('java/lang/String', 'splitWithDelimiters', 'JdkRetargeter -> DesktopRegexStrings (hub jars)'),
+    ('java/lang/String', 'repeat', _RETARGET + 'JdkStrings (client + hub jars)'),
+    ('java/lang/String', 'strip', _RETARGET + 'JdkStrings (client + hub jars)'),
+    ('java/lang/String', 'stripLeading', _RETARGET + 'JdkStrings (client + hub jars)'),
+    ('java/lang/String', 'stripTrailing', _RETARGET + 'JdkStrings (client + hub jars)'),
+    ('java/lang/String', 'isBlank', _RETARGET + 'JdkStrings (client + hub jars)'),
+    ('java/lang/String', 'lines', _RETARGET + 'JdkStrings (client + hub jars)'),
+    ('java/nio/file/Files', 'readString', _RETARGET + 'JdkFiles (client + hub jars)'),
+    ('java/nio/file/Files', 'writeString', _RETARGET + 'JdkFiles (client + hub jars)'),
+    ('java/lang/Runtime', 'version', _RETARGET + 'JdkRuntime (client + hub jars)'),
+    ('java/lang/Runtime$Version', None, 'JdkRetargeter relocates to net.runelite.mp.compat.jdk.RuntimeVersion (client + hub jars)'),
+    # android.jar declares keySet()Set, and ART adds the KeySetView overload only from API 29
+    # (@CovariantReturnType presentAfter = 28), so a desktop-compiled call fails on API 26-28.
+    ('java/util/concurrent/ConcurrentHashMap', 'keySet', _RETARGET + 'JdkConcurrent (client + hub jars)'),
+    ('java/lang/invoke/MethodHandles', 'privateLookupIn', _RETARGET + 'JdkInvoke (client + hub jars)'),
+    ('java/lang/ProcessHandle$Info', 'command', _RETARGET + 'JdkProcess (client + hub jars)'),
+] + [
+    ('java/util/regex/Matcher', member, _RETARGET + 'JdkRegex (client); hub jars relocate to net.runelite.mp.compat.regex')
+    for member in ('appendReplacement', 'appendTail', 'replaceAll', 'replaceFirst', 'results')
+] + [
+    ('java/util/regex/', None, 'JdkRetargeter -> net.runelite.mp.compat.regex (hub jars)'),
 ]
 
 # Members no static helper can stand in for on ART, whatever the API level.
@@ -1134,20 +1152,10 @@ UNSUPPORTED = [
     ('javax/annotation/processing/', None, 'compiler API: not in ART'),
 ]
 
-# Retargets the on-device dexer still needs (#91's table-driven layer): members neither
-# desugar_jdk_libs 2.1 nor an existing shim covers, with the static helper each is planned
-# to rewrite to. Files.readString/writeString are outside desugar_jdk_libs' nio rewrite
-# (it backs Files with the platform's, which gained them at 36.1).
-PLANNED_RETARGETS = [
-    ('java/nio/file/Files', 'readString', 'planned (#91): Files.readAllBytes + new String(bytes, charset), UTF-8 default'),
-    ('java/nio/file/Files', 'writeString', 'planned (#91): Files.write(path, s.getBytes(charset), options), UTF-8 default'),
-    ('java/lang/Runtime', 'version', 'planned (#91): static helper answering a Runtime$Version shadow that parses java.specification.version'),
-    ('java/lang/Runtime$Version', None, 'planned (#91): android-awt shadow class over java.specification.version'),
-    # Not a stub gap but a runtime one: android.jar declares keySet()Set, and ART adds the
-    # KeySetView overload only from API 29 (@CovariantReturnType presentAfter = 28), so a
-    # call compiled on a desktop JDK fails with NoSuchMethodError on API 26-28.
-    ('java/util/concurrent/ConcurrentHashMap', 'keySet', 'planned (#91): keySet()Ljava/util/Set; + checkcast ConcurrentHashMap$KeySetView'),
-]
+# Retargets the on-device dexer still needs: members neither desugar_jdk_libs 2.1 nor the
+# JdkRetargets table covers, with the static helper each is planned to rewrite to. Empty
+# since #93 folded the planned rows into the table (SHIMS above).
+PLANNED_RETARGETS = []
 
 
 def _owner_matches(owner, pattern):
@@ -1513,12 +1521,14 @@ class JdkGapClassifier(object):
         def done(disposition, via):
             return {'disposition': disposition, 'via': via, 'androidSince': since}
 
+        # A table row wins over D8: JdkRetargeter rewrites the call before D8 ever sees it,
+        # so the shim is what runs (String.repeat/strip/isBlank pin the JDK semantics).
+        if shim:
+            return done('retarget', shim)
         via = self.desugar.covers(kind, owner, name, desc, self.ancestors(owner)) if self.desugar else None
         via = via or d8_backport(kind, owner, name, desc)
         if via:
             return done('desugar', via)
-        if shim:
-            return done('retarget', shim)
         if self._present(self.device, kind, owner, name, desc):
             return done('already-on-device-API', 'android API %s' % (since if since is not None else '<= %d' % self.device_level()))
         why = _table_lookup(UNSUPPORTED, owner, name)
@@ -1842,7 +1852,7 @@ def jdk_gaps_main(args):
             'floor': floor_short,
             'device': device_short,
             'desugar': desugar.identifier,
-            'shims': 'DesktopRegexTransformer, DesugarApisTask (IndyConcat), ProcessHandleShim; StringShim covers no JDK member',
+            'shims': 'JdkRetargeter over the JdkRetargets table (net.runelite.mp.compat.jdk), regex relocation for hub jars',
         },
     }
     report = build_jdk_gaps(results, classifier, counts, meta)
