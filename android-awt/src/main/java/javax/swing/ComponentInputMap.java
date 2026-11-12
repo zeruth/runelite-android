@@ -116,6 +116,4 @@ public class ComponentInputMap extends InputMap {
             getComponent().componentInputMapChanged(this);
         }
     }
-=======
->>>>>>> up
 }
