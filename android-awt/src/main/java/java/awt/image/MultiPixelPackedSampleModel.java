@@ -56,9 +56,19 @@ public class MultiPixelPackedSampleModel extends SampleModel {
     public int getTransferType() { return bits <= 8 ? DataBuffer.TYPE_BYTE : bits <= 16 ? DataBuffer.TYPE_USHORT : DataBuffer.TYPE_INT; }
     public int getSampleSize(int band) { if (band != 0) throw new ArrayIndexOutOfBoundsException(band); return bits; }
     public int[] getSampleSize() { return new int[]{bits}; }
-    public int[] getSampleSize(int band, int[] out) { if (out == null) out = new int[1]; out[0] = getSampleSize(band); return out; }
-    public int getSample(int x, int y, int band, DataBuffer data) { return data.getElem(getOffset(x, y)) >>> (elementBits - getBitOffset(x) - bits) & mask; }
+    private void checkPixel(int x, int y) {
+        if (x < 0 || y < 0 || x >= width || y >= height) throw new ArrayIndexOutOfBoundsException("Coordinate out of bounds!");
+    }
+    public Object getDataElements(int x, int y, Object obj, DataBuffer data) {
+        Object result = transferArray(obj, 1);
+        transferSet(result, 0, getSample(x, y, 0, data));
+        return result;
+    }
+    public void setDataElements(int x, int y, Object obj, DataBuffer data) { setSample(x, y, 0, transferGet(obj, 0), data); }
+    public int getSample(int x, int y, int band, DataBuffer data) { checkPixel(x, y); if (band != 0) throw new ArrayIndexOutOfBoundsException("Invalid band"); return data.getElem(getOffset(x, y)) >>> (elementBits - getBitOffset(x) - bits) & mask; }
     public void setSample(int x, int y, int band, int value, DataBuffer data) {
+        checkPixel(x, y);
+        if (band != 0) throw new ArrayIndexOutOfBoundsException("Invalid band");
         int offset = getOffset(x, y), shift = elementBits - getBitOffset(x) - bits;
         data.setElem(offset, data.getElem(offset) & ~(mask << shift) | (value & mask) << shift);
     }
