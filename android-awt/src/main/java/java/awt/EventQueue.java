@@ -107,15 +107,24 @@ public class EventQueue {
         return null;
     }
 
+    /**
+     * Legacy rule, selected with {@code -Dnet.runelite.awt.edtByName=true} (see PORTING.md):
+     * any thread whose name starts with "AWT-Invoke" counts as the EDT, which device probes
+     * use to impersonate it. The default is the JDK's: only the one dispatch thread.
+     */
+    private static final boolean EDT_BY_NAME = Boolean.getBoolean("net.runelite.awt.edtByName");
+    private static volatile Thread dispatchThread;
+
     public static boolean isDispatchThread() {
-        // Treat only our synthetic AWT-Invoke* workers as the EDT. Returning true
-        // unconditionally would make every thread look like the EDT to RuneLite's
-        // HTTP interceptor (RuneLiteModule.provideHttpClient), which rejects blocking
-        // calls from the EDT — that breaks jav_config loading, world fetch, item
-        // prices, session ping, etc., and downstream causes login to use stale/wrong
-        // config (manifesting as "RuneScape has been updated" at login).
-        String name = Thread.currentThread().getName();
-        return name != null && name.startsWith("AWT-Invoke");
+        // Never answer true for other threads: RuneLite's HTTP interceptor
+        // (RuneLiteModule.provideHttpClient) rejects blocking calls from the EDT, so a
+        // too-wide answer breaks jav_config loading, world fetch and login.
+        Thread current = Thread.currentThread();
+        if (EDT_BY_NAME) {
+            String name = current.getName();
+            return name != null && name.startsWith("AWT-Invoke");
+        }
+        return current == dispatchThread;
     }
 
     /**
@@ -131,9 +140,10 @@ public class EventQueue {
      * invokeLater — so honoring that contract with one serial thread is both correct and
      * the real fix.</p>
      *
-     * <p>Named "AWT-InvokeLater" so {@link #isDispatchThread()} (prefix match on
-     * "AWT-Invoke") still recognizes it. Single-thread executor replaces the worker if it
-     * ever dies, but {@link #runGuarded} catches throwables per-task so it shouldn't.</p>
+     * <p>The factory records the worker as {@code dispatchThread}, which is what
+     * {@link #isDispatchThread()} compares against (it keeps the "AWT-InvokeLater" name for
+     * the legacy by-name rule). Single-thread executor replaces the worker if it ever dies,
+     * but {@link #runGuarded} catches throwables per-task so it shouldn't.</p>
      */
     private static final Thread.UncaughtExceptionHandler EDT_UEH =
         new Thread.UncaughtExceptionHandler() {
@@ -148,6 +158,7 @@ public class EventQueue {
             new java.util.concurrent.LinkedBlockingQueue<Runnable>(), r -> {
             Thread t = new Thread(r, "AWT-InvokeLater");
             t.setUncaughtExceptionHandler(EDT_UEH);
+            dispatchThread = t;
             return t;
         });
 
@@ -207,23 +218,40 @@ public class EventQueue {
         EDT.execute(() -> runGuarded(() -> dispatchActive(event)));
     }
 
-    public static void invokeAndWait(Runnable r) throws InterruptedException {
+    /**
+     * As in the JDK, a throwable from {@code r} reaches the caller wrapped in an
+     * {@link java.lang.reflect.InvocationTargetException} instead of the EDT's handler.
+     * Deliberate divergence: on the EDT the JDK throws an Error; here {@code r} runs
+     * inline, since host bridges call it from code that can already be on the EDT and the
+     * Error would kill the task it was called from.
+     */
+    public static void invokeAndWait(Runnable r) throws InterruptedException, java.lang.reflect.InvocationTargetException {
         if (r == null) return;
-        java.awt.event.InvocationEvent event = new java.awt.event.InvocationEvent(Toolkit.getDefaultToolkit(), r);
-        // Already on the EDT — run inline so we don't deadlock waiting on ourselves.
-        if (isDispatchThread()) {
-            runGuarded(() -> dispatchActive(event));
-            return;
-        }
-        java.util.concurrent.CountDownLatch done = new java.util.concurrent.CountDownLatch(1);
-        EDT.execute(() -> {
+        final Throwable[] failure = new Throwable[1];
+        Runnable capturing = () -> {
             try {
-                runGuarded(() -> dispatchActive(event));
-            } finally {
-                done.countDown();
+                r.run();
+            } catch (Throwable t) {
+                failure[0] = t;
             }
-        });
-        done.await();
+        };
+        // The task is the current InvocationEvent while it runs, as on the JDK.
+        java.awt.event.InvocationEvent event = new java.awt.event.InvocationEvent(Toolkit.getDefaultToolkit(), capturing);
+        Runnable dispatching = () -> dispatchActive(event);
+        if (isDispatchThread()) {
+            runGuarded(dispatching);
+        } else {
+            java.util.concurrent.CountDownLatch done = new java.util.concurrent.CountDownLatch(1);
+            EDT.execute(() -> {
+                try {
+                    runGuarded(dispatching);
+                } finally {
+                    done.countDown();
+                }
+            });
+            done.await();
+        }
+        if (failure[0] != null) throw new java.lang.reflect.InvocationTargetException(failure[0]);
     }
 
     private static void dispatchActive(ActiveEvent event) {
