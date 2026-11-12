@@ -721,6 +721,35 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
         return inputMethodsEnabled && getInputMethodRequests() != null;
     }
 
+    private java.awt.dnd.DropTarget dropTarget;
+
+    /**
+     * Associate a {@code DropTarget} with this component, as the JDK does: the old
+     * target is detached and the new one is made reachable by the in-process drag.
+     */
+    public synchronized void setDropTarget(java.awt.dnd.DropTarget dt) {
+        if (dt == dropTarget || (dropTarget != null && dropTarget.equals(dt))) return;
+        java.awt.dnd.DropTarget old;
+        if ((old = dropTarget) != null) {
+            dropTarget.removeNotify();
+            java.awt.dnd.DropTarget t = dropTarget;
+            dropTarget = null;
+            try { t.setComponent(null); } catch (IllegalArgumentException iae) { /* the JDK ignores it too */ }
+        }
+        if ((dropTarget = dt) != null) {
+            try {
+                dropTarget.setComponent(this);
+                dropTarget.addNotify();
+            } catch (IllegalArgumentException iae) {
+                if (old != null) {
+                    try { old.setComponent(this); old.addNotify(); } catch (IllegalArgumentException iae1) { /* as the JDK */ }
+                }
+            }
+        }
+    }
+
+    public synchronized java.awt.dnd.DropTarget getDropTarget() { return dropTarget; }
+
     private String name = "";
     public String getName() { return name; }
     public void setName(String name) { String old = this.name; this.name = name; firePropertyChange("name", old, name); }
