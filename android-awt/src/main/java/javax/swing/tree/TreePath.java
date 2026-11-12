@@ -26,6 +26,7 @@
 package javax.swing.tree;
 
 import java.io.*;
+import java.beans.ConstructorProperties;
 
 /**
  * {@code TreePath} represents an array of objects that uniquely
@@ -96,7 +97,7 @@ public class TreePath implements Serializable {
      * @throws IllegalArgumentException if {@code path} is {@code null},
      *         empty, or contains a {@code null} value
      */
-
+    @ConstructorProperties({"path"})
     public TreePath(Object[] path) {
         if(path == null || path.length == 0)
             throw new IllegalArgumentException("path in TreePath must be non null and not empty.");
