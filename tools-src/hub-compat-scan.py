@@ -53,8 +53,9 @@ USER_AGENT = 'runelite-android hub-compat-scan'
 
 # Host-provided libraries: group, artifact. The first block is what android/build.gradle.kts
 # names for plugins; the second is runelite-client's runtime dependencies that the APK ships
-# anyway (and R8 keeps for externals). Versions resolve from the gradle cache, newest first
-# unless android/build.gradle.kts pins one inline.
+# anyway (and R8 keeps for externals). Versions are the ones the APK resolves: an inline pin
+# in android/build.gradle.kts, else libs.versions.toml, else the newest in the gradle cache
+# (which also holds the build tooling's okio 3 / slf4j 2, not what the APK ships).
 DEFAULT_LIBS = [
     ('com.google.guava', 'guava'),
     ('com.google.guava', 'failureaccess'),
@@ -74,6 +75,10 @@ DEFAULT_LIBS = [
     ('org.apache.commons', 'commons-lang3'),
     ('org.apache.commons', 'commons-text'),
     ('net.sf.jopt-simple', 'jopt-simple'),
+    ('com.google.protobuf', 'protobuf-javalite'),
+    ('net.runelite', 'discord'),
+    ('ch.qos.logback', 'logback-classic'),
+    ('ch.qos.logback', 'logback-core'),
 ]
 
 # Invokedynamic bootstraps D8 desugars away; android.jar has no such classes, the dex
@@ -374,15 +379,61 @@ def scan_jar_classes(classes):
     return dict((c.name, c) for c in classes)
 
 
+def live_plugin_classes(surface, overlay):
+    """Names of the plugin's classes that can load. Parent-first, a class the host also
+    provides loads from the host, so the plugin's copy never does. A plugin-only nested
+    class of such a class (a shaded library's Outer$1, an access$NNN tag class, a nested
+    class an older library version had) is only named by its shadowed outer and siblings,
+    so it never loads either unless some live class names it. The same holds for a
+    plugin-only top-level class of a package the plugin shades from a host library (some
+    class of that package in the jar is also on the host): a newer library version's extra
+    class is named by the library's own classes, which the host shadows. The plugin's own
+    code is the root set; anything it names, transitively, is live. net/runelite packages
+    are never treated as shaded, since plugin classes are loaded by name from there."""
+    def package(name):
+        return name.rsplit('/', 1)[0] if '/' in name else ''
+
+    shaded_packages = set(package(n) for n in overlay
+                          if n in surface and not n.startswith('net/runelite/'))
+
+    def shadowed(name):
+        if '$' in name and name.split('$', 1)[0] in surface:
+            return True
+        return package(name) in shaded_packages
+
+    live = set()
+    stack = [n for n in overlay if n not in surface and not shadowed(n)]
+    while stack:
+        n = stack.pop()
+        if n in live:
+            continue
+        live.add(n)
+        c = overlay[n]
+        named = set(c.class_refs)
+        named.update(owner for _, owner, _, _ in c.member_refs)
+        stack.extend(r for r in named if r in overlay and r not in surface and r not in live)
+    return live
+
+
 def unresolved_references(surface, classes):
     """Resolve every reference of the given plugin classes. Returns
     {(kind, owner, name, desc): referencing-class-count} where kind is 'class',
     'field' or 'method'; 'ownerMissing' is folded into the kind for members whose
-    owner class is absent altogether ('field!' / 'method!')."""
+    owner class is absent altogether ('field!' / 'method!').
+
+    Only classes that can load are scanned (live_plugin_classes): the synthetic accessors
+    (access$NNN, a nestmate's private-constructor <init>) that a shaded library's nested
+    classes call on their host-shadowed outer class never link. Between classes only the
+    plugin defines they resolve through the overlay. A live plugin class that calls one on
+    a host-provided class links against the host copy, which may lack it: that stays
+    unresolved as a real break."""
     overlay = scan_jar_classes(classes)
     resolver = Resolver(surface, overlay)
+    live = live_plugin_classes(surface, overlay)
     out = {}
     for c in classes:
+        if c.name not in live:
+            continue
         for ref in c.class_refs:
             if not resolver.has_class(ref):
                 key = ('class', ref, '', '')
@@ -652,9 +703,41 @@ def find_module_jar(module, prefix, root=ROOT):
     return _newest(libs, r'^%s-(.+)\.jar$' % re.escape(prefix))
 
 
-def pinned_lib_versions():
-    """Versions android/build.gradle.kts states inline ("group:artifact:version")."""
+def catalog_lib_versions(path=None):
+    """[libraries] versions of libs.versions.toml, inline or through version.ref."""
+    path = path or os.path.join(ROOT, 'libs.versions.toml')
     pins = {}
+    if not os.path.exists(path):
+        return pins
+    versions = {}
+    section = None
+    with open(path, encoding='utf8') as fh:
+        for line in fh:
+            line = line.split('#', 1)[0].strip()
+            if line.startswith('['):
+                section = line
+                continue
+            m = re.match(r'([\w.\-]+)\s*=\s*(.+)$', line)
+            if not m:
+                continue
+            key, value = m.group(1), m.group(2).strip()
+            if section == '[versions]':
+                versions[key] = value.strip('"')
+            elif section == '[libraries]':
+                inline = re.match(r'"([\w.\-]+):([\w.\-]+):([\w.\-]+)"', value)
+                module = re.search(r'module\s*=\s*"([\w.\-]+):([\w.\-]+)"', value)
+                ref = re.search(r'version\.ref\s*=\s*"([\w.\-]+)"', value)
+                if inline:
+                    pins[(inline.group(1), inline.group(2))] = inline.group(3)
+                elif module and ref and ref.group(1) in versions:
+                    pins[(module.group(1), module.group(2))] = versions[ref.group(1)]
+    return pins
+
+
+def pinned_lib_versions():
+    """Versions the APK resolves: the catalog, overridden by what android/build.gradle.kts
+    states inline ("group:artifact:version")."""
+    pins = catalog_lib_versions()
     with open(os.path.join(ROOT, 'android', 'build.gradle.kts'), encoding='utf8') as fh:
         for g, a, v in re.findall(r'"([\w.\-]+):([\w.\-]+):([\w.\-]+)"', fh.read()):
             pins[(g, a)] = v
@@ -674,11 +757,53 @@ def find_gradle_lib(group, artifact, version=None, gradle_home=None):
     return _newest(hits, r'^%s-(.+)\.jar$' % re.escape(artifact))
 
 
-def default_libs():
+DEFAULT_DEPENDENCY_REPORT = os.path.join(ROOT, 'build', 'hub-compat', 'releaseRuntimeClasspath.txt')
+
+_DEP_LINE = re.compile(r'[+\\]--- ([\w.\-]+):([\w.\-]+)(?::([\w.\-]+))?(?: -> ([\w.\-]+))?')
+
+
+def dependency_report_versions(path):
+    """Resolved versions from `gradlew :android:dependencies --configuration
+    releaseRuntimeClasspath` output: the version after '->' when conflict resolution or a
+    force moved it, else the requested one. Lines without any version are skipped."""
+    out = {}
+    with open(path, encoding='utf8', errors='replace') as fh:
+        for line in fh:
+            m = _DEP_LINE.search(line)
+            if m and (m.group(4) or m.group(3)):
+                out[(m.group(1), m.group(2))] = m.group(4) or m.group(3)
+    return out
+
+
+def _has_classes(jar):
+    if not jar:
+        return False
+    try:
+        with zipfile.ZipFile(jar) as archive:
+            return any(n.endswith('.class') for n in archive.namelist())
+    except (OSError, zipfile.BadZipFile):
+        return False
+
+
+def default_libs(dependency_report=None):
+    """Host library jars at the versions the APK ships: the dependency report when given,
+    else the pins of pinned_lib_versions(), else the newest in the gradle cache."""
     pins = pinned_lib_versions()
+    if dependency_report:
+        pins.update(dependency_report_versions(dependency_report))
     out = []
     for group, artifact in DEFAULT_LIBS:
-        p = find_gradle_lib(group, artifact, pins.get((group, artifact))) or find_gradle_lib(group, artifact)
+        version = pins.get((group, artifact))
+        # Kotlin multiplatform libraries (okio 3) publish a metadata-only root artifact and
+        # put the JVM classes in <artifact>-jvm at the same version, so -jvm comes first and
+        # a jar without classes never stands in for the library.
+        p = None
+        if version:
+            p = next((c for c in (find_gradle_lib(group, artifact + '-jvm', version),
+                                  find_gradle_lib(group, artifact, version)) if _has_classes(c)), None)
+        if p is None:
+            p = find_gradle_lib(group, artifact)
+            p = p if _has_classes(p) else None
         if p:
             out.append(p)
         else:
@@ -875,6 +1000,8 @@ def render_markdown(report, top_plugins=5, max_per_owner=60):
         w('- `%s`' % s)
     w('')
     w('An unresolved signature is a class, field or method a plugin references that none of the host sources (nor the plugin jar itself) defines. `installs` sums the install counts of the plugins referencing it; a signature marked *(class missing)* has no owner class at all.')
+    w('')
+    w('Classes a plugin shades that the host also provides are not scanned: the plugin loader is parent-first, so the host copy loads and the shaded copy never links. Nor are the plugin-only nested classes of such a class (`Outer$1`, accessor tag classes) or the plugin-only classes of a package it shades from a host library, unless a loadable plugin class names them, so their synthetic accessor calls (`access$NNN`, nestmate `<init>`) are not listed; a loadable class that calls one on a host-provided class is listed, because it links against the host copy.')
     w('')
     w('## Buckets')
     w('')
@@ -1771,6 +1898,10 @@ def build_parser():
     ap.add_argument('--api-jar', help='runelite-api jar (default: newest in runelite-api/build/libs)')
     ap.add_argument('--lib', action='append', default=[], help='extra host jar or class directory (repeatable)')
     ap.add_argument('--no-default-libs', action='store_true', help='skip the gradle-cache library lookup')
+    ap.add_argument('--dependency-report',
+                    help='output of `gradlew :android:dependencies --configuration releaseRuntimeClasspath`; '
+                         'host library versions come from it instead of the build-script pins '
+                         '(default: build/hub-compat/releaseRuntimeClasspath.txt when present)')
     jdk = ap.add_argument_group('--jdk-gaps')
     jdk.add_argument('--jdk-gaps', action='store_true', help='audit JDK 9-21 java.*/javax.* members instead of the host surface')
     jdk.add_argument('--min-api', type=int, help='floor API level (default: minSdk of android/build.gradle.kts)')
@@ -1802,7 +1933,15 @@ def resolve_sources(args):
     add('android app classes', args.app_classes or find_app_classes(), required=False)
     libs = list(args.lib)
     if not args.no_default_libs:
-        libs += default_libs()
+        report = args.dependency_report
+        if not report and os.path.exists(DEFAULT_DEPENDENCY_REPORT):
+            report = DEFAULT_DEPENDENCY_REPORT
+        if not report:
+            # Without it okio has no pin (the APK ships whatever DataStore raises it to),
+            # so the scan would describe a jar the APK may not ship.
+            sys.stderr.write('warning: no dependency report (%s); host library versions come from '
+                             'the build-script pins and the gradle cache\n' % DEFAULT_DEPENDENCY_REPORT)
+        libs += default_libs(report)
     for lib in libs:
         add(lib, lib)
     return sources

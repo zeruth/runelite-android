@@ -274,6 +274,79 @@ class ResolutionTest(SurfaceFixture):
         got = scan.unresolved_references(self.surface, classes)
         self.assertEqual(set(got), {('method', 'java/awt/Container', 'removeAll', '()V')})
 
+    def test_shaded_copy_of_host_class_is_not_scanned(self):
+        # The host's java/awt/Container loads instead, so what the shaded copy calls never links.
+        shaded = ClassWriter('java/awt/Container', superclass='java/awt/Component')
+        shaded.method_ref('java/awt/Component', 'invalidateTree', '()V')
+        shaded.klass('java/awt/peer/ContainerPeer')
+        got = scan.unresolved_references(self.surface, [scan.parse_class(shaded.build())])
+        self.assertEqual(got, {})
+
+    def test_synthetic_accessors_between_plugin_only_classes_resolve(self):
+        # Outer and nestmate both exist only in the plugin jar: they link to each other.
+        outer = ClassWriter('com/example/shaded/Outer')
+        outer.method('access$000', '(Lcom/example/shaded/Outer;)I')
+        outer.method('<init>', '(Lcom/example/shaded/Outer$1;)V')
+        inner = ClassWriter('com/example/shaded/Outer$Helper')
+        inner.method_ref('com/example/shaded/Outer', 'access$000', '(Lcom/example/shaded/Outer;)I')
+        inner.method_ref('com/example/shaded/Outer', '<init>', '(Lcom/example/shaded/Outer$1;)V')
+        tag = ClassWriter('com/example/shaded/Outer$1')
+        classes = [scan.parse_class(w.build()) for w in (outer, inner, tag)]
+        self.assertEqual(scan.unresolved_references(self.surface, classes), {})
+
+    def _shaded_container_nest(self):
+        # The plugin shades a host-provided outer class plus nested classes the host lacks,
+        # calling the accessors only the shaded outer defines.
+        outer = ClassWriter('java/awt/Container', superclass='java/awt/Component')
+        outer.method('access$000', '(Ljava/awt/Container;)I')
+        outer.method('<init>', '(Ljava/awt/Container$1;)V')
+        outer.klass('java/awt/Container$Helper')
+        inner = ClassWriter('java/awt/Container$Helper')
+        inner.method_ref('java/awt/Container', 'access$000', '(Ljava/awt/Container;)I')
+        inner.method_ref('java/awt/Container', '<init>', '(Ljava/awt/Container$1;)V')
+        inner.klass('java/awt/Container$1')
+        tag = ClassWriter('java/awt/Container$1')
+        tag.method_ref('java/awt/Container', 'access$100', '()V')
+        return [outer, inner, tag]
+
+    def test_nest_of_shadowed_class_never_loads(self):
+        # Only the shaded outer names the nested classes, and the host's outer loads instead,
+        # so the accessor calls never link.
+        classes = [scan.parse_class(w.build()) for w in self._shaded_container_nest()]
+        self.assertEqual(scan.unresolved_references(self.surface, classes), {})
+        overlay = scan.scan_jar_classes(classes)
+        self.assertEqual(scan.live_plugin_classes(self.surface, overlay), set())
+
+    def test_extra_class_of_shaded_package_loads_only_when_named(self):
+        # A newer library version's extra top-level class in a package the host provides.
+        shaded = ClassWriter('java/awt/Container', superclass='java/awt/Component')
+        shaded.klass('java/awt/NewerHelper')
+        extra = ClassWriter('java/awt/NewerHelper')
+        extra.method_ref('java/awt/Container', 'addedLater', '()V')
+        classes = [scan.parse_class(w.build()) for w in (shaded, extra)]
+        self.assertEqual(scan.unresolved_references(self.surface, classes), {})
+        user = ClassWriter('com/example/User')
+        user.klass('java/awt/NewerHelper')
+        classes.append(scan.parse_class(user.build()))
+        self.assertEqual(scan.unresolved_references(self.surface, classes),
+                         {('method', 'java/awt/Container', 'addedLater', '()V'): 1})
+
+    def test_accessors_on_host_provided_class_stay_unresolved_when_live(self):
+        # A plugin class names the nested class, so it loads from the plugin and links against
+        # the host's outer class, which has none of the shaded copy's accessors: a real break.
+        user = ClassWriter('com/example/User')
+        user.klass('java/awt/Container$Helper')
+        classes = [scan.parse_class(w.build()) for w in self._shaded_container_nest() + [user]]
+        got = scan.unresolved_references(self.surface, classes)
+        self.assertEqual(got, {
+            ('method', 'java/awt/Container', 'access$000', '(Ljava/awt/Container;)I'): 1,
+            ('method', 'java/awt/Container', '<init>', '(Ljava/awt/Container$1;)V'): 1,
+            ('method', 'java/awt/Container', 'access$100', '()V'): 1,
+        })
+        overlay = scan.scan_jar_classes(classes)
+        self.assertEqual(scan.live_plugin_classes(self.surface, overlay),
+                         {'com/example/User', 'java/awt/Container$Helper', 'java/awt/Container$1'})
+
     def test_jar_source_and_plugin_jar_reader(self):
         data = jar_bytes(host_classes())
         path = os.path.join(self.tmp.name, 'host.jar')
@@ -354,6 +427,60 @@ class HubFormatTest(unittest.TestCase):
             path, fresh = scan.ensure_jar('http://invalid.invalid', jar, tmp)
             self.assertFalse(fresh)
             self.assertTrue(path.endswith(scan.jar_file_name(jar)))
+
+
+class CatalogTest(unittest.TestCase):
+    def test_catalog_versions_inline_and_by_ref(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, 'libs.versions.toml')
+            with open(path, 'w', encoding='utf8') as fh:
+                fh.write('[versions]\nslf4j = "1.7.25" # pinned\n\n[libraries]\n'
+                         'guava = "com.google.guava:guava:23.2-jre"\n'
+                         'slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }\n'
+                         'bom = { module = "com.google.firebase:firebase-bom" }\n'
+                         '[plugins]\nx = { id = "a.b", version = "1" }\n')
+            self.assertEqual(scan.catalog_lib_versions(path), {
+                ('com.google.guava', 'guava'): '23.2-jre',
+                ('org.slf4j', 'slf4j-api'): '1.7.25',
+            })
+
+
+class DependencyReportTest(unittest.TestCase):
+    def test_resolved_versions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, 'deps.txt')
+            with open(path, 'w', encoding='utf8') as fh:
+                fh.write('releaseRuntimeClasspath - Resolved configuration\n'
+                         '+--- project :client\n'
+                         '|    +--- com.squareup.okhttp3:okhttp:3.14.9\n'
+                         '|    |    \\--- com.squareup.okio:okio:1.17.2 -> 3.9.0\n'
+                         '|    |         \\--- com.squareup.okio:okio-jvm:3.9.0\n'
+                         '|    +--- org.slf4j:slf4j-api:1.7.25 (*)\n'
+                         '+--- com.google.guava:guava -> 33.6.0-jre\n'
+                         '\\--- com.google.firebase:firebase-bom:34.19.0\n'
+                         '     \\--- com.google.firebase:firebase-analytics (c)\n')
+            self.assertEqual(scan.dependency_report_versions(path), {
+                ('com.squareup.okhttp3', 'okhttp'): '3.14.9',
+                ('com.squareup.okio', 'okio'): '3.9.0',
+                ('com.squareup.okio', 'okio-jvm'): '3.9.0',
+                ('org.slf4j', 'slf4j-api'): '1.7.25',
+                ('com.google.guava', 'guava'): '33.6.0-jre',
+                ('com.google.firebase', 'firebase-bom'): '34.19.0',
+            })
+
+    def test_metadata_only_jar_is_not_a_library(self):
+        # okio 3's root artifact carries Kotlin metadata only; the classes are in okio-jvm.
+        with tempfile.TemporaryDirectory() as tmp:
+            meta = os.path.join(tmp, 'okio-3.9.0.jar')
+            with zipfile.ZipFile(meta, 'w') as archive:
+                archive.writestr('META-INF/MANIFEST.MF', 'Manifest-Version: 1.0\n')
+                archive.writestr('commonMain/default/manifest', '')
+            jvm = os.path.join(tmp, 'okio-jvm-3.9.0.jar')
+            with zipfile.ZipFile(jvm, 'w') as archive:
+                archive.writestr('okio/Buffer.class', b'\xca\xfe\xba\xbe')
+            self.assertFalse(scan._has_classes(meta))
+            self.assertTrue(scan._has_classes(jvm))
+            self.assertFalse(scan._has_classes(None))
 
 
 class ReportTest(unittest.TestCase):

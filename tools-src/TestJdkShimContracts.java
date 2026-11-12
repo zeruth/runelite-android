@@ -19,11 +19,17 @@ import net.runelite.mp.compat.jdk.RuntimeVersion;
  * --release 8 by run-runtime-contracts.py, this file with the host JDK (11+).
  */
 public class TestJdkShimContracts {
+    // Escapes, not literal characters, so each edge input is visible: NBSP (U+00A0) is not
+    // whitespace to strip/isBlank while EN QUAD (U+2000), LINE SEPARATOR (U+2028) and the
+    // ideographic space (U+3000) are; U+200B is neither; lines() breaks on LF, CR and CRLF only.
     private static final String[] STRINGS = {
-        "", " ", "\t\n\u000B\f\r", "a", " a ", " a ", " a ", "　x　",
-        "a​b", "😀 ", " 😀", "\uD800", " \uDC00 ", "\u001Cx\u001F", "abc",
-        "a\nb", "a\r\nb", "a\rb", "a\n", "a\r\n", "\n", "\r\n\r\n", "\n\na", "a\n\n", "\r\r\n\n", "x\u0085y",
-        "x y", "\u0000 \u0000",
+        "", " ", "\t\n\u000B\f\r", "a", "abc",
+        "\u00A0a\u00A0", "\u2000a\u2000", "\u2028a\u2029", "\u3000x\u3000", "\u2000\u3000", "\u00A0",
+        "\u2000\u00A0\u3000", "a\u200Bb", "\u200B",
+        "\uD83D\uDE00 ", " \uD83D\uDE00", "\uD800", " \uDC00 ", "\u001Cx\u001F",
+        "a\nb", "a\r\nb", "a\rb", "a\n", "a\r", "a\r\n", "\r", "\n", "\r\n", "\r\n\r\n", "\n\na", "a\n\n",
+        "\r\r\n\n", "\n\r", "x\u0085y", "x\u2028y",
+        "x\u00A0y", "\u0000 \u0000",
     };
     private static int cases;
     private static int failures;

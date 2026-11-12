@@ -14,6 +14,7 @@ import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
 import net.runelite.mp.compat.JdkRetargeter;
 import net.runelite.mp.compat.jdk.JdkRetargets;
+import net.runelite.mp.plugins.PluginClassTransform;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.ClassWriter;
@@ -23,7 +24,8 @@ import org.objectweb.asm.Opcodes;
 
 /**
  * Host half of the retargeting fixtures: {@code TestRuntimeRetarget <plugin.jar> <out.jar>} runs
- * JdkRetargeter over a jar the way PluginDexer does (hub mode, regex relocated), then checks the
+ * PluginClassTransform over a jar as PluginDexer does (JdkRetargeter in hub mode, regex relocated,
+ * then IndyLowering), then checks the
  * result: no call or method handle still names a table row, a relocated type or one of String's
  * regex methods (those go to DesktopRegexStrings), the shims the
  * fixture needs are called, a second pass changes nothing, and the client mode leaves regex alone.
@@ -65,11 +67,11 @@ public final class TestRuntimeRetarget {
                 try (InputStream in = input.getInputStream(entry)) {
                     bytes = in.readAllBytes();
                 }
-                byte[] result = JdkRetargeter.rewrite(entry.getName(), bytes, classes, true);
+                byte[] result = PluginClassTransform.rewrite(entry.getName(), bytes, classes);
                 if (result != bytes) {
                     changed++;
                 }
-                if (!Arrays.equals(result, JdkRetargeter.rewrite(entry.getName(), result, classes, true))) {
+                if (!Arrays.equals(result, PluginClassTransform.rewrite(entry.getName(), result, classes))) {
                     throw new AssertionError("second pass changed " + entry.getName());
                 }
                 if (entry.getName().endsWith(".class")) {

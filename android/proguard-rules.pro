@@ -98,6 +98,10 @@
 -keep class net.runelite.cache.** { *; }
 -keep class net.runelite.rs.** { *; }
 -keep class net.runelite.http.api.** { *; }
+# RuneLite's Discord RPC binding (net.runelite:discord). DiscordService's public signatures
+# name its types (getCurrentUser() returns DiscordUser) and hub plugins call them by those
+# names; JNA also maps the Structure fields by name.
+-keep class net.runelite.discord.** { *; }
 
 # Mixin annotations specifically — referenced by string-name during injection.
 # Annotation classes live in the `:mixins` module under net.runelite.mixins.annotations
@@ -163,8 +167,31 @@
 
 # Guava is used for plugin classpath scanning, ClassPath reflection, and
 # ImmutableMap/List builders that the patched RuneLite client calls into.
-# Same generic-signature concern as Guice — keep the whole tree.
+# Same generic-signature concern as Guice — keep the whole tree. The APK ships the
+# JRE flavour, whose java.util.function default methods hub plugins call though the
+# host never does; verifyReleasePluginApi checks they survive.
 -keep class com.google.common.** { *; }
+# guava-33.6.0-jre names types newer than minSdk 26 in three places (read from its bytecode;
+# verifyReleasePluginApi prints the classes each build). The whole-tree keep matters for all
+# three: guava finds the newer helpers by class name.
+# - ClassValue (API 34): FuturesGetChecked loads its ClassValueValidator by name inside a catch
+#   of Error/RuntimeException and falls back to the weak-set validator.
+# - VarHandle (API 33) in AbstractFutureState: it builds VarHandleAtomicHelper only when
+#   Class.forName("java.lang.invoke.VarHandle") succeeds, else UnsafeAtomicHelper. API 26-27
+#   take the Unsafe path. ART has a hidden VarHandle from API 28, so 28-32 build the helper;
+#   R8 rewrites its Lookup.findVarHandle fields to DesugarVarHandle below API 33.
+# - VarHandle in hash.LittleEndianByteArray (Murmur3/Farm/City hashes, BloomFilter): the same
+#   probe, then VarHandleLittleEndianBytes.<clinit> calls MethodHandles.byteArrayViewVarHandle
+#   outside any catch (makeGetter's catch starts after the probe). That method is not in the
+#   SDK before API 33, and R8's VarHandle desugaring (minSdk < 33) supports only findVarHandle and
+#   arrayElementVarHandle while it retypes VarHandle to DesugarVarHandle, so the call cannot be
+#   trusted to link on any API. A failure there would surface as ExceptionInInitializerError
+#   from LittleEndianByteArray and break those hashes for good. The rule below removes the
+#   probe call and treats its result as null, so makeGetter takes guava-android's path:
+#   Unsafe where os.arch is aarch64, plain Java elsewhere. Debug builds skip R8 and keep the probe.
+-assumenosideeffects class com.google.common.hash.LittleEndianByteArray$VarHandleLittleEndianBytesMaker {
+    com.google.common.hash.LittleEndianByteArray$LittleEndianBytes tryMakeVarHandleLittleEndianBytes() return null;
+}
 
 # Hub plugins load after R8 runs and link against the host's protobuf runtime.
 # Preserve its public binary surface, including methods only those plugins use.

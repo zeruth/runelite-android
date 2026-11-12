@@ -10,7 +10,6 @@ import com.android.tools.r8.DiagnosticsHandler
 import com.android.tools.r8.OutputMode
 import net.runelite.client.externalplugins.PluginHubHooks
 import net.runelite.mp.client.RuntimeDexConfiguration
-import net.runelite.mp.compat.JdkRetargeter
 import java.io.File
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
@@ -28,6 +27,11 @@ private const val TAG = "PluginDexer"
  * matters beyond the floor: below it D8 desugars default interface methods onto static
  * companions, Method.isDefault() turns false, and ConfigInvocationHandler stops serving
  * @ConfigItem defaults (quest-helper NPE'd on its first enum config read).
+ *
+ * Before D8, every class goes through [PluginClassTransform]: the JdkRetargets member table with
+ * the desktop regex relocation, then the lowering of the bootstraps D8 refuses
+ * (android-awt/PORTING.md has the bootstrap matrix). FORMAT did not move for the lowering: a jar
+ * that needed it failed D8 before, so none is cached.
  */
 internal class PluginDexer(private val context: Context) : PluginHubHooks.Dexer
 {
@@ -68,10 +72,9 @@ internal class PluginDexer(private val context: Context) : PluginHubHooks.Dexer
                         val bytes = input.getInputStream(entry).use { it.readBytes() }
                         output.putNextEntry(ZipEntry(entry.name))
                         try {
-                            // Hub jars get the regex relocation on top of the JDK member table.
-                            output.write(JdkRetargeter.rewrite(entry.name, bytes, jarClasses, true))
+                            output.write(PluginClassTransform.rewrite(entry.name, bytes, jarClasses))
                         } catch (e: IllegalArgumentException) {
-                            throw PluginHubHooks.DexException("JDK API compatibility: ${e.message}", e)
+                            throw PluginHubHooks.DexException("${entry.name}: ${e.message}", e)
                         }
                         output.closeEntry()
                     }
