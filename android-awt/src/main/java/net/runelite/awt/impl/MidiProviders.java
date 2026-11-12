@@ -67,8 +67,8 @@ import java.util.List;
  * <p>
  * APK size budget: MIDI adds code only, no resources or assets, so its whole cost is the
  * classes {@code assembleDebug} jars into the AAR's {@code classes.jar} (a library AAR is not
- * dexed). The budget is 512 KB deflated in that jar for the classes this port adds: the MIDI API
- * and Gervill must stay under a sixth of the module's own classes (2.98 MB deflated). Measured
+ * dexed). The budget for the classes this port adds is a sixth of the module's own classes in
+ * that jar: 2,977,594 / 6 = 496,266 bytes (496 KB) deflated. Measured
  * on the javac output by deflating exactly the 196 classes of the 127 sources this port adds,
  * without the sampled codecs of the earlier sampled port: {@code javax.sound.midi} 57 KB raw /
  * 32 KB deflated, the {@code com.sun.media.sound} MIDI and Gervill classes 684 KB / 355 KB,
