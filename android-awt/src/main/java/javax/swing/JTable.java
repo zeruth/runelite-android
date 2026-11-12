@@ -501,7 +501,10 @@ public class JTable extends JComponent implements javax.swing.event.TableModelLi
     public int getAutoResizeMode() { return autoResizeMode; }
     public void setAutoResizeMode(int mode) { this.autoResizeMode = mode; }
     public boolean getAutoCreateColumnsFromModel() { return autoCreateColumnsFromModel; }
-    public void setAutoCreateColumnsFromModel(boolean v) { this.autoCreateColumnsFromModel = v; if (v) createDefaultColumnsFromModel(); }
+    public void setAutoCreateColumnsFromModel(boolean v) {
+        boolean old = autoCreateColumnsFromModel;
+        if (old != v) { autoCreateColumnsFromModel = v; if (v) createDefaultColumnsFromModel(); firePropertyChange("autoCreateColumnsFromModel", old, v); }
+    }
     public ListSelectionModel getSelectionModel() { return selectionModel; }
     public void setSelectionModel(ListSelectionModel value) { java.util.Objects.requireNonNull(value);ListSelectionModel old=selectionModel;old.removeListSelectionListener(this);selectionModel=value;value.addListSelectionListener(this);rememberSelection();firePropertyChange("selectionModel",old,value); }
     public void setSelectionMode(int mode) { selectionModel.setSelectionMode(mode);columnModel.getSelectionModel().setSelectionMode(mode); }
@@ -546,7 +549,7 @@ public class JTable extends JComponent implements javax.swing.event.TableModelLi
         if(row<0||column<0||row>=getRowCount()||column>=getColumnCount()||!isCellEditable(row,column))return false;
         if(cellEditor!=null&&!cellEditor.stopCellEditing())return false;
         javax.swing.table.TableCellEditor editor=getCellEditor(row,column);if(editor==null||!editor.isCellEditable(event))return false;
-        Component component=editor.getTableCellEditorComponent(this,getValueAt(row,column),isCellSelected(row,column),row,column);
+        Component component=prepareEditor(editor,row,column);
         if(component==null)return false;cellEditor=editor;editingRow=row;editingColumn=column;editingModelRow=convertRowIndexToModel(row);editingModelColumn=convertColumnIndexToModel(column);editorComponent=component;editor.addCellEditorListener(this);add(component);component.setBounds(getCellRect(row,column,false));component.requestFocus();repaint();return true;
     }
     public javax.swing.table.TableCellEditor getCellEditor() { return cellEditor; }
@@ -869,14 +872,62 @@ public class JTable extends JComponent implements javax.swing.event.TableModelLi
 
     /**
      * The JDK's AccessibleJTable members over the table's rows, columns and selection. The JDK
-     * class also implements AccessibleTable/AccessibleSelection and extends AccessibleJComponent;
-     * the module has none of them, nor AccessibleRole/AccessibleStateSet, until B27 lands, so
-     * these members carry the JDK's semantics but are unreachable through the JDK interfaces.
-     * Deferred to B27, and parity is blocked until then: that card rebases this class onto
-     * AccessibleJComponent and adds the two interfaces to its declaration.
+     * class extends AccessibleJComponent, which with AccessibleRole/AccessibleStateSet arrives in
+     * B27; until then this extends AccessibleContext directly, and getAccessibleRole/StateSet
+     * (and the column header) wait on that card.
      */
-    protected class AccessibleJTable extends javax.accessibility.AccessibleContext {
+    protected class AccessibleJTable extends javax.accessibility.AccessibleContext
+            implements javax.accessibility.AccessibleSelection, javax.accessibility.AccessibleTable {
+        private javax.accessibility.Accessible caption, summary;
+        private javax.accessibility.AccessibleTable rowHeader;
+        private final java.util.Map<Integer, javax.accessibility.Accessible> rowDescriptions = new java.util.HashMap<>(), columnDescriptions = new java.util.HashMap<>();
         protected AccessibleJTable() {}
+        @Override public javax.accessibility.AccessibleSelection getAccessibleSelection() { return this; }
+        @Override public javax.accessibility.AccessibleTable getAccessibleTable() { return this; }
+        // The JDK's AccessibleContext abstract members whose types the module already has.
+        public int getAccessibleIndexInParent() {
+            java.awt.Container parent = getParent();
+            if (parent == null) return -1;
+            for (int i = 0; i < parent.getComponentCount(); i++) if (parent.getComponent(i) == JTable.this) return i;
+            return -1;
+        }
+        public int getAccessibleChildrenCount() { return getRowCount() * getColumnCount(); }
+        public javax.accessibility.Accessible getAccessibleChild(int i) {
+            return i < 0 || i >= getAccessibleChildrenCount() ? null : getAccessibleAt(getAccessibleRow(i), getAccessibleColumn(i));
+        }
+        /** Component.getLocale's last fallback; the shadow Component keeps no locale of its own. */
+        public java.util.Locale getLocale() { return java.util.Locale.getDefault(); }
+        /** The cell's renderer component, as the JDK's AccessibleJTableCell delegates to it. */
+        public javax.accessibility.Accessible getAccessibleAt(int r, int c) {
+            if (r < 0 || c < 0 || r >= getRowCount() || c >= getColumnCount()) return null;
+            Component component = prepareRenderer(getCellRenderer(r, c), r, c);
+            return component instanceof javax.accessibility.Accessible ? (javax.accessibility.Accessible) component : null;
+        }
+        public javax.accessibility.Accessible getAccessibleCaption() { return caption; }
+        public void setAccessibleCaption(javax.accessibility.Accessible a) { javax.accessibility.Accessible old = caption; caption = a; firePropertyChange("AccessibleTableCaptionChanged", old, a); }
+        public javax.accessibility.Accessible getAccessibleSummary() { return summary; }
+        public void setAccessibleSummary(javax.accessibility.Accessible a) { javax.accessibility.Accessible old = summary; summary = a; firePropertyChange("AccessibleTableSummaryChanged", old, a); }
+        public int getAccessibleRowExtentAt(int r, int c) { return 1; }
+        public int getAccessibleColumnExtentAt(int r, int c) { return 1; }
+        public javax.accessibility.AccessibleTable getAccessibleRowHeader() { return rowHeader; }
+        public void setAccessibleRowHeader(javax.accessibility.AccessibleTable table) { rowHeader = table; }
+        /**
+         * The JDK answers with an AccessibleTable over the JTableHeader's cells; that needs
+         * AccessibleJTableHeader from B27, so until then there is no column header (deliberate null).
+         */
+        public javax.accessibility.AccessibleTable getAccessibleColumnHeader() { return null; }
+        /** A no-op on the JDK too: the column header is derived from the table header. */
+        public void setAccessibleColumnHeader(javax.accessibility.AccessibleTable table) {}
+        public javax.accessibility.Accessible getAccessibleRowDescription(int r) { return rowDescriptions.get(r); }
+        public void setAccessibleRowDescription(int r, javax.accessibility.Accessible a) { rowDescriptions.put(r, a); }
+        public javax.accessibility.Accessible getAccessibleColumnDescription(int c) { return columnDescriptions.get(c); }
+        public void setAccessibleColumnDescription(int c, javax.accessibility.Accessible a) { columnDescriptions.put(c, a); }
+        /** The i-th selected cell in row-major order. */
+        public javax.accessibility.Accessible getAccessibleSelection(int i) {
+            for (int row = 0; row < getRowCount(); row++) for (int col = 0; col < getColumnCount(); col++)
+                if (isCellSelected(row, col) && i-- == 0) return getAccessibleAt(row, col);
+            return null;
+        }
         public int getAccessibleRowCount() { return getRowCount(); }
         public int getAccessibleColumnCount() { return getColumnCount(); }
         public int getAccessibleRow(int index) { int cols = getColumnCount(); return cols == 0 ? -1 : index / cols; }

@@ -77,6 +77,13 @@ public class JComponent extends Container {
             }
         });
     }
+    private boolean requestFocusEnabled = true;
+    /**
+     * Whether a mouse press should give this component the focus. As on the JDK it is a hint
+     * for the UI delegates' mouse handlers; programmatic requestFocus ignores it.
+     */
+    public void setRequestFocusEnabled(boolean requestFocusEnabled) { this.requestFocusEnabled = requestFocusEnabled; }
+    public boolean isRequestFocusEnabled() { return requestFocusEnabled; }
     public Border getBorder() { return border; }
     // Border drives getInsets(), which every layout manager reads — a border change is a
     // layout change.

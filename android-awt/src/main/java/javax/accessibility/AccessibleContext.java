@@ -43,6 +43,10 @@ public abstract class AccessibleContext {
     public void setAccessibleDescription(String s) { String old = accessibleDescription; accessibleDescription = s; firePropertyChange(ACCESSIBLE_DESCRIPTION_PROPERTY, old, s); }
     public Accessible getAccessibleParent() { return accessibleParent; }
     public void setAccessibleParent(Accessible parent) { accessibleParent = parent; }
+    /** The selection interface of this object, or {@code null} when it has none (the JDK default). */
+    public AccessibleSelection getAccessibleSelection() { return null; }
+    /** The table interface of this object, or {@code null} when it has none (the JDK default). */
+    public AccessibleTable getAccessibleTable() { return null; }
     public void addPropertyChangeListener(java.beans.PropertyChangeListener listener) { changes.addPropertyChangeListener(listener); }
     public void removePropertyChangeListener(java.beans.PropertyChangeListener listener) { changes.removePropertyChangeListener(listener); }
     public void firePropertyChange(String property, Object oldValue, Object newValue) { changes.firePropertyChange(property, oldValue, newValue); }
