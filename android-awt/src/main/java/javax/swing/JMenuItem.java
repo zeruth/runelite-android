@@ -63,9 +63,6 @@ public class JMenuItem extends AbstractButton implements javax.accessibility.Acc
     public JMenuItem(String text, Icon icon) { setText(text); setIcon(icon); }
     public JMenuItem(String text, int mnemonic) { setText(text); setMnemonic(mnemonic); }
 
-    /** The typed delegate setter of 8u; {@code getUI} stays the inherited ButtonUI one. */
-    public void setUI(javax.swing.plaf.MenuItemUI ui) { super.setUI(ui); }
-
     private KeyStroke accelerator;
     public KeyStroke getAccelerator() { return accelerator; }
     public void setAccelerator(KeyStroke keyStroke) {

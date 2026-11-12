@@ -201,10 +201,6 @@ public class JPopupMenu extends JComponent implements javax.accessibility.Access
     /** As in 8u, a popup has no settable margin: the space between its border and its items is zero. */
     public Insets getMargin() { return new Insets(0, 0, 0, 0); }
 
-    /** Typed delegate accessors, as in 8u; the popup is host-presented until a look and feel sets one. */
-    @Override public javax.swing.plaf.PopupMenuUI getUI() { return (javax.swing.plaf.PopupMenuUI) ui; }
-    public void setUI(javax.swing.plaf.PopupMenuUI ui) { super.setUI(ui); }
-
     /** Lays the open popup out again at its preferred size. */
     public void pack() {
         if (isVisible()) placeOnScreen();
