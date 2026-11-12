@@ -115,6 +115,49 @@ public class TestLayoutContracts {
         check(h3.getX() == 20, "invisible child skipped " + h3.getX());
     }
 
+    static void boxContracts() {
+        // Constructing a Box installs its BoxLayout without going through the throwing setLayout.
+        Box box = new Box(BoxLayout.Y_AXIS);
+        check(box.getLayout() instanceof BoxLayout, "box layout " + box.getLayout());
+        boolean threw = false;
+        try {
+            box.setLayout(new FlowLayout());
+        } catch (java.awt.AWTError expected) {
+            threw = true;
+        }
+        check(threw, "Box.setLayout throws AWTError");
+        check(box.getLayout() instanceof BoxLayout, "box layout kept");
+
+        // BoxLayout add/remove notifications see the child's parent set to the target.
+        JPanel child = rigid(10, 20);
+        box.add(child);
+        box.add(Box.createVerticalStrut(5));
+        check(box.getPreferredSize().equals(new Dimension(10, 25)), "box add preferred " + box.getPreferredSize());
+        box.remove(child);
+        check(box.getPreferredSize().equals(new Dimension(0, 5)), "box remove preferred " + box.getPreferredSize());
+        box.removeAll();
+        check(box.getComponentCount() == 0, "box removeAll");
+
+        Component strut = Box.createHorizontalStrut(7);
+        check(strut.getMinimumSize().equals(new Dimension(7, 0)), "strut min " + strut.getMinimumSize());
+        check(strut.getMaximumSize().equals(new Dimension(7, Short.MAX_VALUE)), "strut max " + strut.getMaximumSize());
+        Component glue = Box.createGlue();
+        check(glue.getMaximumSize().equals(new Dimension(Short.MAX_VALUE, Short.MAX_VALUE)), "glue max " + glue.getMaximumSize());
+        Box.Filler filler = (Box.Filler) Box.createRigidArea(new Dimension(3, 4));
+        filler.changeShape(new Dimension(1, 1), new Dimension(2, 2), new Dimension(3, 3));
+        check(filler.getPreferredSize().equals(new Dimension(2, 2)), "changeShape preferred " + filler.getPreferredSize());
+
+        // JSeparator rejects an orientation other than HORIZONTAL or VERTICAL, and is not focusable.
+        threw = false;
+        try {
+            new javax.swing.JSeparator(42);
+        } catch (IllegalArgumentException expected) {
+            threw = true;
+        }
+        check(threw, "JSeparator orientation check");
+        check(!new javax.swing.JSeparator().isFocusable(), "JSeparator focusable");
+    }
+
     static void overlayLayout() {
         JPanel panel = new JPanel();
         OverlayLayout overlay = new OverlayLayout(panel);
@@ -420,6 +463,7 @@ public class TestLayoutContracts {
 
     public static void main(String[] args) {
         boxLayout();
+        boxContracts();
         overlayLayout();
         groupLayout();
         springs();

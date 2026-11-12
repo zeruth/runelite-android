@@ -80,9 +80,60 @@ public class JProgressBar extends JComponent implements SwingConstants, javax.ac
     protected String progressString;
     private boolean borderPainted = true;
 
+    /**
+     * Listens for change events sent by the progress bar's model,
+     * redispatching them to change-event listeners registered upon
+     * this progress bar.
+     */
+    protected ChangeListener changeListener = null;
+
+    /**
+     * Only one <code>ChangeEvent</code> is needed per instance since the
+     * event's only interesting property is the immutable source, which
+     * is the progress bar.
+     */
+    protected transient javax.swing.event.ChangeEvent changeEvent = null;
+
     private final javax.swing.event.EventListenerList listeners=new javax.swing.event.EventListenerList();
-    private final ChangeListener modelListener=e->{javax.swing.event.ChangeEvent event=new javax.swing.event.ChangeEvent(this);for(ChangeListener l:getChangeListeners())l.stateChanged(event);repaint();};
-    public JProgressBar() { model.addChangeListener(modelListener); }
+    private final ChangeListener modelListener=e->{fireStateChanged();repaint();};
+    public JProgressBar() { model.addChangeListener(modelListener); updateUI(); }
+
+    /** Resets the UI property to a value from the current look and feel. */
+    public void updateUI() { setUI((javax.swing.plaf.ProgressBarUI) UIManager.getUI(this)); }
+
+    /** Returns "ProgressBarUI", the UIDefaults key of the delegate class. */
+    public String getUIClassID() { return "ProgressBarUI"; }
+
+    /**
+     * Subclasses that want to handle change events from the model
+     * differently can override this to return an instance of a custom
+     * <code>ChangeListener</code> implementation.
+     */
+    protected ChangeListener createChangeListener() {
+        return e -> fireStateChanged();
+    }
+
+    /** Send a ChangeEvent, whose source is this JProgressBar, to all registered ChangeListeners. */
+    protected void fireStateChanged() {
+        Object[] l = listeners.getListenerList();
+        for (int i = l.length - 2; i >= 0; i -= 2) {
+            if (l[i] == ChangeListener.class) {
+                if (changeEvent == null) {
+                    changeEvent = new javax.swing.event.ChangeEvent(this);
+                }
+                ((ChangeListener) l[i + 1]).stateChanged(changeEvent);
+            }
+        }
+    }
+
+    protected String paramString() {
+        return super.paramString()
+                + ",orientation=" + (orientation == HORIZONTAL ? "HORIZONTAL" : "VERTICAL")
+                + ",paintBorder=" + borderPainted
+                + ",paintString=" + stringPainted
+                + ",progressString=" + (progressString != null ? progressString : "")
+                + ",indeterminateString=" + indeterminate;
+    }
     public JProgressBar(int orient) { this();setOrientation(orient); }
     public JProgressBar(int min, int max) { this(); setMinimum(min); setMaximum(max); }
     public JProgressBar(int orient, int min, int max) { this(orient); setMinimum(min); setMaximum(max); }
@@ -144,10 +195,9 @@ public class JProgressBar extends JComponent implements SwingConstants, javax.ac
     public javax.swing.plaf.ProgressBarUI getUI() { return (javax.swing.plaf.ProgressBarUI) super.getUI(); }
 
     /**
-     * Draw the bar ourselves — real Swing delegates to ProgressBarUI but we don't ship
-     * a working UI delegate, so without this the splash's bar stays invisible (just an
-     * empty rect between the action and subAction labels). Horizontal fill only; this
-     * is what the SplashScreen + a couple of plugin status overlays need.
+     * Paints through the ProgressBarUI delegate (BasicProgressBarUI or the look and
+     * feel's subclass). The fallback below only runs when the current look and feel
+     * supplies no delegate, so the splash's bar still shows in that case.
      */
     @Override
     protected void paintComponent(java.awt.Graphics g) {

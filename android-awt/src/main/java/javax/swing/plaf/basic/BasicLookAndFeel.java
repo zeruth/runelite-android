@@ -58,6 +58,7 @@ public abstract class BasicLookAndFeel extends LookAndFeel {
         Object[] uiDefaults = {
                   "LabelUI", basicPackageName + "BasicLabelUI",
              "OptionPaneUI", basicPackageName + "BasicOptionPaneUI",
+            "ProgressBarUI", basicPackageName + "BasicProgressBarUI",
                    "TreeUI", basicPackageName + "BasicTreeUI",
                   "TableUI", basicPackageName + "BasicTableUI",
             "TableHeaderUI", basicPackageName + "BasicTableHeaderUI",

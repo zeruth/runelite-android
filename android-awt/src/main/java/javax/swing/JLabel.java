@@ -110,6 +110,27 @@ public class JLabel extends JComponent implements SwingConstants, javax.accessib
     /** JShadowedLabel and friends call the typed overload — accept and discard. */
     public void setUI(javax.swing.plaf.LabelUI ui) { super.setUI(ui); }
 
+    /*
+     * The shadow JLabel paints itself and installs no delegate unless one is set, while a
+     * JDK JLabel always has one; without it the shared Basic delegate answers, so the
+     * baseline (GroupLayout baseline groups, TitledBorder) matches the JDK's for plain text.
+     */
+    @Override
+    public int getBaseline(int width, int height) {
+        if (ui != null) {
+            return super.getBaseline(width, height);
+        }
+        return javax.swing.plaf.basic.BasicLabelUI.createUI(this).getBaseline(this, width, height);
+    }
+
+    @Override
+    public java.awt.Component.BaselineResizeBehavior getBaselineResizeBehavior() {
+        if (ui != null) {
+            return super.getBaselineResizeBehavior();
+        }
+        return javax.swing.plaf.basic.BasicLabelUI.createUI(this).getBaselineResizeBehavior(this);
+    }
+
     /** Cached content size (text + icon, no insets) — invalidated when text/icon/font
      * changes. Without this every BorderLayout layout pass remeasures the text via
      * JNI/Minikin, which dominated profile. Insets are added per call so a border change
