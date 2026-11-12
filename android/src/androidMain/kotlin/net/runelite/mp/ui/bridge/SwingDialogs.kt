@@ -56,8 +56,14 @@ internal class SwingDialogs(private val activity: ComponentActivity) {
     private val save = activity.registerForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { finishPick(listOfNotNull(it)) }
 
     init {
-        java.awt.Window.setVisibilityHandler { window, visible ->
+        java.awt.Window.setVisibilityHandler handler@{ window, visible ->
+            // The client frame and the splash are drawn full-screen by the main activity (AppAndroid);
+            // presenting them here would put the whole client in a dialog whose Close runs RuneLite's exit.
+            if (window is net.runelite.client.ui.ContainableFrame || window is net.runelite.client.ui.SplashScreen) return@handler
             main.post {
+                // Window events are not fired here: Window.setVisible fires OPENED and activates
+                // (ACTIVATED, GAINED_FOCUS) on show, and hiding clears focus (LOST_FOCUS, DEACTIVATED)
+                // synchronously, before dispose posts CLOSED, in the desktop order.
                 if (!visible || closed) windows.remove(window)?.dismiss()
                 else if (!windows.containsKey(window)) {
                     val root = (window as? javax.swing.RootPaneContainer)?.rootPane
@@ -65,9 +71,11 @@ internal class SwingDialogs(private val activity: ComponentActivity) {
                         val view = net.runelite.mp.ui.panels.SwingPanelView(activity, "Swing window", root)
                         val title = (window as? java.awt.Dialog)?.title ?: (window as? java.awt.Frame)?.title
                         val dialog = AlertDialog.Builder(activity).setTitle(title).setView(view).setNegativeButton("Close", null).create()
+                        // The close button is the desktop title-bar close: WINDOW_CLOSING lets JFrame/JDialog apply
+                        // their default close operation and plugin listeners veto or react, as on the JDK.
                         fun requestClose() {
                             javax.swing.SwingUtilities.invokeLater {
-                                if (window is javax.swing.JDialog)
+                                if (window is java.awt.Frame || window is java.awt.Dialog)
                                     window.dispatchEvent(java.awt.event.WindowEvent(window, java.awt.event.WindowEvent.WINDOW_CLOSING))
                                 else window.isVisible = false
                             }
