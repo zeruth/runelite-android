@@ -56,18 +56,28 @@ internal class SwingDialogs(private val activity: ComponentActivity) {
     private val save = activity.registerForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { finishPick(listOfNotNull(it)) }
 
     init {
-        java.awt.Window.setVisibilityHandler { window, visible ->
+        java.awt.Window.setVisibilityHandler handler@{ window, visible ->
+            // The client frame and the splash are drawn full-screen by the main activity (AppAndroid);
+            // presenting them here would put the whole client in a dialog whose Close runs RuneLite's exit.
+            if (window is net.runelite.client.ui.ContainableFrame || window is net.runelite.client.ui.SplashScreen) return@handler
             main.post {
-                if (!visible || closed) windows.remove(window)?.dismiss()
-                else if (!windows.containsKey(window)) {
+                if (!visible || closed) {
+                    // Desktop order on hide: focus leaves, then the window deactivates (CLOSED follows from dispose).
+                    if (windows.remove(window)?.also { it.dismiss() } != null) javax.swing.SwingUtilities.invokeLater {
+                        window.dispatchEvent(java.awt.event.WindowEvent(window, java.awt.event.WindowEvent.WINDOW_LOST_FOCUS))
+                        window.dispatchEvent(java.awt.event.WindowEvent(window, java.awt.event.WindowEvent.WINDOW_DEACTIVATED))
+                    }
+                } else if (!windows.containsKey(window)) {
                     val root = (window as? javax.swing.RootPaneContainer)?.rootPane
                     if (root != null) {
                         val view = net.runelite.mp.ui.panels.SwingPanelView(activity, "Swing window", root)
                         val title = (window as? java.awt.Dialog)?.title ?: (window as? java.awt.Frame)?.title
                         val dialog = AlertDialog.Builder(activity).setTitle(title).setView(view).setNegativeButton("Close", null).create()
+                        // The close button is the desktop title-bar close: WINDOW_CLOSING lets JFrame/JDialog apply
+                        // their default close operation and plugin listeners veto or react, as on the JDK.
                         fun requestClose() {
                             javax.swing.SwingUtilities.invokeLater {
-                                if (window is javax.swing.JDialog)
+                                if (window is java.awt.Frame || window is java.awt.Dialog)
                                     window.dispatchEvent(java.awt.event.WindowEvent(window, java.awt.event.WindowEvent.WINDOW_CLOSING))
                                 else window.isVisible = false
                             }
@@ -83,6 +93,13 @@ internal class SwingDialogs(private val activity: ComponentActivity) {
                             }
                         }
                         dialog.show()
+                        // OPENED was fired by setVisible; the window manager's ACTIVATED then GAINED_FOCUS follow.
+                        javax.swing.SwingUtilities.invokeLater {
+                            if (window.isVisible) {
+                                window.dispatchEvent(java.awt.event.WindowEvent(window, java.awt.event.WindowEvent.WINDOW_ACTIVATED))
+                                window.dispatchEvent(java.awt.event.WindowEvent(window, java.awt.event.WindowEvent.WINDOW_GAINED_FOCUS))
+                            }
+                        }
                         dialog.window?.setLayout((activity.resources.displayMetrics.widthPixels * .9).toInt(), (activity.resources.displayMetrics.heightPixels * .85).toInt())
                     }
                 }

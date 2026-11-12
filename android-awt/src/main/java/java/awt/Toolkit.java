@@ -122,7 +122,18 @@ public abstract class Toolkit {
     public void sync() {}
     public void beep() {}
 
-    public boolean isFrameStateSupported(int state) { return state == Frame.NORMAL; }
+    /** The states the Windows toolkit supports; a lone horizontal or vertical maximize is not one. */
+    public boolean isFrameStateSupported(int state) {
+        return state == Frame.NORMAL || state == Frame.ICONIFIED || state == Frame.MAXIMIZED_BOTH;
+    }
+
+    /** Every modality is honoured: the host shows one window at a time over the game. */
+    public boolean isModalityTypeSupported(Dialog.ModalityType modalityType) { return modalityType != null; }
+    public boolean isModalExclusionTypeSupported(Dialog.ModalExclusionType modalExclusionType) {
+        return modalExclusionType != null;
+    }
+    /** Android windows are stacked by the activity; none can float above other apps. */
+    public boolean isAlwaysOnTopSupported() { return false; }
 
     public boolean prepareImage(Image image, int width, int height, ImageObserver observer) {
         return true;
