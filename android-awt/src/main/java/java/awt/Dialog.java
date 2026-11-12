@@ -111,15 +111,15 @@ public class Dialog extends Window {
     public ModalityType getModalityType() { return modalityType; }
 
     /**
-     * Sets the modality; {@code null} means MODELESS and a type the toolkit does not
-     * support becomes APPLICATION_MODAL, as on the JDK. Like the JDK, a change applies
-     * from the next time the dialog is shown.
+     * Sets the modality; {@code null} and a type the toolkit does not support both mean
+     * MODELESS, as on the JDK (the shadow Toolkit supports every non-null type). Like the
+     * JDK, a change applies from the next time the dialog is shown.
      *
      * @since 1.6
      */
     public void setModalityType(ModalityType type) {
         if (type == null) type = ModalityType.MODELESS;
-        if (!Toolkit.getDefaultToolkit().isModalityTypeSupported(type)) type = ModalityType.APPLICATION_MODAL;
+        if (!Toolkit.getDefaultToolkit().isModalityTypeSupported(type)) type = ModalityType.MODELESS;
         modalityType = type;
         modal = modalityType != ModalityType.MODELESS;
     }
