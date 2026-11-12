@@ -3975,9 +3975,7 @@ public class JTree extends JComponent implements Scrollable, Accessible
                 showsRootHandlesSet = false;
             }
         } else {
-            // JDK: super.setUIProperty; the shadow JComponent has none, and
-            // LookAndFeel.installProperty applies the public setter in its place.
-            LookAndFeel.installProperty(this, propertyName, value);
+            super.setUIProperty(propertyName, value);
         }
     }
 
@@ -4022,9 +4020,47 @@ public class JTree extends JComponent implements Scrollable, Accessible
 // Accessibility support
 ////////////////
 
-    // The JDK's AccessibleJTree / AccessibleJTreeNode are not ported: the shadow's
-    // javax.accessibility has no AccessibleSelection, AccessibleState or
-    // AccessibleJComponent to build them on, and Android exposes no Java Access
-    // Bridge to consume them. getAccessibleContext() is JComponent's plain context.
+    /**
+     * Gets the AccessibleContext associated with this JTree.
+     * For JTrees, the AccessibleContext takes the form of an
+     * AccessibleJTree.
+     *
+     * @return an AccessibleJTree that serves as the
+     *         AccessibleContext of this JTree
+     */
+    public AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJTree();
+        }
+        return accessibleContext;
+    }
+
+    /**
+     * Accessibility support for trees: role TREE; the children are the root alone when it is
+     * visible, otherwise the root's children, as on the JDK. The JDK's per-node
+     * AccessibleJTreeNode is reduced to a cell context, since Android has no Access Bridge
+     * that would walk node selection or actions.
+     */
+    protected class AccessibleJTree extends AccessibleJComponent {
+        public AccessibleRole getAccessibleRole() {
+            return AccessibleRole.TREE;
+        }
+
+        public int getAccessibleChildrenCount() {
+            TreeModel model = getModel();
+            if (model == null) return 0;
+            if (isRootVisible()) return 1;
+            Object root = model.getRoot();
+            return root == null ? 0 : model.getChildCount(root);
+        }
+
+        public Accessible getAccessibleChild(int i) {
+            TreeModel model = getModel();
+            if (model == null || i < 0 || i >= getAccessibleChildrenCount()) return null;
+            Object root = model.getRoot();
+            Object node = isRootVisible() ? root : model.getChild(root, i);
+            return new net.runelite.awt.impl.AccessibleCell(JTree.this, i, node, false);
+        }
+    }
 
 } // End of class JTree

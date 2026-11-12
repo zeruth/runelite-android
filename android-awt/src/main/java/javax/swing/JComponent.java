@@ -51,10 +51,98 @@ public class JComponent extends Container {
     /** A list of event listeners for this component. */
     protected javax.swing.event.EventListenerList listenerList = new javax.swing.event.EventListenerList();
 
-    private transient javax.accessibility.AccessibleContext accessibleContext;
+    /**
+     * A JComponent is not {@link javax.accessibility.Accessible} itself (the JDK leaves that to
+     * each widget), but RuneLite panels subclass it directly and the Android host asks every
+     * component it rasterizes, so a plain subclass answers a generic Swing context here.
+     */
     public javax.accessibility.AccessibleContext getAccessibleContext() {
-        if (accessibleContext == null) accessibleContext = new javax.accessibility.AccessibleContext() {};
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJComponent() {
+                private static final long serialVersionUID = 1L;
+            };
+        }
         return accessibleContext;
+    }
+
+    /**
+     * Accessibility support shared by every Swing component: the name falls back to a
+     * titled border, the description to the tool tip, and the children are the container's
+     * accessible components.
+     */
+    public abstract class AccessibleJComponent extends AccessibleAWTContainer
+            implements javax.accessibility.AccessibleExtendedComponent {
+        private static final long serialVersionUID = 1L;
+
+        protected AccessibleJComponent() {
+            super();
+        }
+
+        /** @deprecated This field is unused. */
+        @Deprecated
+        protected java.awt.event.FocusListener accessibleFocusHandler = null;
+
+        public String getAccessibleName() {
+            String name = accessibleName;
+            if (name == null) {
+                name = (String) getClientProperty(javax.accessibility.AccessibleContext.ACCESSIBLE_NAME_PROPERTY);
+            }
+            if (name == null) {
+                name = getBorderTitle(getBorder());
+            }
+            if (name == null) {
+                // JLabel.LABELED_BY_PROPERTY: set by JLabel.setLabelFor on the labelled component.
+                Object o = getClientProperty("labeledBy");
+                if (o instanceof javax.accessibility.Accessible) {
+                    javax.accessibility.AccessibleContext ac = ((javax.accessibility.Accessible) o).getAccessibleContext();
+                    if (ac != null) name = ac.getAccessibleName();
+                }
+            }
+            return name;
+        }
+
+        /** The title of the (possibly compound) titled border, the JDK's name fallback. */
+        protected String getBorderTitle(Border b) {
+            if (b instanceof javax.swing.border.TitledBorder) {
+                return ((javax.swing.border.TitledBorder) b).getTitle();
+            } else if (b instanceof javax.swing.border.CompoundBorder) {
+                String s = getBorderTitle(((javax.swing.border.CompoundBorder) b).getInsideBorder());
+                if (s == null) s = getBorderTitle(((javax.swing.border.CompoundBorder) b).getOutsideBorder());
+                return s;
+            }
+            return null;
+        }
+
+        public String getAccessibleDescription() {
+            String description = accessibleDescription;
+            if (description == null) {
+                description = (String) getClientProperty(javax.accessibility.AccessibleContext.ACCESSIBLE_DESCRIPTION_PROPERTY);
+            }
+            if (description == null) {
+                description = getToolTipText();
+            }
+            return description;
+        }
+
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.SWING_COMPONENT;
+        }
+
+        // State set (OPAQUE included) and children come from AccessibleAWTContainer.
+
+        // AccessibleExtendedComponent
+
+        public String getToolTipText() {
+            return JComponent.this.getToolTipText();
+        }
+
+        public String getTitledBorderText() {
+            return getBorderTitle(getBorder());
+        }
+
+        public javax.accessibility.AccessibleKeyBinding getAccessibleKeyBinding() {
+            return null;
+        }
     }
 
     private Border border;
@@ -94,6 +182,8 @@ public class JComponent extends Container {
     public JComponent() {
         // As the JDK's JComponent(): key events reach processKeyEvent overrides.
         enableEvents(java.awt.AWTEvent.KEY_EVENT_MASK);
+        // As the JDK: an unparented Swing component answers a locale instead of throwing
+        // IllegalComponentStateException from Component.getLocale.
         super.setLocale(JComponent.getDefaultLocale());
         addHierarchyListener(e -> {
             if ((e.getChangeFlags() & (java.awt.event.HierarchyEvent.PARENT_CHANGED | java.awt.event.HierarchyEvent.SHOWING_CHANGED)) == 0) return;
@@ -304,27 +394,82 @@ public class JComponent extends Container {
     protected void printChildren(java.awt.Graphics g) { paintChildren(g); }
     protected void printBorder(java.awt.Graphics g) { paintBorder(g); }
 
-    /**
-     * The JDK paints the region synchronously into the window. The Android host owns the
-     * surface and draws a tree when its repaint generation moves, so this requests that
-     * repaint; the region is on screen at the host's next frame, not on return.
-     */
-    public void paintImmediately(int x, int y, int w, int h) {
-        repaint(0, x, y, w, h);
-    }
-
-    public void paintImmediately(java.awt.Rectangle r) {
-        paintImmediately(r.x, r.y, r.width, r.height);
-    }
-
     public javax.swing.plaf.ComponentUI getUI() { return ui; }
     public void setUI(javax.swing.plaf.ComponentUI ui) { javax.swing.plaf.ComponentUI old=this.ui;if(old!=null)old.uninstallUI(this);this.ui=ui;if(ui!=null)ui.installUI(this);firePropertyChange("UI",old,ui);revalidate();repaint(); }
     public String getUIClassID() { return "ComponentUI"; }
 
     public void updateUI() { javax.swing.plaf.ComponentUI delegate=UIManager.getUI(this);if(delegate!=null)setUI(delegate); }
 
+    /**
+     * Adds the specified region to the dirty region list if the component is showing. The
+     * component will be repainted after all of the currently pending events have been
+     * dispatched.
+     *
+     * @param tm  this parameter is not used
+     * @param x  the x value of the dirty region
+     * @param y  the y value of the dirty region
+     * @param width  the width of the dirty region
+     * @param height  the height of the dirty region
+     * @see RepaintManager#addDirtyRegion
+     */
+    @Override
+    public void repaint(long tm, int x, int y, int width, int height) {
+        RepaintManager.currentManager(this).addDirtyRegion(this, x, y, width, height);
+    }
+
     public void repaint(java.awt.Rectangle r) {
         repaint(0, r.x, r.y, r.width, r.height);
+    }
+
+    /**
+     * Supports deferred automatic layout: invalidates this component and its ancestors, and
+     * queues the nearest validate root with the RepaintManager. Unlike the JDK, the
+     * invalidation happens on the calling thread too, because the Android hosts validate
+     * their trees on their own frame and must see the change on the next one.
+     *
+     * @see RepaintManager#addInvalidComponent
+     */
+    @Override
+    public void revalidate() {
+        invalidate();
+        RepaintManager.currentManager(this).addInvalidComponent(this);
+    }
+
+    /**
+     * If this method returns true, revalidate calls by descendants of this component will
+     * cause the entire tree beginning with this root to be validated. Returns false by
+     * default; JScrollPane and JRootPane override it to return true.
+     *
+     * @return whether this component is a validate root
+     */
+    @Override
+    public boolean isValidateRoot() {
+        return false;
+    }
+
+    /**
+     * Paints the specified region in this component and all of its descendants that overlap
+     * the region, immediately. There is no screen to paint to: the region, with the dirty
+     * region pending for this component, is folded into its root's region right away, which
+     * the host that rasterizes the root takes with {@code RepaintManager.hostTakeDirtyRegion}
+     * and paints on its next frame. Other components' pending regions are left queued.
+     *
+     * @param x  the x value of the region to be painted
+     * @param y  the y value of the region to be painted
+     * @param w  the width of the region to be painted
+     * @param h  the height of the region to be painted
+     */
+    public void paintImmediately(int x, int y, int w, int h) {
+        RepaintManager.currentManager(this).paintImmediately(this, x, y, w, h);
+    }
+
+    /**
+     * Paints the specified region now.
+     *
+     * @param r a <code>Rectangle</code> containing the region to be painted
+     */
+    public void paintImmediately(java.awt.Rectangle r) {
+        paintImmediately(r.x, r.y, r.width, r.height);
     }
 
     // --- key bindings (OpenJDK 8u JComponent) -------------------------------
@@ -945,6 +1090,52 @@ public class JComponent extends Container {
     boolean isFocusTraversalKeysSetByClient(int id) {
         return id == java.awt.KeyboardFocusManager.FORWARD_TRAVERSAL_KEYS ? focusTraversalKeysForwardSet
             : id == java.awt.KeyboardFocusManager.BACKWARD_TRAVERSAL_KEYS && focusTraversalKeysBackwardSet;
+    }
+
+    /**
+     * Sets a property on behalf of a look and feel ({@link LookAndFeel#installProperty}).
+     * As in the JDK, focus traversal keys go in only when the application has not set its
+     * own, and do not count as set by the client.  The JDK's subclasses override this for
+     * their own primitive properties; the shadow's mostly do not, so any other property
+     * goes to its public setter, without the JDK's "set by the client" bookkeeping.
+     */
+    @SuppressWarnings("unchecked")
+    void setUIProperty(String propertyName, Object value) {
+        int id = "focusTraversalKeysForward".equals(propertyName)
+            ? java.awt.KeyboardFocusManager.FORWARD_TRAVERSAL_KEYS
+            : "focusTraversalKeysBackward".equals(propertyName)
+            ? java.awt.KeyboardFocusManager.BACKWARD_TRAVERSAL_KEYS : -1;
+        if (id != -1) {
+            if (!isFocusTraversalKeysSetByClient(id)) {
+                super.setFocusTraversalKeys(id, (java.util.Set<java.awt.AWTKeyStroke>) value);
+            }
+            return;
+        }
+        String setter = "set" + Character.toUpperCase(propertyName.charAt(0)) + propertyName.substring(1);
+        try {
+            for (java.lang.reflect.Method method : getClass().getMethods()) {
+                Class<?>[] parameters = method.getParameterTypes();
+                if (method.getName().equals(setter) && parameters.length == 1) {
+                    if (parameters[0].isPrimitive() && value == null) {
+                        throw new NullPointerException(propertyName);
+                    }
+                    method.invoke(this, value);
+                    return;
+                }
+            }
+        } catch (IllegalAccessException e) {
+            throw new IllegalArgumentException("property \"" + propertyName + "\" cannot be set using this method", e);
+        } catch (java.lang.reflect.InvocationTargetException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof RuntimeException) {
+                throw (RuntimeException) cause;
+            }
+            throw new IllegalArgumentException("property \"" + propertyName + "\" cannot be set using this method", cause);
+        } catch (IllegalArgumentException e) {
+            // Method.invoke reports a value of the wrong type this way.
+            throw new ClassCastException(e.getMessage());
+        }
+        throw new IllegalArgumentException("property \"" + propertyName + "\" cannot be set using this method");
     }
 
     /**

@@ -37,6 +37,22 @@ import javax.swing.text.EditorKit;
 import javax.swing.text.JTextComponent;
 
 public class JEditorPane extends JTextComponent {
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJEditorPane();
+        }
+        return accessibleContext;
+    }
+
+    /** Accessibility support for editor panes: a TEXT context that is MULTI_LINE. */
+    protected class AccessibleJEditorPane extends AccessibleJTextComponent {
+        public javax.accessibility.AccessibleStateSet getAccessibleStateSet() {
+            javax.accessibility.AccessibleStateSet states = super.getAccessibleStateSet();
+            states.add(javax.accessibility.AccessibleState.MULTI_LINE);
+            return states;
+        }
+    }
     private static final long serialVersionUID = 1L;
 
     private String contentType = "text/plain";
