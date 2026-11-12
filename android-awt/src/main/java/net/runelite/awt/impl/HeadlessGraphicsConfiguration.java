@@ -52,4 +52,6 @@ public final class HeadlessGraphicsConfiguration extends GraphicsConfiguration {
 
     @Override public GraphicsDevice getDevice() { return device; }
     @Override public Rectangle getBounds() { int[] metrics = display; return new Rectangle(0, 0, metrics[0], metrics[1]); }
+    /** Window backbuffers are TYPE_INT_ARGB and the host composites them with their alpha. */
+    @Override public boolean isTranslucencyCapable() { return true; }
 }
