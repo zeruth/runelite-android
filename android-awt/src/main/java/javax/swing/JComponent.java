@@ -63,6 +63,8 @@ public class JComponent extends Container {
     private float alignmentY = 0.5f;
 
     public JComponent() {
+        // As the JDK's JComponent(): key events reach processKeyEvent overrides.
+        enableEvents(java.awt.AWTEvent.KEY_EVENT_MASK);
         addHierarchyListener(e -> {
             if ((e.getChangeFlags() & (java.awt.event.HierarchyEvent.PARENT_CHANGED | java.awt.event.HierarchyEvent.SHOWING_CHANGED)) == 0) return;
             boolean attached = getParent() != null && isVisible();
