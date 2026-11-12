@@ -63,9 +63,38 @@ public class JComponent extends Container {
     private float alignmentX = 0.5f;
     private float alignmentY = 0.5f;
 
+    // The JDK keeps it per AppContext; Android has one application context.
+    private static volatile java.util.Locale defaultLocale;
+
+    /**
+     * Returns the default locale used to initialize each JComponent's locale
+     * property upon creation; {@code Locale.getDefault()} until one is set.
+     *
+     * @since 1.4
+     */
+    public static java.util.Locale getDefaultLocale() {
+        java.util.Locale l = defaultLocale;
+        if (l == null) {
+            l = java.util.Locale.getDefault();
+            defaultLocale = l;
+        }
+        return l;
+    }
+
+    /**
+     * Sets the default locale used to initialize each JComponent's locale
+     * property upon creation; {@code null} resets it to the VM's default.
+     *
+     * @since 1.4
+     */
+    public static void setDefaultLocale(java.util.Locale l) {
+        defaultLocale = l;
+    }
+
     public JComponent() {
         // As the JDK's JComponent(): key events reach processKeyEvent overrides.
         enableEvents(java.awt.AWTEvent.KEY_EVENT_MASK);
+        super.setLocale(JComponent.getDefaultLocale());
         addHierarchyListener(e -> {
             if ((e.getChangeFlags() & (java.awt.event.HierarchyEvent.PARENT_CHANGED | java.awt.event.HierarchyEvent.SHOWING_CHANGED)) == 0) return;
             boolean attached = getParent() != null && isVisible();
@@ -519,6 +548,13 @@ public class JComponent extends Container {
      */
     Object setDropLocation(TransferHandler.DropLocation location, Object state, boolean forDrop) {
         return null;
+    }
+
+    /**
+     * Called to indicate to this component that DnD is done; JTree cancels
+     * its expand-on-hover timer here.
+     */
+    void dndDone() {
     }
 
     private JPopupMenu componentPopupMenu;
