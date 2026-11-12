@@ -163,24 +163,29 @@ public class JScrollPane extends JComponent implements ScrollPaneConstants, java
 
     // Viewport -> scrollbars (BasicScrollPaneUI.syncScrollPaneWithViewport) and back.
     // `syncing` stops the model events we raise from steering the viewport again.
+    // While a BasicScrollPaneUI is installed its own viewport, model and wheel listeners
+    // do this work, as on the desktop; these stand down so nothing is applied twice.
     private boolean syncing;
+    private boolean delegateSyncs() {
+        return ui instanceof javax.swing.plaf.basic.BasicScrollPaneUI;
+    }
     private final javax.swing.event.ChangeListener viewportListener = event -> {
         JViewport vp = viewport;
-        if (vp == null) return;
+        if (vp == null || delegateSyncs()) return;
         if (columnHeader != null) columnHeader.setViewPosition(new java.awt.Point(vp.getViewPosition().x, 0));
         if(rowHeader!=null)rowHeader.setViewPosition(new java.awt.Point(0,vp.getViewPosition().y));
         syncScrollBarsWithViewport();
     };
     private final java.awt.event.AdjustmentListener verticalListener = e -> {
         JViewport vp = viewport;
-        if (syncing || vp == null || verticalScrollBar == null) return;
+        if (syncing || vp == null || verticalScrollBar == null || delegateSyncs()) return;
         java.awt.Point p = vp.getViewPosition();
         p.y = verticalScrollBar.getValue();
         vp.setViewPosition(p);
     };
     private final java.awt.event.AdjustmentListener horizontalListener = e -> {
         JViewport vp = viewport;
-        if (syncing || vp == null || horizontalScrollBar == null) return;
+        if (syncing || vp == null || horizontalScrollBar == null || delegateSyncs()) return;
         java.awt.Point p = vp.getViewPosition();
         p.x = horizontalScrollBar.getValue();
         vp.setViewPosition(p);
@@ -217,7 +222,7 @@ public class JScrollPane extends JComponent implements ScrollPaneConstants, java
         // event on the scrollpane (or anywhere in its subtree, via the walk-up in
         // Compose's input bridge) actually scrolls the content.
         addMouseWheelListener(e -> {
-            if (e == null || viewport == null || !wheelScrollingEnabled) return;
+            if (e == null || viewport == null || !wheelScrollingEnabled || delegateSyncs()) return;
             // Use the view's preferred row height (≈ a JLabel line) as the unit, or the
             // scrollbar's increment when the pane asks for more (RuneLite sets 16+).
             int unit = Math.max(16, getFont() == null ? 16 : getFontMetrics(getFont()).getHeight());

@@ -20,6 +20,7 @@ import javax.swing.ListSelectionModel;
 import javax.swing.ScrollPaneConstants;
 import javax.swing.border.EmptyBorder;
 import javax.swing.plaf.basic.BasicComboBoxEditor;
+import javax.swing.plaf.basic.BasicScrollPaneUI;
 
 /**
  * JList cell geometry in every layout orientation, the selection API, combo editor commit,
@@ -265,6 +266,23 @@ public class TestListAndScrollContracts {
         check(!pane.isWheelScrollingEnabled(), "wheel scrolling");
     }
 
+    /** BasicScrollPaneUI's own listeners sync the bar and the viewport both ways. */
+    static void scrollPaneDelegate() {
+        JPanel view = new JPanel(null);
+        view.setPreferredSize(new Dimension(80, 400));
+        JScrollPane pane = new JScrollPane(view);
+        pane.setUI(new BasicScrollPaneUI());
+        JViewport vp = pane.getViewport();
+        vp.setSize(80, 100);
+        vp.setViewPosition(new Point(0, 50));
+        JScrollBar bar = pane.getVerticalScrollBar();
+        eq(50, bar.getValue(), "delegate: viewport moves the bar");
+        eq(100, bar.getVisibleAmount(), "delegate: bar extent");
+        eq(400, bar.getMaximum(), "delegate: bar maximum");
+        bar.setValue(120);
+        eq(new Point(0, 120), vp.getViewPosition(), "delegate: bar moves the viewport");
+    }
+
     public static void main(String[] args) {
         vertical();
         verticalWrap(3, 70);
@@ -276,6 +294,7 @@ public class TestListAndScrollContracts {
         viewport();
         combo();
         scrollPane();
+        scrollPaneDelegate();
         System.out.println("PASS: list and scroll contracts");
     }
 }
