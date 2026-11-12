@@ -501,11 +501,12 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
     }
 
     /**
-     * Opaque means "paints every pixel of its bounds": true for the native widgets,
-     * false for lightweight components, which JComponent refines with setOpaque.
+     * Opaque means "paints every pixel of its bounds": true for a native widget once it has
+     * its (here notional) peer, i.e. after addNotify, false before that and for lightweight
+     * components, which JComponent refines with setOpaque.
      */
     public boolean isOpaque() {
-        return !isLightweight();
+        return notified && !isLightweight();
     }
 
     boolean isRecursivelyVisible() {

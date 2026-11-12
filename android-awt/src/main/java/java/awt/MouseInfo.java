@@ -68,7 +68,10 @@ public class MouseInfo {
 
     public static PointerInfo getPointerInfo() throws HeadlessException {
         Pointer last = pointer;
-        GraphicsDevice device = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice();
+        // The device the shadow GraphicsEnvironment reports as its screen, taken directly so
+        // the pointer never depends on which GraphicsEnvironment is loaded: a headless JDK one
+        // would throw HeadlessException here.
+        GraphicsDevice device = net.runelite.awt.impl.HeadlessGraphicsConfiguration.INSTANCE.getDevice();
         return new PointerInfo(device, new Point(last.x, last.y));
     }
 
