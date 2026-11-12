@@ -34,6 +34,8 @@ import javax.swing.text.Document;
 import javax.swing.text.JTextComponent;
 
 public class JTextArea extends JTextComponent {
+    private static final String uiClassID = "TextAreaUI";
+    public String getUIClassID() { return uiClassID; }
 
     public javax.accessibility.AccessibleContext getAccessibleContext() {
         if (accessibleContext == null) {

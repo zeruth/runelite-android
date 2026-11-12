@@ -35,7 +35,6 @@ import java.util.Vector;
 import javax.swing.event.ListSelectionListener;
 
 public class JList<E> extends JComponent implements Scrollable, javax.accessibility.Accessible {
-
     public javax.accessibility.AccessibleContext getAccessibleContext() {
         if (accessibleContext == null) {
             accessibleContext = new AccessibleJList();

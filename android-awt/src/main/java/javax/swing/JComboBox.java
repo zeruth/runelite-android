@@ -43,6 +43,8 @@ import javax.swing.event.PopupMenuListener;
  * array-built combos started blank and removeAllItems() never cleared anything.
  */
 public class JComboBox<E> extends JComponent implements ListDataListener, javax.accessibility.Accessible {
+    private static final String uiClassID = "ComboBoxUI";
+    public String getUIClassID() { return uiClassID; }
 
     public javax.accessibility.AccessibleContext getAccessibleContext() {
         if (accessibleContext == null) {

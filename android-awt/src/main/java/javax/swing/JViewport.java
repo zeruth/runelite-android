@@ -57,7 +57,6 @@ import javax.swing.plaf.ViewportUI;
  * @author Philip Milne
  */
 public class JViewport extends JComponent implements javax.accessibility.Accessible {
-
     private static final long serialVersionUID = 1L;
 
     /**

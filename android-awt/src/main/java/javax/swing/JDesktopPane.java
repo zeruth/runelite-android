@@ -59,6 +59,24 @@ public class JDesktopPane extends JLayeredPane {
         setOpaque(true);
     }
 
+    /**
+     * Returns the L&amp;F object that renders this component.
+     *
+     * @return the {@code DesktopPaneUI} object that renders this component
+     */
+    public javax.swing.plaf.DesktopPaneUI getUI() {
+        return (javax.swing.plaf.DesktopPaneUI) ui;
+    }
+
+    /**
+     * Sets the L&amp;F object that renders this component.
+     *
+     * @param ui the DesktopPaneUI L&amp;F object
+     */
+    public void setUI(javax.swing.plaf.DesktopPaneUI ui) {
+        super.setUI(ui);
+    }
+
     @Override
     public String getUIClassID() {
         return uiClassID;

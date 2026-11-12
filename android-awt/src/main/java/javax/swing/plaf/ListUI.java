@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2005, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2013, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -29,13 +29,11 @@ import java.awt.Point;
 import java.awt.Rectangle;
 import javax.swing.JList;
 
-
 /**
  * The {@code JList} pluggable look and feel delegate.
  *
  * @author Hans Muller
  */
-
 public abstract class ListUI extends ComponentUI
 {
     /**
@@ -43,7 +41,7 @@ public abstract class ListUI extends ComponentUI
      * given location in the list's coordinate system. To determine if the
      * cell actually contains the specified location, compare the point against
      * the cell's bounds, as provided by {@code getCellBounds}.
-     * This method must return {@code -1} if the list's model is empty.
+     * This method returns {@code -1} if the list's model is empty.
      *
      * @param list the list
      * @param location the coordinates of the point
@@ -51,7 +49,6 @@ public abstract class ListUI extends ComponentUI
      * @throws NullPointerException if {@code location} is null
      */
     public abstract int locationToIndex(JList list, Point location);
-
 
     /**
      * Returns the origin in the given {@code JList}, of the specified item,
@@ -63,7 +60,6 @@ public abstract class ListUI extends ComponentUI
      * @return the origin of the cell, or {@code null}
      */
     public abstract Point indexToLocation(JList list, int index);
-
 
     /**
      * Returns the bounding rectangle, in the given list's coordinate system,

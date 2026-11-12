@@ -35,7 +35,6 @@ import java.awt.Container;
 import javax.swing.border.Border;
 
 public class JScrollPane extends JComponent implements ScrollPaneConstants, javax.accessibility.Accessible {
-
     public javax.accessibility.AccessibleContext getAccessibleContext() {
         if (accessibleContext == null) {
             accessibleContext = new AccessibleJScrollPane();
