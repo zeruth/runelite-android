@@ -53,8 +53,40 @@ public class EventQueue {
     public EventQueue() {
     }
 
-    public synchronized void postEvent(AWTEvent event) {
-        if (event != null) { queue.addLast(event); notifyAll(); }
+    /**
+     * Queues the event and schedules its dispatch on the EDT, in posting order. The event
+     * stays visible to {@link #peekEvent} until then, so RuneLite's
+     * {@code SwingUtil.pumpPendingEvents} can still drain it early through a secondary loop.
+     */
+    public void postEvent(AWTEvent event) {
+        if (event == null) throw new NullPointerException("event");
+        synchronized (this) { queue.addLast(event); notifyAll(); }
+        EDT.execute(() -> runGuarded(this::dispatchNextPending));
+    }
+
+    private void dispatchNextPending() {
+        AWTEvent event;
+        synchronized (this) { event = queue.pollFirst(); }
+        // Null when a secondary loop or getNextEvent already took it.
+        if (event != null) dispatchEvent(event);
+    }
+
+    /**
+     * JDK routing: an {@link ActiveEvent} dispatches itself, a component or menu event goes
+     * to its source's {@code dispatchEvent} (which notifies the Toolkit's AWTEventListeners).
+     */
+    protected void dispatchEvent(AWTEvent event) {
+        Object src = event.getSource();
+        if (event instanceof ActiveEvent) {
+            AWTEvent previous = beginDispatch(event);
+            try { ((ActiveEvent) event).dispatch(); } finally { endDispatch(previous); }
+        } else if (src instanceof Component) {
+            ((Component) src).dispatchEvent(event);
+        } else if (src instanceof MenuComponent) {
+            ((MenuComponent) src).dispatchEvent(event);
+        } else {
+            System.err.println("unable to dispatch event: " + event);
+        }
     }
 
     public synchronized AWTEvent getNextEvent() throws InterruptedException {
@@ -134,8 +166,7 @@ public class EventQueue {
                             AWTEvent event;
                             synchronized (EventQueue.this) { event = queue.pollFirst(); }
                             if (event != null) {
-                                if (event.getSource() instanceof Component)
-                                    ((Component) event.getSource()).dispatchEvent(event);
+                                dispatchEvent(event);
                                 continue;
                             }
                             // Includes SwingUtil's invokeLater(loop::exit), preserving
@@ -163,27 +194,41 @@ public class EventQueue {
         };
     }
 
+    /**
+     * As on the JDK the task travels as an {@link java.awt.event.InvocationEvent} sourced at
+     * the default Toolkit, so {@link #getCurrentEvent()} inside it answers that event. It runs
+     * on the single EDT executor rather than through {@link #postEvent}'s queue: SwingUtil's
+     * {@code pumpPendingEvents} only enters its secondary loop when {@link #peekEvent} sees a
+     * pending component event, and every queued task would otherwise satisfy it.
+     */
     public static void invokeLater(Runnable r) {
         if (r == null) return;
-        EDT.execute(() -> runGuarded(r));
+        java.awt.event.InvocationEvent event = new java.awt.event.InvocationEvent(Toolkit.getDefaultToolkit(), r);
+        EDT.execute(() -> runGuarded(() -> dispatchActive(event)));
     }
 
     public static void invokeAndWait(Runnable r) throws InterruptedException {
         if (r == null) return;
+        java.awt.event.InvocationEvent event = new java.awt.event.InvocationEvent(Toolkit.getDefaultToolkit(), r);
         // Already on the EDT — run inline so we don't deadlock waiting on ourselves.
         if (isDispatchThread()) {
-            runGuarded(r);
+            runGuarded(() -> dispatchActive(event));
             return;
         }
         java.util.concurrent.CountDownLatch done = new java.util.concurrent.CountDownLatch(1);
         EDT.execute(() -> {
             try {
-                runGuarded(r);
+                runGuarded(() -> dispatchActive(event));
             } finally {
                 done.countDown();
             }
         });
         done.await();
+    }
+
+    private static void dispatchActive(ActiveEvent event) {
+        AWTEvent previous = beginDispatch((AWTEvent) event);
+        try { event.dispatch(); } finally { endDispatch(previous); }
     }
 
     /**

@@ -509,6 +509,28 @@ public class Window extends Container {
     public void addWindowStateListener(java.awt.event.WindowStateListener l) { if (l != null) windowStateListeners.add(l); }
     public void removeWindowStateListener(java.awt.event.WindowStateListener l) { windowStateListeners.remove(l); }
     public java.awt.event.WindowStateListener[] getWindowStateListeners() { return windowStateListeners.toArray(new java.awt.event.WindowStateListener[0]); }
+    @Override boolean eventEnabled(AWTEvent event) {
+        switch (event.getID()) {
+            case java.awt.event.WindowEvent.WINDOW_OPENED:
+            case java.awt.event.WindowEvent.WINDOW_CLOSING:
+            case java.awt.event.WindowEvent.WINDOW_CLOSED:
+            case java.awt.event.WindowEvent.WINDOW_ICONIFIED:
+            case java.awt.event.WindowEvent.WINDOW_DEICONIFIED:
+            case java.awt.event.WindowEvent.WINDOW_ACTIVATED:
+            case java.awt.event.WindowEvent.WINDOW_DEACTIVATED:
+                if ((eventMask & AWTEvent.WINDOW_EVENT_MASK) != 0 || !windowListeners.isEmpty()) return true;
+                return false;
+            case java.awt.event.WindowEvent.WINDOW_GAINED_FOCUS:
+            case java.awt.event.WindowEvent.WINDOW_LOST_FOCUS:
+                if ((eventMask & AWTEvent.WINDOW_FOCUS_EVENT_MASK) != 0 || !windowFocusListeners.isEmpty()) return true;
+                return false;
+            case java.awt.event.WindowEvent.WINDOW_STATE_CHANGED:
+                if ((eventMask & AWTEvent.WINDOW_STATE_EVENT_MASK) != 0 || !windowStateListeners.isEmpty()) return true;
+                return false;
+            default:
+                return super.eventEnabled(event);
+        }
+    }
     @Override protected void processEvent(AWTEvent event) {
         if (event instanceof java.awt.event.WindowEvent) {
             java.awt.event.WindowEvent windowEvent = (java.awt.event.WindowEvent) event;

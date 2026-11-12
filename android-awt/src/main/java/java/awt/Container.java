@@ -91,6 +91,7 @@ public class Container extends Component {
         if (layout instanceof LayoutManager2) ((LayoutManager2) layout).addLayoutComponent(comp, null);
         else if (layout != null) layout.addLayoutComponent(null, comp);
         invalidate();
+        fireContainerEvent(java.awt.event.ContainerEvent.COMPONENT_ADDED, comp);
         return comp;
     }
 
@@ -103,7 +104,8 @@ public class Container extends Component {
     public void add(Component comp, Object constraints) {
         if (comp == null) return;
         checkCycle(comp);
-        if (children.contains(comp)) {
+        boolean added = !children.contains(comp);
+        if (!added) {
             // add(comp, -1) already added; just register constraint
         } else {
             detach(comp);
@@ -116,6 +118,7 @@ public class Container extends Component {
             layout.addLayoutComponent((String) constraints, comp);
         }
         invalidate();
+        if (added) fireContainerEvent(java.awt.event.ContainerEvent.COMPONENT_ADDED, comp);
     }
 
     public void add(Component comp, Object constraints, int index) {
@@ -128,6 +131,7 @@ public class Container extends Component {
         if (layout instanceof LayoutManager2) ((LayoutManager2) layout).addLayoutComponent(comp, constraints);
         else if (layout != null && (constraints == null || constraints instanceof String)) layout.addLayoutComponent((String) constraints, comp);
         invalidate();
+        fireContainerEvent(java.awt.event.ContainerEvent.COMPONENT_ADDED, comp);
     }
 
     public void remove(int index) {
@@ -137,6 +141,7 @@ public class Container extends Component {
             c.setParent(null);
         }
         invalidate();
+        if (c != null) fireContainerEvent(java.awt.event.ContainerEvent.COMPONENT_REMOVED, c);
     }
 
     public void remove(Component comp) {
@@ -144,17 +149,20 @@ public class Container extends Component {
             if (layout != null) layout.removeLayoutComponent(comp);
             comp.setParent(null);
             invalidate();
+            fireContainerEvent(java.awt.event.ContainerEvent.COMPONENT_REMOVED, comp);
         }
     }
 
     public void removeAll() {
         if (children.isEmpty()) return;
-        for (Component c : children) {
+        Component[] removed = children.toArray(new Component[0]);
+        for (Component c : removed) {
             if (layout != null) layout.removeLayoutComponent(c);
             c.setParent(null);
         }
         children.clear();
         invalidate();
+        for (Component c : removed) fireContainerEvent(java.awt.event.ContainerEvent.COMPONENT_REMOVED, c);
     }
 
     public int getComponentZOrder(Component comp) { return children.indexOf(comp); }
@@ -199,6 +207,48 @@ public class Container extends Component {
             if (d != null && (d.width > 0 || d.height > 0)) return d;
         }
         return super.getMinimumSize();
+    }
+
+    // ---- ContainerEvents -------------------------------------------------------------------
+
+    private final List<java.awt.event.ContainerListener> containerListeners = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    public void addContainerListener(java.awt.event.ContainerListener l) { if (l != null) containerListeners.add(l); }
+    public void removeContainerListener(java.awt.event.ContainerListener l) { containerListeners.remove(l); }
+    public java.awt.event.ContainerListener[] getContainerListeners() {
+        return containerListeners.toArray(new java.awt.event.ContainerListener[0]);
+    }
+
+    /** As the JDK's addImpl/remove: built only when a listener, mask or AWTEventListener wants it. */
+    private void fireContainerEvent(int id, Component child) {
+        if (containerListeners.isEmpty() && (eventMask & AWTEvent.CONTAINER_EVENT_MASK) == 0
+                && !Toolkit.enabledOnToolkit(AWTEvent.CONTAINER_EVENT_MASK)) return;
+        dispatchEvent(new java.awt.event.ContainerEvent(this, id, child));
+    }
+
+    @Override boolean eventEnabled(AWTEvent event) {
+        int id = event.getID();
+        if (id == java.awt.event.ContainerEvent.COMPONENT_ADDED || id == java.awt.event.ContainerEvent.COMPONENT_REMOVED) {
+            return (eventMask & AWTEvent.CONTAINER_EVENT_MASK) != 0 || !containerListeners.isEmpty();
+        }
+        return super.eventEnabled(event);
+    }
+
+    @Override protected void processEvent(AWTEvent event) {
+        if (event instanceof java.awt.event.ContainerEvent) {
+            processContainerEvent((java.awt.event.ContainerEvent) event);
+            return;
+        }
+        super.processEvent(event);
+    }
+
+    protected void processContainerEvent(java.awt.event.ContainerEvent e) {
+        for (java.awt.event.ContainerListener l : containerListeners) {
+            switch (e.getID()) {
+                case java.awt.event.ContainerEvent.COMPONENT_ADDED: l.componentAdded(e); break;
+                case java.awt.event.ContainerEvent.COMPONENT_REMOVED: l.componentRemoved(e); break;
+            }
+        }
     }
 
     public void setFocusCycleRoot(boolean focusCycleRoot) {}
