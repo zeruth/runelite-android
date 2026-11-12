@@ -31,6 +31,12 @@
 package javax.swing;
 
 import java.awt.Component;
+import java.awt.Dimension;
+import java.awt.GraphicsConfiguration;
+import java.awt.Insets;
+import java.awt.Point;
+import java.awt.Rectangle;
+import java.awt.Toolkit;
 import javax.swing.event.PopupMenuListener;
 
 public class JPopupMenu extends JComponent implements MenuElement {
@@ -68,23 +74,129 @@ public class JPopupMenu extends JComponent implements MenuElement {
     public void insert(Action a, int index) { super.add(new JMenuItem(a), index); }
     public void insert(Component c, int index) { super.add(c, index); }
     @Override public void removeAll() { super.removeAll(); }
+
+    /**
+     * As in 8u: the popup's screen location is the invoker's screen origin plus (x, y), moved
+     * back inside the host screen bounds. The panel host takes the shown menu through
+     * {@link #takeShownPopupMenu} and presents its items itself.
+     */
     public void show(Component invoker, int x, int y) {
-        this.invoker = invoker;
+        setInvoker(invoker);
+        long lx = x;
+        long ly = y;
+        if (invoker != null) {
+            Point origin = invoker.getLocationOnScreen();
+            lx += origin.x;
+            ly += origin.y;
+        }
+        desiredLocationX = (int) Math.max(Integer.MIN_VALUE, Math.min(Integer.MAX_VALUE, lx));
+        desiredLocationY = (int) Math.max(Integer.MIN_VALUE, Math.min(Integer.MAX_VALUE, ly));
         setVisible(true);
         shownPopup.set(this);
-        // Without a real Swing root pane to mount onto, positioning here is best-effort.
-        java.awt.Dimension d = getPreferredSize();
-        setBounds(x, y, Math.max(80, d.width), Math.max(20, d.height));
+        placeOnScreen();
+    }
+
+    private int desiredLocationX, desiredLocationY;
+
+    /** Screen coordinates, as in 8u: moves an open popup at once. */
+    @Override
+    public void setLocation(int x, int y) {
+        desiredLocationX = x;
+        desiredLocationY = y;
+        if (isVisible()) placeOnScreen();
+    }
+
+    private void placeOnScreen() {
+        Dimension d = getPreferredSize();
+        Dimension size = new Dimension(Math.max(80, d.width), Math.max(20, d.height));
+        Point p = adjustPopupLocationToFitScreen(desiredLocationX, desiredLocationY, size);
+        setBounds(p.x, p.y, size.width, size.height);
         doLayout();
         repaint();
     }
+
+    private static final boolean popupPositionFixDisabled =
+        "false".equals(System.getProperty("javax.swing.adjustPopupLocationToFit", ""));
+
+    /** 8u adjustPopupLocationToFitScreen, against the host screen and its insets. */
+    Point adjustPopupLocationToFitScreen(int xPosition, int yPosition, Dimension popupSize) {
+        Point popupLocation = new Point(xPosition, yPosition);
+        if (popupPositionFixDisabled) return popupLocation;
+        Toolkit toolkit = Toolkit.getDefaultToolkit();
+        GraphicsConfiguration gc = invoker != null ? invoker.getGraphicsConfiguration() : getGraphicsConfiguration();
+        Rectangle scrBounds = gc != null ? gc.getBounds() : new Rectangle(toolkit.getScreenSize());
+        if (gc != null) {
+            Insets insets = toolkit.getScreenInsets(gc);
+            scrBounds.x += insets.left;
+            scrBounds.y += insets.top;
+            scrBounds.width -= insets.left + insets.right;
+            scrBounds.height -= insets.top + insets.bottom;
+        }
+        long popupRightX = (long) popupLocation.x + (long) popupSize.width;
+        long popupBottomY = (long) popupLocation.y + (long) popupSize.height;
+        int scrRightX = scrBounds.x + scrBounds.width;
+        int scrBottomY = scrBounds.y + scrBounds.height;
+        if (popupRightX > (long) scrRightX) popupLocation.x = scrRightX - popupSize.width;
+        if (popupBottomY > (long) scrBottomY) popupLocation.y = scrBottomY - popupSize.height;
+        if (popupLocation.x < scrBounds.x) popupLocation.x = scrBounds.x;
+        if (popupLocation.y < scrBounds.y) popupLocation.y = scrBounds.y;
+        return popupLocation;
+    }
+
+    /** Lays the open popup out again at its preferred size. */
+    public void pack() {
+        if (isVisible()) placeOnScreen();
+    }
+
+    public void setPopupSize(Dimension d) {
+        Dimension old = getPreferredSize();
+        setPreferredSize(d);
+        if (isVisible() && !old.equals(getPreferredSize())) placeOnScreen();
+    }
+
+    public void setPopupSize(int width, int height) { setPopupSize(new Dimension(width, height)); }
+
+    public int getComponentIndex(Component c) {
+        int n = getComponentCount();
+        for (int i = 0; i < n; i++) {
+            if (getComponent(i) == c) return i;
+        }
+        return -1;
+    }
+
+    /** @deprecated replaced by {@link java.awt.Container#getComponent(int)} */
+    @Deprecated
+    public Component getComponentAtIndex(int i) { return getComponent(i); }
+
+    private SingleSelectionModel selectionModel = new DefaultSingleSelectionModel();
+    public SingleSelectionModel getSelectionModel() { return selectionModel; }
+    public void setSelectionModel(SingleSelectionModel model) { selectionModel = model; }
+    public void setSelected(Component sel) { selectionModel.setSelectedIndex(getComponentIndex(sel)); }
+
+    /** BasicPopupMenuUI.isPopupTrigger: a right-button release. */
+    public boolean isPopupTrigger(java.awt.event.MouseEvent e) {
+        return e.getID() == java.awt.event.MouseEvent.MOUSE_RELEASED
+            && (e.getModifiers() & java.awt.event.InputEvent.BUTTON3_MASK) != 0;
+    }
+
     public Component getInvoker() { return invoker; }
-    public void setInvoker(Component invoker) { this.invoker = invoker; }
+    public void setInvoker(Component invoker) {
+        Component old = this.invoker;
+        this.invoker = invoker;
+        firePropertyChange("invoker", old, invoker);
+    }
     private String label;
     public void setLabel(String label) { String old=this.label;this.label=label;firePropertyChange("label",old,label); }
     public String getLabel() { return label; }
     public java.awt.Component getComponent() { return this; }
-    public void menuSelectionChanged(boolean included) { if(!included)setVisible(false); }
+
+    /** As in 8u: a menu's popup opens and closes with the selected path; a context popup closes. */
+    public void menuSelectionChanged(boolean included) {
+        if (invoker instanceof JMenu) ((JMenu) invoker).setPopupMenuVisible(included);
+        if (isPopupMenu() && !included) setVisible(false);
+    }
+
+    private boolean isPopupMenu() { return invoker != null && !(invoker instanceof JMenu); }
 
     /** As in 8u, a popup takes no mouse action of its own; the manager routes to its items. */
     public void processMouseEvent(java.awt.event.MouseEvent event, MenuElement path[], MenuSelectionManager manager) {}
@@ -126,14 +238,36 @@ public class JPopupMenu extends JComponent implements MenuElement {
     }
     public void addPopupMenuListener(PopupMenuListener l) { if (l != null) popupListeners.add(l); }
     public void removePopupMenuListener(PopupMenuListener l) { popupListeners.remove(l); }
+    public PopupMenuListener[] getPopupMenuListeners() { return popupListeners.toArray(new PopupMenuListener[0]); }
+
+    // Listeners are notified last-added first, as EventListenerList dispatch is in 8u.
+    protected void firePopupMenuWillBecomeVisible() {
+        javax.swing.event.PopupMenuEvent event = new javax.swing.event.PopupMenuEvent(this);
+        PopupMenuListener[] listeners = getPopupMenuListeners();
+        for (int i = listeners.length - 1; i >= 0; i--) listeners[i].popupMenuWillBecomeVisible(event);
+    }
+
+    protected void firePopupMenuWillBecomeInvisible() {
+        javax.swing.event.PopupMenuEvent event = new javax.swing.event.PopupMenuEvent(this);
+        PopupMenuListener[] listeners = getPopupMenuListeners();
+        for (int i = listeners.length - 1; i >= 0; i--) listeners[i].popupMenuWillBecomeInvisible(event);
+    }
+
+    protected void firePopupMenuCanceled() {
+        javax.swing.event.PopupMenuEvent event = new javax.swing.event.PopupMenuEvent(this);
+        PopupMenuListener[] listeners = getPopupMenuListeners();
+        for (int i = listeners.length - 1; i >= 0; i--) listeners[i].popupMenuCanceled(event);
+    }
+
     @Override public void setVisible(boolean visible) {
         if (visible == isVisible()) return;
-        javax.swing.event.PopupMenuEvent event = new javax.swing.event.PopupMenuEvent(this);
-        for (PopupMenuListener listener : new java.util.ArrayList<>(popupListeners)) {
-            if (visible) listener.popupMenuWillBecomeVisible(event);
-            else listener.popupMenuWillBecomeInvisible(event);
-        }
+        if (visible) firePopupMenuWillBecomeVisible();
+        else firePopupMenuWillBecomeInvisible();
         super.setVisible(visible);
+        // 8u: a context popup going away ends the menu selection it was part of.
+        if (!visible && isPopupMenu() && MenuSelectionManager.defaultManager().isComponentPartOfCurrentMenu(this)) {
+            MenuSelectionManager.defaultManager().clearSelectedPath();
+        }
     }
     public boolean isBorderPainted() { return false; }
     public void setBorderPainted(boolean b) {}

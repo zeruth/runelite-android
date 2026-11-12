@@ -40,6 +40,23 @@ public abstract class AbstractButton extends JComponent {
     public static final String TEXT_CHANGED_PROPERTY = "text";
     public static final String ICON_CHANGED_PROPERTY = "icon";
     public static final String SELECTED_CHANGED_PROPERTY = "selected";
+    public static final String MODEL_CHANGED_PROPERTY = "model";
+    public static final String MNEMONIC_CHANGED_PROPERTY = "mnemonic";
+    public static final String MARGIN_CHANGED_PROPERTY = "margin";
+    public static final String VERTICAL_ALIGNMENT_CHANGED_PROPERTY = "verticalAlignment";
+    public static final String HORIZONTAL_ALIGNMENT_CHANGED_PROPERTY = "horizontalAlignment";
+    public static final String VERTICAL_TEXT_POSITION_CHANGED_PROPERTY = "verticalTextPosition";
+    public static final String HORIZONTAL_TEXT_POSITION_CHANGED_PROPERTY = "horizontalTextPosition";
+    public static final String BORDER_PAINTED_CHANGED_PROPERTY = "borderPainted";
+    public static final String FOCUS_PAINTED_CHANGED_PROPERTY = "focusPainted";
+    public static final String ROLLOVER_ENABLED_CHANGED_PROPERTY = "rolloverEnabled";
+    public static final String CONTENT_AREA_FILLED_CHANGED_PROPERTY = "contentAreaFilled";
+    public static final String PRESSED_ICON_CHANGED_PROPERTY = "pressedIcon";
+    public static final String SELECTED_ICON_CHANGED_PROPERTY = "selectedIcon";
+    public static final String ROLLOVER_ICON_CHANGED_PROPERTY = "rolloverIcon";
+    public static final String ROLLOVER_SELECTED_ICON_CHANGED_PROPERTY = "rolloverSelectedIcon";
+    public static final String DISABLED_ICON_CHANGED_PROPERTY = "disabledIcon";
+    public static final String DISABLED_SELECTED_ICON_CHANGED_PROPERTY = "disabledSelectedIcon";
 
     public static final int HORIZONTAL = SwingConstants.HORIZONTAL;
     public static final int VERTICAL = SwingConstants.VERTICAL;
@@ -52,7 +69,7 @@ public abstract class AbstractButton extends JComponent {
     protected ButtonModel model = new DefaultButtonModel();
     protected String text = "";
     protected Icon icon;
-    private Icon pressedIcon, selectedIcon, rolloverIcon, disabledIcon, rolloverSelectedIcon;
+    private Icon pressedIcon, selectedIcon, rolloverIcon, disabledIcon, rolloverSelectedIcon, disabledSelectedIcon;
     private int horizontalAlignment = CENTER;
     private int horizontalTextPosition = TRAILING;
     private int verticalAlignment = CENTER;
@@ -67,42 +84,141 @@ public abstract class AbstractButton extends JComponent {
     // Swing's AbstractButton.init(): buttons default to LEFT_ALIGNMENT in BoxLayouts.
     public AbstractButton() { setAlignmentX(0f); setModel(model); }
 
+    // Unlike 8u the text is never null: the panel host and the painters read it unguarded.
     public String getText() { return text; }
-    public void setText(String text) { this.text = text == null ? "" : text; invalidate(); }
+    public void setText(String text) {
+        String old = this.text;
+        this.text = text == null ? "" : text;
+        firePropertyChange(TEXT_CHANGED_PROPERTY, old, this.text);
+        updateDisplayedMnemonicIndex(this.text, getMnemonic());
+        if (!this.text.equals(old)) { revalidate(); repaint(); }
+        invalidate();
+    }
     public Icon getIcon() { return icon; }
-    public void setIcon(Icon icon) { this.icon = icon; invalidate(); }
+    public void setIcon(Icon icon) {
+        Icon old = this.icon;
+        this.icon = icon;
+        // 8u drops a disabled icon it derived itself from the old default icon.
+        if (icon != old && disabledIcon instanceof javax.swing.plaf.UIResource) disabledIcon = null;
+        firePropertyChange(ICON_CHANGED_PROPERTY, old, icon);
+        if (icon != old) { revalidate(); repaint(); }
+        invalidate();
+    }
     public Icon getPressedIcon() { return pressedIcon; }
-    public void setPressedIcon(Icon icon) { this.pressedIcon = icon; }
+    public void setPressedIcon(Icon icon) { Icon old = pressedIcon; pressedIcon = icon; firePropertyChange(PRESSED_ICON_CHANGED_PROPERTY, old, icon); if (icon != old && getModel().isPressed()) repaint(); }
     public Icon getSelectedIcon() { return selectedIcon; }
-    public void setSelectedIcon(Icon icon) { this.selectedIcon = icon; }
+    public void setSelectedIcon(Icon icon) {
+        Icon old = selectedIcon;
+        selectedIcon = icon;
+        if (icon != old && disabledSelectedIcon instanceof javax.swing.plaf.UIResource) disabledSelectedIcon = null;
+        firePropertyChange(SELECTED_ICON_CHANGED_PROPERTY, old, icon);
+        if (icon != old && isSelected()) repaint();
+    }
     public Icon getRolloverIcon() { return rolloverIcon; }
-    public void setRolloverIcon(Icon icon) { this.rolloverIcon = icon; }
-    public Icon getDisabledIcon() { return disabledIcon; }
-    public void setDisabledIcon(Icon icon) { this.disabledIcon = icon; }
+    public void setRolloverIcon(Icon icon) {
+        Icon old = rolloverIcon;
+        rolloverIcon = icon;
+        firePropertyChange(ROLLOVER_ICON_CHANGED_PROPERTY, old, icon);
+        // As in 8u, giving a rollover icon turns rollover on.
+        setRolloverEnabled(true);
+        if (icon != old) repaint();
+    }
     // Shown when a button is both rolled-over AND selected. RuneLite's
     // SwingUtil.removeButtonDecorations() sets all icon variants including this one;
     // without it external plugin panels (quest-helper) crash at startUp with
     // NoSuchMethodError before any UI is built.
     public Icon getRolloverSelectedIcon() { return rolloverSelectedIcon; }
-    public void setRolloverSelectedIcon(Icon icon) { this.rolloverSelectedIcon = icon; }
+    public void setRolloverSelectedIcon(Icon icon) {
+        Icon old = rolloverSelectedIcon;
+        rolloverSelectedIcon = icon;
+        firePropertyChange(ROLLOVER_SELECTED_ICON_CHANGED_PROPERTY, old, icon);
+        setRolloverEnabled(true);
+        if (icon != old && isSelected()) repaint();
+    }
+    /** The disabled icon, derived from the default icon by the look and feel when none is set. */
+    public Icon getDisabledIcon() {
+        if (disabledIcon == null) {
+            disabledIcon = UIManager.getLookAndFeel() == null ? null : UIManager.getLookAndFeel().getDisabledIcon(this, getIcon());
+            if (disabledIcon != null) firePropertyChange(DISABLED_ICON_CHANGED_PROPERTY, null, disabledIcon);
+        }
+        return disabledIcon;
+    }
+    public void setDisabledIcon(Icon icon) { Icon old = disabledIcon; disabledIcon = icon; firePropertyChange(DISABLED_ICON_CHANGED_PROPERTY, old, icon); if (icon != old && !isEnabled()) repaint(); }
+    /** As in 8u: falls back to a disabled form of the selected icon, then to the disabled icon. */
+    public Icon getDisabledSelectedIcon() {
+        if (disabledSelectedIcon == null) {
+            if (selectedIcon == null) return getDisabledIcon();
+            disabledSelectedIcon = UIManager.getLookAndFeel() == null ? null
+                : UIManager.getLookAndFeel().getDisabledSelectedIcon(this, selectedIcon);
+        }
+        return disabledSelectedIcon;
+    }
+    public void setDisabledSelectedIcon(Icon icon) {
+        Icon old = disabledSelectedIcon;
+        disabledSelectedIcon = icon;
+        firePropertyChange(DISABLED_SELECTED_ICON_CHANGED_PROPERTY, old, icon);
+        if (icon != old && !isEnabled() && isSelected()) repaint();
+    }
 
     public int getHorizontalAlignment() { return horizontalAlignment; }
-    public void setHorizontalAlignment(int alignment) { this.horizontalAlignment = alignment; }
+    public void setHorizontalAlignment(int alignment) {
+        if (alignment == horizontalAlignment) return;
+        int old = horizontalAlignment;
+        horizontalAlignment = checkHorizontalKey(alignment, "horizontalAlignment");
+        firePropertyChange(HORIZONTAL_ALIGNMENT_CHANGED_PROPERTY, old, horizontalAlignment);
+        repaint();
+    }
     public int getHorizontalTextPosition() { return horizontalTextPosition; }
-    public void setHorizontalTextPosition(int textPosition) { this.horizontalTextPosition = textPosition; }
+    public void setHorizontalTextPosition(int textPosition) {
+        if (textPosition == horizontalTextPosition) return;
+        int old = horizontalTextPosition;
+        horizontalTextPosition = checkHorizontalKey(textPosition, "horizontalTextPosition");
+        firePropertyChange(HORIZONTAL_TEXT_POSITION_CHANGED_PROPERTY, old, horizontalTextPosition);
+        revalidate(); repaint();
+    }
     public int getVerticalAlignment() { return verticalAlignment; }
-    public void setVerticalAlignment(int alignment) { this.verticalAlignment = alignment; }
+    public void setVerticalAlignment(int alignment) {
+        if (alignment == verticalAlignment) return;
+        int old = verticalAlignment;
+        verticalAlignment = checkVerticalKey(alignment, "verticalAlignment");
+        firePropertyChange(VERTICAL_ALIGNMENT_CHANGED_PROPERTY, old, verticalAlignment);
+        repaint();
+    }
     public int getVerticalTextPosition() { return verticalTextPosition; }
-    public void setVerticalTextPosition(int textPosition) { this.verticalTextPosition = textPosition; }
+    public void setVerticalTextPosition(int textPosition) {
+        if (textPosition == verticalTextPosition) return;
+        int old = verticalTextPosition;
+        verticalTextPosition = checkVerticalKey(textPosition, "verticalTextPosition");
+        firePropertyChange(VERTICAL_TEXT_POSITION_CHANGED_PROPERTY, old, verticalTextPosition);
+        revalidate(); repaint();
+    }
+
+    protected int checkHorizontalKey(int key, String exception) {
+        if (key == LEFT || key == CENTER || key == RIGHT || key == SwingConstants.LEADING || key == TRAILING) return key;
+        throw new IllegalArgumentException(exception);
+    }
+
+    protected int checkVerticalKey(int key, String exception) {
+        if (key == TOP || key == CENTER || key == BOTTOM) return key;
+        throw new IllegalArgumentException(exception);
+    }
 
     public boolean isBorderPainted() { return borderPainted; }
-    public void setBorderPainted(boolean b) { this.borderPainted = b; }
+    public void setBorderPainted(boolean b) { boolean old = borderPainted; borderPainted = b; firePropertyChange(BORDER_PAINTED_CHANGED_PROPERTY, old, b); if (b != old) { revalidate(); repaint(); } }
     public boolean isContentAreaFilled() { return contentAreaFilled; }
-    public void setContentAreaFilled(boolean b) { this.contentAreaFilled = b; }
+    public void setContentAreaFilled(boolean b) { boolean old = contentAreaFilled; contentAreaFilled = b; firePropertyChange(CONTENT_AREA_FILLED_CHANGED_PROPERTY, old, b); if (b != old) repaint(); }
     public boolean isFocusPainted() { return focusPainted; }
-    public void setFocusPainted(boolean b) { this.focusPainted = b; }
+    public void setFocusPainted(boolean b) { boolean old = focusPainted; focusPainted = b; firePropertyChange(FOCUS_PAINTED_CHANGED_PROPERTY, old, b); if (b != old && isFocusOwner()) { revalidate(); repaint(); } }
     public boolean isRolloverEnabled() { return rolloverEnabled; }
-    public void setRolloverEnabled(boolean b) { this.rolloverEnabled = b; }
+    public void setRolloverEnabled(boolean b) { boolean old = rolloverEnabled; rolloverEnabled = b; firePropertyChange(ROLLOVER_ENABLED_CHANGED_PROPERTY, old, b); if (b != old) repaint(); }
+
+    private long multiClickThreshhold;
+    /** Clicks closer together than this many milliseconds produce one action event. */
+    public void setMultiClickThreshhold(long threshhold) {
+        if (threshhold < 0) throw new IllegalArgumentException("threshhold must be >= 0");
+        multiClickThreshhold = threshhold;
+    }
+    public long getMultiClickThreshhold() { return multiClickThreshhold; }
 
     public ButtonModel getModel() { return model; }
     public void setModel(ButtonModel newModel) {
@@ -117,7 +233,8 @@ public abstract class AbstractButton extends JComponent {
         model.addActionListener(modelActionListener);
         model.addItemListener(modelItemListener);
         model.addChangeListener(modelChangeListener);
-        firePropertyChange("model", old, newModel);
+        updateMnemonicProperties();
+        firePropertyChange(MODEL_CHANGED_PROPERTY, old, newModel);
         repaint();
     }
     @Override public void setEnabled(boolean enabled) {
@@ -140,6 +257,7 @@ public abstract class AbstractButton extends JComponent {
         repaint();
     };
     private final ChangeListener modelChangeListener = e -> {
+        updateMnemonicProperties();
         javax.swing.event.ChangeEvent event = new javax.swing.event.ChangeEvent(this);
         for (ChangeListener listener : getChangeListeners()) listener.stateChanged(event);
         repaint();
@@ -217,6 +335,11 @@ public abstract class AbstractButton extends JComponent {
     private final java.util.List<ItemListener> itemListeners = new java.util.ArrayList<>();
 
     public void doClick() { doClick(68); }
+    /**
+     * Presses and releases the button through its model. Deliberately does not sleep
+     * {@code pressTime} as 8u does: 8u paints the pressed state in between, the panel host
+     * repaints only after the EDT task, so the sleep would stall the EDT for nothing.
+     */
     public void doClick(int pressTime) {
         if (!isEnabled()) return;
         model.setArmed(true);
@@ -225,12 +348,62 @@ public abstract class AbstractButton extends JComponent {
         model.setArmed(false);
     }
 
-    public void setMnemonic(int mnemonic) { model.setMnemonic(mnemonic); }
-    public int getMnemonic() { return model.getMnemonic(); }
-    public void setMnemonic(char mnemonic) { model.setMnemonic(mnemonic); }
+    // The mnemonic last published; the model's is the source of truth (8u updateMnemonicProperties).
+    private int mnemonic;
+
+    public void setMnemonic(int mnemonic) {
+        model.setMnemonic(mnemonic);
+        updateMnemonicProperties();
+    }
+    public int getMnemonic() { return mnemonic; }
+    /** As in 8u: a lower-case letter is taken as its VK_ code. */
+    public void setMnemonic(char mnemonic) {
+        int vk = mnemonic;
+        if (vk >= 'a' && vk <= 'z') vk -= ('a' - 'A');
+        setMnemonic(vk);
+    }
+
+    private void updateMnemonicProperties() {
+        int newMnemonic = model.getMnemonic();
+        if (mnemonic != newMnemonic) {
+            int old = mnemonic;
+            mnemonic = newMnemonic;
+            firePropertyChange(MNEMONIC_CHANGED_PROPERTY, old, mnemonic);
+            updateDisplayedMnemonicIndex(getText(), mnemonic);
+            revalidate();
+            repaint();
+        }
+    }
+
     private int displayedMnemonicIndex = -1;
-    public void setDisplayedMnemonicIndex(int index) { if (index < -1 || index >= text.length()) throw new IllegalArgumentException("index"); displayedMnemonicIndex = index; repaint(); }
+    public void setDisplayedMnemonicIndex(int index) {
+        int old = displayedMnemonicIndex;
+        if (index != -1) {
+            String t = getText();
+            int length = t == null ? 0 : t.length();
+            if (index < -1 || index >= length) throw new IllegalArgumentException("index == " + index);
+        }
+        displayedMnemonicIndex = index;
+        firePropertyChange("displayedMnemonicIndex", old, index);
+        if (index != old) { revalidate(); repaint(); }
+    }
     public int getDisplayedMnemonicIndex() { return displayedMnemonicIndex; }
+
+    private void updateDisplayedMnemonicIndex(String t, int key) {
+        setDisplayedMnemonicIndex(findDisplayedMnemonicIndex(t, key));
+    }
+
+    /** 8u SwingUtilities.findDisplayedMnemonicIndex: first case-insensitive match of the key. */
+    static int findDisplayedMnemonicIndex(String t, int key) {
+        if (t == null || key == '\0') return -1;
+        char upper = Character.toUpperCase((char) key);
+        char lower = Character.toLowerCase((char) key);
+        int upperIndex = t.indexOf(upper);
+        int lowerIndex = t.indexOf(lower);
+        if (upperIndex == -1) return lowerIndex;
+        if (lowerIndex == -1) return upperIndex;
+        return lowerIndex < upperIndex ? lowerIndex : upperIndex;
+    }
 
     public void setActionCommand(String s) { model.setActionCommand(s); }
     public String getActionCommand() { return model.getActionCommand() != null ? model.getActionCommand() : text; }
@@ -267,6 +440,7 @@ public abstract class AbstractButton extends JComponent {
         if (hide == hideActionText) return;
         hideActionText = hide;
         if (action != null) setTextFromAction(action, false);
+        firePropertyChange("hideActionText", !hide, hide);
     }
 
     protected void configurePropertiesFromAction(Action a) {
@@ -278,6 +452,17 @@ public abstract class AbstractButton extends JComponent {
         setEnabled(a == null || a.isEnabled());
         if (a != null && a.getValue(Action.SELECTED_KEY) != null && shouldUpdateSelectedStateFromAction()) {
             setSelectedFromAction(a);
+        }
+        setDisplayedMnemonicIndexFromAction(a, false);
+    }
+
+    private void setDisplayedMnemonicIndexFromAction(Action a, boolean fromPropertyChange) {
+        Object value = a == null ? null : a.getValue(Action.DISPLAYED_MNEMONIC_INDEX_KEY);
+        if (fromPropertyChange || value instanceof Integer) {
+            int index = value instanceof Integer ? (Integer) value : -1;
+            String t = getText();
+            if (t == null || index >= t.length()) index = -1;
+            setDisplayedMnemonicIndex(index);
         }
     }
 
@@ -309,6 +494,7 @@ public abstract class AbstractButton extends JComponent {
             case Action.SELECTED_KEY:
                 if (a.getValue(Action.SELECTED_KEY) != null && shouldUpdateSelectedStateFromAction()) setSelectedFromAction(a);
                 break;
+            case Action.DISPLAYED_MNEMONIC_INDEX_KEY: setDisplayedMnemonicIndexFromAction(a, true); break;
             default: break;
         }
     }

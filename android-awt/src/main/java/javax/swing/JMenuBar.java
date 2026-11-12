@@ -67,9 +67,31 @@ public class JMenuBar extends JComponent implements MenuElement {
         firePropertyChange("selectionModel", old, model); repaint();
     }
     public void setSelected(Component sel) {
-        int index = -1;
-        for (int i = 0; i < getComponentCount(); i++) if (getComponent(i) == sel) { index = i; break; }
-        selectionModel.setSelectedIndex(index);
+        selectionModel.setSelectedIndex(getComponentIndex(sel));
+    }
+
+    public int getComponentIndex(Component c) {
+        int n = getComponentCount();
+        for (int i = 0; i < n; i++) {
+            if (getComponent(i) == c) return i;
+        }
+        return -1;
+    }
+
+    /** @deprecated replaced by {@link java.awt.Container#getComponent(int)} */
+    @Deprecated
+    public Component getComponentAtIndex(int i) {
+        return i < 0 || i >= getComponentCount() ? null : getComponent(i);
+    }
+
+    /** As in 8u, where the help menu was never implemented. */
+    public void setHelpMenu(JMenu menu) {
+        throw new Error("setHelpMenu() not yet implemented.");
+    }
+
+    /** As in 8u, where the help menu was never implemented. */
+    public JMenu getHelpMenu() {
+        throw new Error("getHelpMenu() not yet implemented.");
     }
     public boolean isSelected() { return selectionModel.isSelected(); }
     public void remove(int index) {
