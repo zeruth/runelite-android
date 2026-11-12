@@ -1002,7 +1002,7 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
             ancestor = ancestor.parent
         }
         if (target is JTextComponent || target is JComboBox<*> || target is JSpinner) clicks.reset()
-        if (target.isEnabled) target.requestFocusInWindow()
+        if (target.isEnabled) net.runelite.mp.ui.bridge.SoftKeyboardController.hostEditing { target.requestFocusInWindow() }
         when (val control = target) {
             is JTextComponent -> if (control.isEnabled && control.isEditable) {
                 val search = generateSequence(control as Component?) { it.parent }.take(4)

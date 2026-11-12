@@ -128,6 +128,16 @@ does the behaviour depend on the display, the audio device or the file system? Y
 reimplementation behind a ported facade. A class that is half and half (`Component`, `Window`,
 `BufferedImage`) is ported, with the peer calls routed to a backend interface rather than removed.
 
+### The event dispatch thread
+
+`EventQueue` runs every `invokeLater`/`invokeAndWait` task on one serial thread, `AWT-InvokeLater`,
+and `EventQueue.isDispatchThread()` / `SwingUtilities.isEventDispatchThread()` answer true on that
+thread only, as on the JDK. The old rule, true on any thread whose name starts with `AWT-Invoke`
+(device probes and bridges used it to impersonate the EDT from a thread of their own), is kept behind
+`-Dnet.runelite.awt.edtByName=true` (`System.setProperty` before `java.awt.EventQueue` loads). Never
+widen the answer beyond those threads: RuneLite's HTTP interceptor rejects blocking calls made on the
+EDT, so a thread wrongly reported as the EDT breaks jav_config loading and login.
+
 ## 7. Native entry points
 
 A per-pixel loop that is too slow in Java goes into the Rust crate `android-awt/rust`
@@ -193,3 +203,28 @@ For `python tools-src/port-jdk-class.py java.awt.geom.QuadCurve2D [--from jdk17u
 
 The script copies the file byte-for-byte; every change after that is a human edit that the
 checklist accounts for.
+
+## 10. java.lang shims in the app
+
+Not every JDK 9+ gap is a shadow class. Where the injected game client calls a `java.*` member
+that `android.jar` lacks or that misbehaves on ART, and the owning class is one Android already
+defines (so it cannot be shadowed, section 4), the on-device client preparation
+(`android/src/androidMain/kotlin/net/runelite/mp/client/ClientTransforms.kt`, run in order by
+`ClientPreparer.build`) rewrites the call site to a static helper in
+`android/src/androidMain/kotlin/net/runelite/mp/util`. These rewrites apply to the downloaded
+client jar only; hub plugins go through `PluginDexer` (D8 alone) and see none of them. Each row
+is one rewrite; a retargeting table in the dexer replaces them row by row.
+
+| Shim member | Pass (`ClientTransforms.kt`) | Bytecode matched | Rewritten to | Why |
+|---|---|---|---|---|
+| `IndyConcat.concat(String, Object[], Object[]) String` | `DesugarStringConcatTask` (`ConcatRewriter.visitInvokeDynamicInsn`) | `INVOKEDYNAMIC` with bootstrap `StringConcatFactory.makeConcatWithConstants` | arguments spilled to locals and boxed into `Object[]`, `LDC` recipe, bootstrap constants into `Object[]` (a `ConstantDynamic` over `ConstantBootstraps.invoke` + `H_INVOKESTATIC` becomes the direct static call), then `INVOKESTATIC IndyConcat.concat` | D8 rejects const-dynamic (`UnsupportedFeature(const-dynamic)`), and the client's concat constants are CONDYs; a `toString()` placeholder would leak a NUL into the login packet |
+| `IndyConcat.replaceAllJava8(Matcher, Function) String` | `DesugarApisTask` | `INVOKEVIRTUAL java/util/regex/Matcher.replaceAll(Ljava/util/function/Function;)Ljava/lang/String;` | `INVOKESTATIC IndyConcat.replaceAllJava8(Ljava/util/regex/Matcher;Ljava/util/function/Function;)Ljava/lang/String;` (receiver becomes the first argument) | `Matcher.replaceAll(Function)` (JDK 9) is absent from `android.jar` at minSdk 26 |
+| `IndyConcat.privateLookupInJava8(Class, Lookup) Lookup` | `DesugarApisTask` | `INVOKESTATIC java/lang/invoke/MethodHandles.privateLookupIn(Ljava/lang/Class;Ljava/lang/invoke/MethodHandles$Lookup;)…Lookup;` | `INVOKESTATIC IndyConcat.privateLookupInJava8` with the same descriptor | `MethodHandles.privateLookupIn` (JDK 9) is absent at minSdk 26; the shim builds the lookup reflectively |
+| `StringShim.stripNul(String) String` | `DesugarLambdasTask` (first pass collects, `rewriteClass` patches) | every method with descriptor `(Ljava/lang/String;I)V` whose body calls `String.indexOf(I)I` and does `NEW java/lang/IllegalArgumentException` (the client's NUL-terminated string writer, `xi.cq`) | prologue `ALOAD 1; INVOKESTATIC StringShim.stripNul; ASTORE 1` at method entry | the writer throws on a NUL; any NUL an Android API slips into the machine-info packet would crash login with "error_game_crash" |
+| `UnsafeShim.<constant>` fields | `DesugarLambdasTask` (`LambdaRewriter.visitFieldInsn`) | `GETSTATIC sun/misc/Unsafe.{ADDRESS_SIZE, INVALID_FIELD_OFFSET, ARRAY_*_BASE_OFFSET, ARRAY_*_INDEX_SCALE}` | `GETSTATIC UnsafeShim.<same name and descriptor>` (seeded from a live `Unsafe` in `<clinit>`) | ART's `sun.misc.Unsafe` lacks the static constants |
+| `UnsafeShim` off-heap methods | `DesugarLambdasTask` (`LambdaRewriter.visitMethodInsn`) | `INVOKEVIRTUAL sun/misc/Unsafe` `allocateMemory(J)J`, `reallocateMemory(JJ)J`, `freeMemory(J)V`, `setMemory(JJB)V` / `(Ljava/lang/Object;JJB)V`, `copyMemory(JJJ)V` / `(Ljava/lang/Object;JLjava/lang/Object;JJ)V`, `get/put{Byte,Short,Char,Int,Long,Float,Double}(J…)` | arguments spilled to locals, `POP` of the `Unsafe` receiver, arguments reloaded, `INVOKESTATIC UnsafeShim.<same name and descriptor>` | the off-heap members are hidden API on API 30+; the shim emulates off-heap memory with synthetic addresses into `ByteBuffer`s. Heap-array forms stay on ART's `Unsafe` |
+| `ProcessHandleShim.sanitizedCommand(Object) Optional` | `DesugarLambdasTask` (`LambdaRewriter.visitMethodInsn`) | `INVOKEINTERFACE java/lang/ProcessHandle$Info.command()Ljava/util/Optional;` | `INVOKESTATIC ProcessHandleShim.sanitizedCommand(Ljava/lang/Object;)Ljava/util/Optional;` (the receiver passes as `Object`) | the command goes into the login packet; the shim cuts it at a NUL. The `java.lang.ProcessHandle` shadow in this module (the one `java.lang` class shadowed, `shadowClasses` in `build.gradle.kts`) already answers the NUL-free `/proc/self/exe` path, so the row is a guard and can fold into the table as "keep, no retarget" |
+
+`DesugarLambdasTask` itself (every `LambdaMetafactory.metafactory` indy becomes a generated
+`runelite/desugar/LambdaN` class, impl methods and their types widened to public) is a language
+lowering, not a member retarget, and stays outside the table.
