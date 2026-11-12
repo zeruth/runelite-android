@@ -317,6 +317,20 @@ class ResolutionTest(SurfaceFixture):
         overlay = scan.scan_jar_classes(classes)
         self.assertEqual(scan.live_plugin_classes(self.surface, overlay), set())
 
+    def test_extra_class_of_shaded_package_loads_only_when_named(self):
+        # A newer library version's extra top-level class in a package the host provides.
+        shaded = ClassWriter('java/awt/Container', superclass='java/awt/Component')
+        shaded.klass('java/awt/NewerHelper')
+        extra = ClassWriter('java/awt/NewerHelper')
+        extra.method_ref('java/awt/Container', 'addedLater', '()V')
+        classes = [scan.parse_class(w.build()) for w in (shaded, extra)]
+        self.assertEqual(scan.unresolved_references(self.surface, classes), {})
+        user = ClassWriter('com/example/User')
+        user.klass('java/awt/NewerHelper')
+        classes.append(scan.parse_class(user.build()))
+        self.assertEqual(scan.unresolved_references(self.surface, classes),
+                         {('method', 'java/awt/Container', 'addedLater', '()V'): 1})
+
     def test_accessors_on_host_provided_class_stay_unresolved_when_live(self):
         # A plugin class names the nested class, so it loads from the plugin and links against
         # the host's outer class, which has none of the shaded copy's accessors: a real break.
@@ -428,6 +442,30 @@ class CatalogTest(unittest.TestCase):
             self.assertEqual(scan.catalog_lib_versions(path), {
                 ('com.google.guava', 'guava'): '23.2-jre',
                 ('org.slf4j', 'slf4j-api'): '1.7.25',
+            })
+
+
+class DependencyReportTest(unittest.TestCase):
+    def test_resolved_versions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, 'deps.txt')
+            with open(path, 'w', encoding='utf8') as fh:
+                fh.write('releaseRuntimeClasspath - Resolved configuration\n'
+                         '+--- project :client\n'
+                         '|    +--- com.squareup.okhttp3:okhttp:3.14.9\n'
+                         '|    |    \\--- com.squareup.okio:okio:1.17.2 -> 3.9.0\n'
+                         '|    |         \\--- com.squareup.okio:okio-jvm:3.9.0\n'
+                         '|    +--- org.slf4j:slf4j-api:1.7.25 (*)\n'
+                         '+--- com.google.guava:guava -> 33.6.0-jre\n'
+                         '\\--- com.google.firebase:firebase-bom:34.19.0\n'
+                         '     \\--- com.google.firebase:firebase-analytics (c)\n')
+            self.assertEqual(scan.dependency_report_versions(path), {
+                ('com.squareup.okhttp3', 'okhttp'): '3.14.9',
+                ('com.squareup.okio', 'okio'): '3.9.0',
+                ('com.squareup.okio', 'okio-jvm'): '3.9.0',
+                ('org.slf4j', 'slf4j-api'): '1.7.25',
+                ('com.google.guava', 'guava'): '33.6.0-jre',
+                ('com.google.firebase', 'firebase-bom'): '34.19.0',
             })
 
 

@@ -384,13 +384,25 @@ def live_plugin_classes(surface, overlay):
     provides loads from the host, so the plugin's copy never does. A plugin-only nested
     class of such a class (a shaded library's Outer$1, an access$NNN tag class, a nested
     class an older library version had) is only named by its shadowed outer and siblings,
-    so it never loads either unless some live class names it. Every other plugin-only
-    class is a root."""
-    def shadowed_nest(name):
-        return '$' in name and name.split('$', 1)[0] in surface
+    so it never loads either unless some live class names it. The same holds for a
+    plugin-only top-level class of a package the plugin shades from a host library (some
+    class of that package in the jar is also on the host): a newer library version's extra
+    class is named by the library's own classes, which the host shadows. The plugin's own
+    code is the root set; anything it names, transitively, is live. net/runelite packages
+    are never treated as shaded, since plugin classes are loaded by name from there."""
+    def package(name):
+        return name.rsplit('/', 1)[0] if '/' in name else ''
+
+    shaded_packages = set(package(n) for n in overlay
+                          if n in surface and not n.startswith('net/runelite/'))
+
+    def shadowed(name):
+        if '$' in name and name.split('$', 1)[0] in surface:
+            return True
+        return package(name) in shaded_packages
 
     live = set()
-    stack = [n for n in overlay if n not in surface and not shadowed_nest(n)]
+    stack = [n for n in overlay if n not in surface and not shadowed(n)]
     while stack:
         n = stack.pop()
         if n in live:
@@ -745,11 +757,37 @@ def find_gradle_lib(group, artifact, version=None, gradle_home=None):
     return _newest(hits, r'^%s-(.+)\.jar$' % re.escape(artifact))
 
 
-def default_libs():
+_DEP_LINE = re.compile(r'[+\\]--- ([\w.\-]+):([\w.\-]+)(?::([\w.\-]+))?(?: -> ([\w.\-]+))?')
+
+
+def dependency_report_versions(path):
+    """Resolved versions from `gradlew :android:dependencies --configuration
+    releaseRuntimeClasspath` output: the version after '->' when conflict resolution or a
+    force moved it, else the requested one. Lines without any version are skipped."""
+    out = {}
+    with open(path, encoding='utf8', errors='replace') as fh:
+        for line in fh:
+            m = _DEP_LINE.search(line)
+            if m and (m.group(4) or m.group(3)):
+                out[(m.group(1), m.group(2))] = m.group(4) or m.group(3)
+    return out
+
+
+def default_libs(dependency_report=None):
+    """Host library jars at the versions the APK ships: the dependency report when given,
+    else the pins of pinned_lib_versions(), else the newest in the gradle cache."""
     pins = pinned_lib_versions()
+    if dependency_report:
+        pins.update(dependency_report_versions(dependency_report))
     out = []
     for group, artifact in DEFAULT_LIBS:
-        p = find_gradle_lib(group, artifact, pins.get((group, artifact))) or find_gradle_lib(group, artifact)
+        version = pins.get((group, artifact))
+        p = find_gradle_lib(group, artifact, version)
+        if p is None and version:
+            # Kotlin multiplatform libraries (okio 3) publish a metadata-only artifact and
+            # put the JVM classes in <artifact>-jvm at the same version.
+            p = find_gradle_lib(group, artifact + '-jvm', version)
+        p = p or find_gradle_lib(group, artifact)
         if p:
             out.append(p)
         else:
@@ -947,7 +985,7 @@ def render_markdown(report, top_plugins=5, max_per_owner=60):
     w('')
     w('An unresolved signature is a class, field or method a plugin references that none of the host sources (nor the plugin jar itself) defines. `installs` sums the install counts of the plugins referencing it; a signature marked *(class missing)* has no owner class at all.')
     w('')
-    w('Classes a plugin shades that the host also provides are not scanned: the plugin loader is parent-first, so the host copy loads and the shaded copy never links. Nor are the plugin-only nested classes of such a class (`Outer$1`, accessor tag classes) unless a loadable plugin class names them, so their synthetic accessor calls (`access$NNN`, nestmate `<init>`) are not listed; a loadable class that calls one on a host-provided class is listed, because it links against the host copy.')
+    w('Classes a plugin shades that the host also provides are not scanned: the plugin loader is parent-first, so the host copy loads and the shaded copy never links. Nor are the plugin-only nested classes of such a class (`Outer$1`, accessor tag classes) or the plugin-only classes of a package it shades from a host library, unless a loadable plugin class names them, so their synthetic accessor calls (`access$NNN`, nestmate `<init>`) are not listed; a loadable class that calls one on a host-provided class is listed, because it links against the host copy.')
     w('')
     w('## Buckets')
     w('')
@@ -1834,6 +1872,9 @@ def build_parser():
     ap.add_argument('--api-jar', help='runelite-api jar (default: newest in runelite-api/build/libs)')
     ap.add_argument('--lib', action='append', default=[], help='extra host jar or class directory (repeatable)')
     ap.add_argument('--no-default-libs', action='store_true', help='skip the gradle-cache library lookup')
+    ap.add_argument('--dependency-report',
+                    help='output of `gradlew :android:dependencies --configuration releaseRuntimeClasspath`; '
+                         'host library versions come from it instead of the build-script pins')
     jdk = ap.add_argument_group('--jdk-gaps')
     jdk.add_argument('--jdk-gaps', action='store_true', help='audit JDK 9-21 java.*/javax.* members instead of the host surface')
     jdk.add_argument('--min-api', type=int, help='floor API level (default: minSdk of android/build.gradle.kts)')
@@ -1865,7 +1906,7 @@ def resolve_sources(args):
     add('android app classes', args.app_classes or find_app_classes(), required=False)
     libs = list(args.lib)
     if not args.no_default_libs:
-        libs += default_libs()
+        libs += default_libs(args.dependency_report)
     for lib in libs:
         add(lib, lib)
     return sources

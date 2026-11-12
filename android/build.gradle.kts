@@ -271,12 +271,24 @@ if (androidSdkAvailable) {
                 "org.slf4j:slf4j-api",
                 "net.runelite:discord"
             )
-            val libraries = configurations.getByName("releaseRuntimeClasspath").incoming.artifactView {
+            val artifacts = configurations.getByName("releaseRuntimeClasspath").incoming.artifactView {
                 attributes.attribute(org.gradle.api.attributes.Attribute.of("artifactType", String::class.java), "jar")
                 componentFilter { id -> id is org.gradle.api.artifacts.component.ModuleComponentIdentifier &&
                     "${id.group}:${id.module}" in pluginApiModules }
-            }.files.files
-                .filter { it.extension == "jar" }
+            }.artifacts.artifacts
+            // A module missing from the classpath would hand the verifier no jar for its
+            // prefix and pass silently; fail instead. okio counts once, under either name.
+            val resolved = artifacts.mapNotNull {
+                (it.id.componentIdentifier as? org.gradle.api.artifacts.component.ModuleComponentIdentifier)
+                    ?.let { id -> "${id.group}:${id.module}" }
+            }.toSet()
+            val okioModules = setOf("com.squareup.okio:okio", "com.squareup.okio:okio-jvm")
+            val missing = (pluginApiModules - okioModules).filter { it !in resolved } +
+                (if (resolved.none { it in okioModules }) listOf("com.squareup.okio:okio") else emptyList())
+            if (missing.isNotEmpty()) {
+                error("releaseRuntimeClasspath lacks plugin API modules: ${missing.joinToString()}")
+            }
+            val libraries = artifacts.map { it.file }.filter { it.extension == "jar" }
             val python = providers.environmentVariable("PYTHON").orNull
                 ?: if (System.getProperty("os.name").startsWith("Windows")) "python" else "python3"
             commandLine(listOf(python, rootProject.file("tools-src/verify-release-plugin-api.py").absolutePath,
