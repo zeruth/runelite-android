@@ -134,7 +134,8 @@ this work.
   - the `javax.swing.text.html` port, which retires `HtmlTextRenderer`;
   - RTF.
 - **Look and feel:** Metal, Synth, Nimbus, and FlatLaf painting the RuneLite sidebar end to end.
-- **The contract suite:** the last CI run of `run-awt-contracts.py` ended at 101 tests with 28
-  failures and 3 errors. A failure in `[jdk]` mode points at the contract or its runner; a
-  `[patched]`-only failure is a gap in the shadow classes. Green in both modes is the closing gate
-  for the AWT set.
+- **The contract suite:** the last GitHub CI run of `run-awt-contracts.py` had 28 failures and 5
+  errors. `tools-src/awt-contracts-known-failures.txt` lists those 33 runs, so CI passes over them
+  while any new failure still fails the build. A failure in `[jdk]` mode points at the contract or
+  its runner; a `[patched]`-only failure is a gap in the shadow classes. The closing gate for the
+  AWT set is `run-awt-contracts.py --strict` green in both modes, with the list empty.
