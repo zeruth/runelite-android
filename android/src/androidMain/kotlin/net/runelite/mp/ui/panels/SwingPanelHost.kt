@@ -84,6 +84,8 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
     // The component AWT would consider "entered" for a real mouse pointer.
     private var hovered: Component? = null // AWT thread only
     private var hoverPoint = Point() // AWT thread only, root coordinates
+    // The hovered component's effective cursor, resolved on the EDT for the pointer icon.
+    @Volatile private var hoverCursor: java.awt.Cursor? = null
     // Latest pointer positions in logical px; moves are coalesced into one queued EDT task.
     @Volatile private var dragX = 0
     @Volatile private var dragY = 0
@@ -91,14 +93,11 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
     @Volatile private var hoverX = 0
     @Volatile private var hoverY = 0
     private val hoverQueued = AtomicBoolean()
-    private var tipPopup: android.widget.PopupWindow? = null // Android thread only
-    private var tipX = 0f // Android thread only
-    private var tipY = 0f
-    private val dismissTip = Runnable { tipPopup?.dismiss(); tipPopup = null }
-    private val hoverTip = Runnable {
-        val x = hoverX; val y = hoverY; val serial = mountSerial
-        SwingUtilities.invokeLater { if (isCurrentMount(serial) && gesture == null) toolTip(x, y, false) }
-    }
+    // Windows of the heavy weight popups (tooltips) PopupFactory's host layer shows.
+    private val overlays = mutableListOf<android.widget.PopupWindow>() // Android thread only
+    // Root point of the finger while a long press shows a tip, so its overlay goes beside it.
+    private var touchTip: Point? = null // AWT thread only
+    private val dismissTip = Runnable { overlays.toList().forEach { it.dismiss() }; overlays.clear() }
     private val hoverExit = Runnable {
         val serial = mountSerial
         SwingUtilities.invokeLater { if (serial == mountSerial) hover(null) }
@@ -116,9 +115,75 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
     @Volatile private var logicalWidth = BASE_LOGICAL_WIDTH
     private var diagnosed = false
     private val wheel = net.runelite.mp.input.MouseWheelSteps()
+    // In-process drag and drop (java.awt.dnd): every host draws the drag image while the
+    // pointer is over it, and registers its root's place on screen so a drag can cross
+    // into another panel. Origins are logical px, like the events.
+    private class DragOverlay(val image: Bitmap?, val x: Int, val y: Int, val offsetX: Int, val offsetY: Int,
+                              val accepted: Boolean)
+    private var dragOverlay: DragOverlay? = null // Android thread only
+    private val dragPaint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
+    @Volatile private var originX = 0
+    @Volatile private var originY = 0
+    private var dragSession: net.runelite.awt.impl.DragDropHost.Session? = null // AWT thread only
+    private var dragBitmap: Bitmap? = null // AWT thread only
+    private val dragListener = object : net.runelite.awt.impl.DragDropHost.Listener {
+        override fun dragUpdated(session: net.runelite.awt.impl.DragDropHost.Session) {
+            root?.let { net.runelite.awt.impl.DragDropHost.setRootOrigin(it, originX, originY) }
+            if (session !== dragSession) {
+                dragSession = session
+                dragBitmap = bitmapOf(session.dragImage)
+            }
+            val overlay = DragOverlay(dragBitmap, session.location.x, session.location.y,
+                session.dragImageOffset.x, session.dragImageOffset.y, session.isDropAccepted)
+            post { updateOrigin(); dragOverlay = overlay; invalidate() }
+        }
+        override fun dragEnded(session: net.runelite.awt.impl.DragDropHost.Session) {
+            if (session === dragSession) { dragSession = null; dragBitmap = null }
+            post { dragOverlay = null; invalidate() }
+        }
+    }
+
+    private fun bitmapOf(image: java.awt.Image?): Bitmap? {
+        val buffered = image as? java.awt.image.BufferedImage ?: return null
+        val w = buffered.width; val h = buffered.height
+        if (w <= 0 || h <= 0) return null
+        return Bitmap.createBitmap(buffered.getRGB(0, 0, w, h, null, 0, w), w, h, Bitmap.Config.ARGB_8888)
+    }
+
+    /** This view's top-left on screen, in logical px. Android thread. */
+    private fun updateOrigin() {
+        if (width == 0) return
+        val loc = IntArray(2)
+        getLocationOnScreen(loc)
+        val scale = logicalWidth.toFloat() / width
+        originX = (loc[0] * scale).toInt(); originY = (loc[1] * scale).toInt()
+    }
+
+    private fun drawDrag(canvas: Canvas) {
+        val o = dragOverlay ?: return
+        val s = width.toFloat() / logicalWidth.coerceAtLeast(1)
+        val px = (o.x - originX) * s; val py = (o.y - originY) * s
+        if (px < 0 || py < 0 || px >= width || py >= height) return
+        val image = o.image
+        if (image != null) {
+            val left = px + o.offsetX * s; val top = py + o.offsetY * s
+            dragPaint.alpha = 200
+            canvas.drawBitmap(image, null, android.graphics.RectF(left, top, left + image.width * s, top + image.height * s), dragPaint)
+        } else {
+            // No drag image: desktop shows only the drag cursor, so mark where the drop lands.
+            dragPaint.color = if (o.accepted) android.graphics.Color.rgb(220, 138, 0) else android.graphics.Color.GRAY
+            dragPaint.alpha = 160
+            canvas.drawCircle(px, py, 10 * s, dragPaint)
+        }
+    }
+
+    /** Cancels a drag that started in [base]'s tree; it can no longer receive its release. EDT. */
+    private fun cancelDragFrom(base: Component?) {
+        val session = net.runelite.awt.impl.DragDropHost.current() ?: return
+        if (base != null && net.runelite.awt.impl.DragDropHost.rootOf(session.sourceComponent) === base) session.cancel()
+    }
+
     private var paintedRoot: JComponent? = null // AWT thread only
-    private var paintedGeneration = -1L // AWT thread only
-    private var paintedLayoutGeneration = -1L // AWT thread only
     private val render = object : Runnable {
         override fun run() {
             if (!running) return
@@ -150,14 +215,20 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
                                 component.setBounds(0, 0, lw, h)
                                 val resized = raster?.let { it.width != pw || it.height != ph } ?: true
                                 val active = android.os.SystemClock.uptimeMillis() - lastInteraction < 500 || !flinger.isFinished
+                                // Taken every tick, painted or not, so the region never outlives the frame it asked for.
+                                val repaints = javax.swing.RepaintManager.currentManager(component)
+                                // Layout changes arrive here too: Component.invalidate() repaints, and a
+                                // child the RepaintManager re-laid out repaints from reshape, so the
+                                // region and the root's validity are the whole change signal.
+                                val requested = repaints.hostTakeDirtyRegion(component)
                                 val dirty = component !== paintedRoot || resized || !component.isValid() ||
-                                    component.subtreeLayoutGeneration() != paintedLayoutGeneration ||
-                                    component.subtreePaintGeneration() != paintedGeneration
+                                    requested != null
                                 if (!dirty && !active) return@invokeLater
                                 if (!component.isValid()) component.validate()
-                                // Keep repaint requests raised during paint pending for the next frame.
-                                val generation = component.subtreePaintGeneration()
-                                val layoutGeneration = component.subtreeLayoutGeneration()
+                                // Everything past here repaints the whole raster (fillRect + hostPaint of
+                                // the root), which covers what the layout pass asked for; requests raised
+                                // during paint stay pending for the next frame.
+                                repaints.hostTakeDirtyRegion(component)
                                 if (!diagnosed) {
                                     diagnosed = true
                                     fun describe(c: Component, depth: Int): String =
@@ -181,8 +252,6 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
                                 backBitmap = backBitmap xor 1
                                 bitmap = target
                                 paintedRoot = component
-                                paintedGeneration = generation
-                                paintedLayoutGeneration = layoutGeneration
                             }
                         }
                     } catch (t: Throwable) {
@@ -205,6 +274,7 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         hosts.add(java.lang.ref.WeakReference(this))
+        net.runelite.awt.impl.DragDropHost.addListener(dragListener)
         attachmentSerial++
         running = true
         post(render)
@@ -212,11 +282,14 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
 
     override fun onDetachedFromWindow() {
         hosts.removeAll { it.get() == null || it.get() === this }
+        net.runelite.awt.impl.DragDropHost.removeListener(dragListener)
+        dragOverlay = null
         running = false
         attachmentSerial++
         removeCallbacks(render)
         clearAndroidState(mountSerial)
         SwingUtilities.invokeLater {
+            cancelDragFrom(root)
             root?.let { java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager().clearFocusIn(it); it.setHostShowing(false) }
             mountPanel(null, -1L)
             root = null
@@ -239,6 +312,7 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
         swingPopup = null
         gesture = null
         hovered = null
+        hoverCursor = null
         panel?.let { SwingUtil.deactivate(it) }
         root?.let { java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager().clearFocusIn(it); it.setHostShowing(false) }
         root = null
@@ -257,8 +331,9 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
         if (serial != mountSerial) return
         cancelMouse()
         removeCallbacks(longPress)
-        removeCallbacks(hoverTip); removeCallbacks(hoverExit)
-        removeCallbacks(dismissTip); dismissTip.run()
+        removeCallbacks(hoverExit)
+        dismissTip.run()
+        SwingUtilities.invokeLater { ToolTipManager.sharedInstance().hostHideToolTip() }
         touchActive = false; touchMount = -1L; dragged = false; longPressed = false
         downX = 0f; downY = 0f; lastY = 0f
         parent?.requestDisallowInterceptTouchEvent(false)
@@ -278,6 +353,7 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
         paint.color = android.graphics.Color.rgb(30, 30, 30)
         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
         frame?.let { canvas.drawBitmap(it, null, Rect(0, 0, width, height), paint) }
+        drawDrag(canvas)
         error?.let {
             paint.color = android.graphics.Color.WHITE
             paint.textSize = 14 * resources.displayMetrics.scaledDensity
@@ -322,11 +398,12 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
             interacted()
             stopFling()
             removeCallbacks(hoverExit)
-            removeCallbacks(hoverTip)
         }
         SwingUtilities.invokeLater {
             if (!isCurrentMount(serial)) return@invokeLater
             val base = root ?: return@invokeLater
+            // A mouse starts a drag on the desktop threshold alone, no long press.
+            net.runelite.awt.impl.DragDropHost.setPointer(false, false)
             when (id) {
                 MouseEvent.MOUSE_PRESSED -> {
                     val target = mousePresses.values.firstOrNull()?.target ?: sink(base, hit(base, sx, sy))
@@ -382,14 +459,19 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
                     postDelayed(longPress, ViewConfiguration.getLongPressTimeout().toLong())
                 parent?.requestDisallowInterceptTouchEvent(true)
                 // Android ends hover just before a button press; the pointer hasn't left.
-                removeCallbacks(hoverExit); removeCallbacks(hoverTip)
-                removeCallbacks(dismissTip); dismissTip.run()
+                removeCallbacks(hoverExit)
                 val x = (event.x * scale).toInt(); val y = (event.y * scale).toInt()
                 dragX = x; dragY = y
                 val serial = touchMount
+                updateOrigin()
+                val ox = originX; val oy = originY
                 SwingUtilities.invokeLater {
                     try {
+                        // A tap anywhere dismisses a tip a long press showed, as a desktop press does.
+                        ToolTipManager.sharedInstance().hostHideToolTip()
                         if (isCurrentMount(serial)) {
+                            root?.let { net.runelite.awt.impl.DragDropHost.setRootOrigin(it, ox, oy) }
+                            net.runelite.awt.impl.DragDropHost.setPointer(tool != MotionEvent.TOOL_TYPE_MOUSE, false)
                             JPopupMenu.takeShownPopupMenu()?.isVisible = false
                             if (tool != MotionEvent.TOOL_TYPE_MOUSE) hover(null)
                             // A mouse drag never scrolls on desktop, so any drag handler takes it.
@@ -484,7 +566,8 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
                 SwingUtilities.invokeLater {
                     clicks.reset()
                     // AWT has no cancel; a release leaves drag handlers in their resting state.
-                    try { if (serial == mountSerial) release(x, y, false, 0L, 0L, 0f, 0f, 0, 0, 0f) } catch (t: Throwable) {
+                    // A java.awt.dnd drag is cancelled first, so the release does not drop it.
+                    try { if (serial == mountSerial) { cancelDragFrom(root); release(x, y, false, 0L, 0L, 0f, 0f, 0, 0, 0f) } } catch (t: Throwable) {
                         android.util.Log.e("SwingPanelHost", "Panel input failed: $panelKey", t)
                     }
                 }
@@ -514,21 +597,11 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
                         }
                     }
                 }
-                // Like ToolTipManager: the tip waits for the pointer to rest, and moving away hides it.
-                val slop = ViewConfiguration.get(context).scaledTouchSlop
-                if (tipPopup != null && (kotlin.math.abs(event.x - tipX) > slop || kotlin.math.abs(event.y - tipY) > slop)) {
-                    removeCallbacks(dismissTip); dismissTip.run()
-                }
-                if (tipPopup == null) {
-                    tipX = event.x; tipY = event.y
-                    removeCallbacks(hoverTip)
-                    postDelayed(hoverTip, ToolTipManager.sharedInstance().initialDelay.toLong())
-                }
+                // Tips need nothing more: ToolTipManager listens on the ENTERED/MOVED that
+                // hoverAt sends and shows them through the host layer, as on desktop.
             }
             MotionEvent.ACTION_HOVER_EXIT -> {
-                removeCallbacks(hoverTip)
-                removeCallbacks(dismissTip); dismissTip.run()
-                // Android also ends hover when a button goes down, right before ACTION_DOWN;
+                // The EXITED that hoverExit sends hides any tip. Android also ends hover when a button goes down, right before ACTION_DOWN;
                 // only a hover that doesn't turn into a press means the pointer left.
                 removeCallbacks(hoverExit)
                 postDelayed(hoverExit, ViewConfiguration.getTapTimeout().toLong())
@@ -600,6 +673,8 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
     }
 
     private fun drag(x: Int, y: Int, downX: Int, downY: Int, tool: Int, held: Boolean) {
+        // Before the press below: a held finger may start a drag, a swiping one only scrolls.
+        net.runelite.awt.impl.DragDropHost.setPointer(tool != MotionEvent.TOOL_TYPE_MOUSE, held)
         if (gesture == null && !(held && press(downX, downY, tool, true))) return
         val target = gesture ?: return
         send(target, MouseEvent.MOUSE_DRAGGED, x, y, InputEvent.BUTTON1_DOWN_MASK)
@@ -627,6 +702,7 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
     /** Move the entered component, sending EXITED/ENTERED as AWT does when the pointer crosses. */
     private fun hover(target: Component?, x: Int = hoverPoint.x, y: Int = hoverPoint.y) {
         hoverPoint = Point(x, y)
+        if (target == null) hoverCursor = null
         val previous = hovered
         if (previous === target) return
         hovered = target
@@ -641,12 +717,28 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
         val target = sink(base, hit(base, x, y))
         hover(target, x, y)
         send(target, MouseEvent.MOUSE_MOVED, x, y)
+        // After MOVED: handlers set the cursor there (split-pane dividers, link labels).
+        hoverCursor = effectiveCursor(target)
     }
+
+    /** Component.getCursor as the JDK resolves it: an unset cursor is the nearest ancestor's. */
+    private fun effectiveCursor(target: Component?): java.awt.Cursor? {
+        var c = target
+        while (c != null) {
+            c.cursor?.let { return it }
+            c = c.parent
+        }
+        return null
+    }
+
+    override fun awtCursor(x: Float, y: Float): java.awt.Cursor? = hoverCursor
 
     /**
      * Show the tooltip ToolTipManager would for the pointer at (x, y): the deepest
-     * component's, up to the one receiving the events. [touch] places it above the
-     * finger; a mouse tip sits below the pointer like desktop.
+     * component's, up to the one receiving the events, at once (a finger cannot hover).
+     * ToolTipManager builds and places it (createToolTip, getToolTipLocation) and
+     * dismisses it after its dismiss delay or the next tap; [touch] moves the overlay
+     * beside the finger, where the hand does not cover it.
      */
     private fun toolTip(x: Int, y: Int, touch: Boolean): Boolean {
         val base = root ?: return false
@@ -655,27 +747,95 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
         val deepest = hit(base, x, y)
         val receiver = sink(base, deepest)
         var node: Component? = deepest
-        var text: String? = null
-        while (node != null && text == null) {
-            if (node is JComponent) text = toolTipText(node, x, y)
+        while (node != null) {
+            if (node is JComponent) {
+                val p = SwingUtilities.convertPoint(base, x, y, node)
+                val probe = MouseEvent(node, MouseEvent.MOUSE_MOVED, System.currentTimeMillis(), 0, p.x, p.y, 0, false)
+                if (!node.getToolTipText(probe).isNullOrBlank()) {
+                    touchTip = if (touch) Point(x, y) else null
+                    try { return manager.hostShowToolTip(node, p.x, p.y) } finally { touchTip = null }
+                }
+            }
             if (node === receiver || node === base) break
             node = node.parent
         }
-        val tip = text?.takeIf { it.isNotBlank() } ?: return false
-        val serial = mountSerial
-        val dismissAfter = manager.dismissDelay.toLong()
-        post { if (running && serial == mountSerial) showTip(tip, x, y, touch, dismissAfter) }
-        return true
+        return false
     }
 
-    /** Honours getToolTipText(MouseEvent) overrides, which compile against the JDK signature. */
-    private fun toolTipText(c: JComponent, x: Int, y: Int): String? = try {
-        val method = c.javaClass.getMethod("getToolTipText", MouseEvent::class.java)
-        val base = root
-        val p = if (base == null) Point(x, y) else SwingUtilities.convertPoint(base, x, y, c)
-        method.invoke(c, MouseEvent(c, MouseEvent.MOUSE_MOVED, System.currentTimeMillis(), 0, p.x, p.y, 0, false)) as String?
-    } catch (t: Throwable) {
-        c.toolTipText
+    /**
+     * PopupFactory's heavy weight popup, for a sidebar panel (no root pane) the kind
+     * every tooltip is: [contents], already laid out at its preferred size, rasterized
+     * at device scale into an overlay window at the AWT screen point (x, y), so it
+     * escapes the panel bounds like a desktop popup window. The overlay is a snapshot;
+     * ToolTipManager re-shows a tip whose text changes. EDT only.
+     */
+    private fun showOverlay(contents: Component, x: Int, y: Int): Overlay? {
+        val base = root ?: return null
+        if (width <= 0) return null
+        val panelScale = width.toFloat() / logicalWidth.coerceAtLeast(1)
+        val pw = (contents.width.coerceAtLeast(1) * panelScale).toInt().coerceAtLeast(1)
+        val ph = (contents.height.coerceAtLeast(1) * panelScale).toInt().coerceAtLeast(1)
+        val image = BufferedImage(pw, ph, BufferedImage.TYPE_INT_ARGB)
+        val graphics = image.createGraphics()
+        try {
+            (graphics as? net.runelite.awt.impl.BufferedImageGraphics2D)?.setDeviceScale(panelScale)
+            java.awt.Window.hostPaint(graphics, contents)
+        } finally { graphics.dispose() }
+        val bitmap = Bitmap.createBitmap(pw, ph, Bitmap.Config.ARGB_8888)
+        bitmap.setPixels(image.backingArray(), 0, pw, 0, 0, pw, ph)
+        val origin = base.locationOnScreen
+        val local = Point(x - origin.x, y - origin.y)
+        val finger = touchTip
+        val overlay = Overlay()
+        val serial = mountSerial
+        post { if (running && serial == mountSerial) overlay.show(bitmap, local, finger, panelScale) }
+        return overlay
+    }
+
+    /** One heavy weight popup's window: requested on the EDT, shown and dismissed on the UI thread. */
+    private inner class Overlay {
+        private var window: android.widget.PopupWindow? = null // Android thread only
+        @Volatile private var hidden = false
+
+        fun show(bitmap: Bitmap, local: Point, finger: Point?, panelScale: Float) {
+            if (hidden) return
+            val origin = IntArray(2).also { getLocationOnScreen(it) }
+            val metrics = resources.displayMetrics
+            val w = bitmap.width
+            val h = bitmap.height
+            var left: Int
+            var top: Int
+            if (finger != null) {
+                // Beside the finger, on the side facing the middle of the screen. Above or below
+                // it the fingertip and hand cover the tip, and in a sidebar the panel's top edge
+                // kept pushing it underneath.
+                val gap = 36f * metrics.density
+                val fingerX = origin[0] + finger.x * panelScale
+                val fingerY = origin[1] + finger.y * panelScale
+                left = if (fingerX > metrics.widthPixels / 2f) (fingerX - gap - w).toInt() else (fingerX + gap).toInt()
+                top = (fingerY - h / 2f).toInt()
+            } else {
+                left = (origin[0] + local.x * panelScale).toInt()
+                top = (origin[1] + local.y * panelScale).toInt()
+            }
+            // Desktop keeps a tip on its screen; ToolTipManager leaves that to the host.
+            left = left.coerceIn(0, (metrics.widthPixels - w).coerceAtLeast(0))
+            top = top.coerceIn(0, (metrics.heightPixels - h).coerceAtLeast(0))
+            val view = android.widget.ImageView(context).apply { setImageBitmap(bitmap) }
+            val popup = android.widget.PopupWindow(view, w, h, false)
+            popup.isTouchable = false
+            popup.showAtLocation(this@SwingPanelView, android.view.Gravity.NO_GRAVITY, left, top)
+            window = popup
+            overlays.add(popup)
+        }
+
+        fun dismiss() {
+            hidden = true
+            post {
+                window?.let { it.dismiss(); overlays.remove(it) }
+                window = null
+            }
+        }
     }
 
     /** Host dialogs in the dark Material style. The activity theme is Theme.Black, so a plain
@@ -823,55 +983,6 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
         }
     }
 
-    private fun showTip(text: String, x: Int, y: Int, touch: Boolean, dismissAfter: Long) {
-        removeCallbacks(dismissTip); dismissTip.run()
-        val panelScale = width.toFloat() / logicalWidth
-        val label = android.widget.TextView(context).apply {
-            this.text = if (text.trimStart().startsWith("<html", ignoreCase = true))
-                android.text.Html.fromHtml(text, android.text.Html.FROM_HTML_MODE_COMPACT).trimEnd()
-            else text
-            setTextColor(android.graphics.Color.WHITE)
-            setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, 12f * panelScale)
-            val pad = (5f * panelScale).toInt()
-            setPadding(pad, pad, pad, pad)
-            background = android.graphics.drawable.GradientDrawable().apply {
-                setColor(android.graphics.Color.rgb(20, 20, 20))
-                setStroke(1.coerceAtLeast(panelScale.toInt()), android.graphics.Color.rgb(90, 90, 90))
-            }
-        }
-        label.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.AT_MOST),
-            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
-        val origin = IntArray(2).also { getLocationOnScreen(it) }
-        val fx = x * panelScale; val fy = y * panelScale
-        var left: Int
-        var top: Int
-        if (touch) {
-            // Beside the finger, on the side facing the middle of the screen. Above or below
-            // it the fingertip and hand cover the tip, and in a sidebar the panel's top edge
-            // kept pushing it underneath.
-            val metrics = resources.displayMetrics
-            val gap = 36f * metrics.density
-            val fingerX = origin[0] + fx
-            val fingerY = origin[1] + fy
-            left = if (fingerX > metrics.widthPixels / 2f) (fingerX - gap - label.measuredWidth).toInt()
-                else (fingerX + gap).toInt()
-            left = left.coerceIn(0, (metrics.widthPixels - label.measuredWidth).coerceAtLeast(0))
-            top = (fingerY - label.measuredHeight / 2f).toInt()
-                .coerceIn(0, (metrics.heightPixels - label.measuredHeight).coerceAtLeast(0))
-        } else {
-            // A mouse pointer is small: just below it, centred, inside the panel.
-            left = (origin[0] + fx - label.measuredWidth / 2f).toInt()
-                .coerceIn(origin[0], (origin[0] + width - label.measuredWidth).coerceAtLeast(origin[0]))
-            top = (origin[1] + fy + 20f * panelScale).toInt()
-        }
-        // Sized to the measured label so a long tip wraps within the sidebar's width.
-        val popup = android.widget.PopupWindow(label, label.measuredWidth, label.measuredHeight, false)
-        popup.isTouchable = false
-        popup.showAtLocation(this, android.view.Gravity.NO_GRAVITY, left, top)
-        tipPopup = popup
-        postDelayed(dismissTip, dismissAfter)
-    }
-
     private var velocity: VelocityTracker? = null // Android thread only
     private val flinger = android.widget.OverScroller(context)
     private var flingLastY = 0 // Android thread only
@@ -984,7 +1095,7 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
             ancestor = ancestor.parent
         }
         if (target is JTextComponent || target is JComboBox<*> || target is JSpinner) clicks.reset()
-        if (target.isEnabled) target.requestFocusInWindow()
+        if (target.isEnabled) net.runelite.mp.ui.bridge.SoftKeyboardController.hostEditing { target.requestFocusInWindow() }
         when (val control = target) {
             is JTextComponent -> if (control.isEnabled && control.isEditable) {
                 val search = generateSequence(control as Component?) { it.parent }.take(4)
@@ -1064,7 +1175,8 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
         if (target is AbstractButton && target.isEnabled) target.doClick()
         if (target is JTabbedPane) {
             val index = target.indexAtLocation(local.x, local.y)
-            if (index >= 0) target.selectedIndex = index
+            // indexAtLocation reports disabled tabs too, as on the JDK; only enabled ones select.
+            if (index >= 0 && target.isEnabledAt(index)) target.selectedIndex = index
         }
         if (!mouse) send(target, MouseEvent.MOUSE_EXITED, x, y)
     }
@@ -1177,6 +1289,14 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
     private companion object {
         val hosts = java.util.concurrent.CopyOnWriteArrayList<java.lang.ref.WeakReference<SwingPanelView>>()
         init {
+            PopupFactory.setHostLayer(object : PopupFactory.HostLayer {
+                override fun show(owner: Component?, contents: Component, x: Int, y: Int): Any? {
+                    val o = owner ?: return null
+                    val host = hosts.mapNotNull { it.get() }.lastOrNull { it.hosts(o) } ?: return null
+                    return host.showOverlay(contents, x, y)
+                }
+                override fun hide(handle: Any?) { (handle as? Overlay)?.dismiss() }
+            })
             JComboBox.setPopupHandler { combo, visible ->
                 SwingUtilities.invokeLater {
                     val host = hosts.mapNotNull { it.get() }.lastOrNull { it.hosts(combo) }

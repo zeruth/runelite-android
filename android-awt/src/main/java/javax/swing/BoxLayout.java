@@ -1,5 +1,36 @@
+/*
+ * Copyright (c) 2026, Tyler Bochard
+ * All rights reserved.
+ *
+ * Part of android-awt, the Android shadow of the desktop JDK surface used by
+ * runelite-android. Original work of this project, not derived from OpenJDK;
+ * licensed under the BSD 2-Clause License (see the LICENSE file at the
+ * repository root). Files ported from OpenJDK carry the OpenJDK header instead;
+ * see android-awt/LICENSE.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ *    list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
 package javax.swing;
 
+import java.awt.AWTError;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.Dimension;
@@ -8,7 +39,7 @@ import java.awt.LayoutManager2;
 import java.io.Serializable;
 
 /**
- * A port of the JDK's BoxLayout + SizeRequirements. Along the axis children are tiled:
+ * The JDK's BoxLayout over {@link SizeRequirements}. Along the axis children are tiled:
  * a deficit is taken from each in proportion to (preferred - minimum), a surplus handed
  * out in proportion to (maximum - preferred) — that is how glue absorbs slack and how a
  * label with setMinimumSize(1, h) gives way to its row's buttons. Across the axis each
@@ -28,190 +59,231 @@ public class BoxLayout implements LayoutManager2, Serializable {
     private final int axis;
     private final Container target;
 
+    /**
+     * Creates a layout manager that will lay out components along the
+     * given axis.
+     *
+     * @exception AWTError if the value of <code>axis</code> is invalid
+     */
     public BoxLayout(Container target, int axis) {
         if (axis != X_AXIS && axis != Y_AXIS && axis != LINE_AXIS && axis != PAGE_AXIS) {
-            throw new IllegalArgumentException("Invalid axis: " + axis);
+            throw new AWTError("Invalid axis");
         }
-        this.target = target; this.axis = axis;
+        this.axis = axis;
+        this.target = target;
     }
 
-    public final int getAxis() { return axis; }
+    /** @since 1.6 */
     public final Container getTarget() { return target; }
 
-    @Override public void addLayoutComponent(String name, Component comp) {}
-    @Override public void addLayoutComponent(Component comp, Object constraints) {}
-    @Override public void removeLayoutComponent(Component comp) {}
-    @Override public void invalidateLayout(Container target) { cachedX = cachedY = null; }
+    /** @since 1.6 */
+    public final int getAxis() { return axis; }
 
-    private boolean isXAxis() { return axis == X_AXIS || axis == LINE_AXIS; }
-
-    /** SizeRequirements: one child's (or a total's) min/pref/max along an axis + alignment. */
-    private static final class Req {
-        int minimum, preferred, maximum;
-        float alignment;
-        Req(int min, int pref, int max, float a) { minimum = min; preferred = pref; maximum = max; alignment = a; }
+    /**
+     * Indicates that a child has changed its layout related information,
+     * and thus any cached calculations should be flushed.
+     *
+     * @exception AWTError if the target isn't the container specified to the
+     *                      BoxLayout constructor
+     */
+    public synchronized void invalidateLayout(Container target) {
+        checkContainer(target);
+        xChildren = null;
+        yChildren = null;
+        xTotal = null;
+        yTotal = null;
     }
 
-    // The JDK caches SizeRequirements until invalidateLayout. Without a cache, measuring a
-    // BoxLayout asks every child for min, pref AND max, and a child that is itself a BoxLayout
-    // re-measures its whole subtree for each — 3^depth. Loot Lookup's nested result rows froze
-    // the EDT for seconds per search. Entries track the target subtree's generation,
-    // so detached renderer construction cannot discard otherwise valid measurements.
-    private Req[] cachedX, cachedY;
-    private long cachedXGen = -1, cachedYGen = -1;
-    private Container cachedFor;
+    /** Not used by this class. */
+    public void addLayoutComponent(String name, Component comp) {
+        invalidateLayout(comp.getParent());
+    }
 
-    private Req[] requests(Container t, boolean xAxis) {
-        long gen = t.subtreeLayoutGeneration();
-        if (t == cachedFor) {
-            if (xAxis && cachedX != null && cachedXGen == gen) return cachedX;
-            if (!xAxis && cachedY != null && cachedYGen == gen) return cachedY;
-        } else {
-            cachedFor = t;
-            cachedX = cachedY = null;
+    /** Not used by this class. */
+    public void removeLayoutComponent(Component comp) {
+        invalidateLayout(comp.getParent());
+    }
+
+    /** Not used by this class. */
+    public void addLayoutComponent(Component comp, Object constraints) {
+        invalidateLayout(comp.getParent());
+    }
+
+    /**
+     * Returns the preferred dimensions for this layout, given the components
+     * in the specified target container.
+     */
+    public Dimension preferredLayoutSize(Container target) {
+        Dimension size;
+        synchronized (this) {
+            checkContainer(target);
+            checkRequests();
+            size = new Dimension(xTotal.preferred, yTotal.preferred);
         }
-        Req[] r = computeRequests(t, xAxis);
-        // Measuring a child may itself invalidate (a wrapping text component sizing itself);
-        // only keep the result if the tree stood still while it was taken.
-        if (t.subtreeLayoutGeneration() == gen) {
-            if (xAxis) { cachedX = r; cachedXGen = gen; } else { cachedY = r; cachedYGen = gen; }
+        return withInsets(target, size);
+    }
+
+    /** Returns the minimum dimensions needed to lay out the components contained in the specified target container. */
+    public Dimension minimumLayoutSize(Container target) {
+        Dimension size;
+        synchronized (this) {
+            checkContainer(target);
+            checkRequests();
+            size = new Dimension(xTotal.minimum, yTotal.minimum);
         }
-        return r;
+        return withInsets(target, size);
     }
 
-    private static Req[] computeRequests(Container t, boolean xAxis) {
-        int n = t.getComponentCount();
-        Req[] r = new Req[n];
-        for (int i = 0; i < n; i++) {
-            Component c = t.getComponent(i);
-            // Our java.awt.Component has no alignment accessors; AWT's default is CENTER.
-            float align = !(c instanceof JComponent) ? 0.5f
-                : xAxis ? ((JComponent) c).getAlignmentX() : ((JComponent) c).getAlignmentY();
-            if (!c.isVisible()) { r[i] = new Req(0, 0, 0, align); continue; }
-            Dimension min = c.getMinimumSize(), pref = c.getPreferredSize(), max = c.getMaximumSize();
-            r[i] = xAxis ? new Req(min.width, pref.width, max.width, align)
-                         : new Req(min.height, pref.height, max.height, align);
+    /** Returns the maximum dimensions the target container can use to lay out the components it contains. */
+    public Dimension maximumLayoutSize(Container target) {
+        Dimension size;
+        synchronized (this) {
+            checkContainer(target);
+            checkRequests();
+            size = new Dimension(xTotal.maximum, yTotal.maximum);
         }
-        return r;
+        return withInsets(target, size);
     }
 
-    private static int clamp(long v) { return (int) Math.min(v, Integer.MAX_VALUE); }
-
-    private static Req tiledTotal(Req[] children) {
-        long min = 0, pref = 0, max = 0;
-        for (Req c : children) { min += c.minimum; pref += c.preferred; max += c.maximum; }
-        return new Req(clamp(min), clamp(pref), clamp(max), 0.5f);
+    private static Dimension withInsets(Container target, Dimension size) {
+        Insets insets = target.getInsets();
+        size.width = (int) Math.min((long) size.width + (long) insets.left + (long) insets.right, Integer.MAX_VALUE);
+        size.height = (int) Math.min((long) size.height + (long) insets.top + (long) insets.bottom, Integer.MAX_VALUE);
+        return size;
     }
 
-    private static Req alignedTotal(Req[] children) {
-        int ascMin = 0, ascPref = 0, ascMax = 0, descMin = 0, descPref = 0, descMax = 0;
-        for (Req r : children) {
-            int a = (int) (r.alignment * r.minimum);
-            ascMin = Math.max(a, ascMin); descMin = Math.max(r.minimum - a, descMin);
-            a = (int) (r.alignment * r.preferred);
-            ascPref = Math.max(a, ascPref); descPref = Math.max(r.preferred - a, descPref);
-            a = (int) (r.alignment * r.maximum);
-            ascMax = Math.max(a, ascMax); descMax = Math.max(r.maximum - a, descMax);
-        }
-        int min = clamp((long) ascMin + descMin);
-        int pref = clamp((long) ascPref + descPref);
-        int max = clamp((long) ascMax + descMax);
-        float alignment = 0f;
-        if (min > 0) alignment = Math.max(0f, Math.min(1f, (float) ascMin / min));
-        return new Req(min, pref, max, alignment);
+    /** Returns the alignment along the X axis for the container. */
+    public synchronized float getLayoutAlignmentX(Container target) {
+        checkContainer(target);
+        checkRequests();
+        return xTotal.alignment;
     }
 
-    private static void tiledPositions(int allocated, Req[] children, int[] offsets, int[] spans) {
-        long min = 0, pref = 0, max = 0;
-        for (Req c : children) { min += c.minimum; pref += c.preferred; max += c.maximum; }
-        int total = 0;
-        if (allocated >= pref) {
-            float totalPlay = Math.min(allocated - pref, max - pref);
-            float factor = (max - pref == 0) ? 0f : totalPlay / (max - pref);
-            for (int i = 0; i < children.length; i++) {
-                Req r = children[i];
-                offsets[i] = total;
-                float play = factor * ((long) r.maximum - r.preferred);
-                spans[i] = clamp((long) r.preferred + (long) play);
-                total = clamp((long) total + spans[i]);
+    /** Returns the alignment along the Y axis for the container. */
+    public synchronized float getLayoutAlignmentY(Container target) {
+        checkContainer(target);
+        checkRequests();
+        return yTotal.alignment;
+    }
+
+    /**
+     * Called by the AWT when the specified container needs to be laid out.
+     *
+     * @exception AWTError  if the target isn't the container specified to the
+     *                      BoxLayout constructor
+     */
+    public void layoutContainer(Container target) {
+        checkContainer(target);
+        int nChildren = target.getComponentCount();
+        int[] xOffsets = new int[nChildren];
+        int[] xSpans = new int[nChildren];
+        int[] yOffsets = new int[nChildren];
+        int[] ySpans = new int[nChildren];
+
+        Dimension alloc = target.getSize();
+        Insets in = target.getInsets();
+        alloc.width -= in.left + in.right;
+        alloc.height -= in.top + in.bottom;
+
+        // There is no ComponentOrientation here: LINE_AXIS and PAGE_AXIS resolve as for a
+        // left-to-right, horizontal container, and ltr is always true.
+        int absoluteAxis = resolveAxis(axis);
+        synchronized (this) {
+            checkRequests();
+            if (absoluteAxis == X_AXIS) {
+                SizeRequirements.calculateTiledPositions(alloc.width, xTotal, xChildren, xOffsets, xSpans, true);
+                SizeRequirements.calculateAlignedPositions(alloc.height, yTotal, yChildren, yOffsets, ySpans);
+            } else {
+                SizeRequirements.calculateAlignedPositions(alloc.width, xTotal, xChildren, xOffsets, xSpans, true);
+                // Wrapped controls (HTML labels, line-wrapped text) must measure their height
+                // at the width they are about to get: size them across first and, if that
+                // changed any measurement, take the vertical requests again.
+                long before = generation(target);
+                for (int i = 0; i < nChildren; i++) {
+                    Component c = target.getComponent(i);
+                    if (c.isVisible() && c.getWidth() != xSpans[i]) {
+                        c.setSize(xSpans[i], Math.max(0, c.getHeight()));
+                    }
+                }
+                if (before != NO_GENERATION && generation(target) != before) {
+                    xChildren = null;
+                    checkRequests();
+                }
+                SizeRequirements.calculateTiledPositions(alloc.height, yTotal, yChildren, yOffsets, ySpans);
             }
-        } else {
-            float totalPlay = Math.min(pref - allocated, pref - min);
-            float factor = (pref - min == 0) ? 0f : totalPlay / (pref - min);
-            for (int i = 0; i < children.length; i++) {
-                Req r = children[i];
-                offsets[i] = total;
-                float play = factor * (r.preferred - r.minimum);
-                spans[i] = (int) (r.preferred - play);
-                total = clamp((long) total + spans[i]);
-            }
+        }
+
+        for (int i = 0; i < nChildren; i++) {
+            Component c = target.getComponent(i);
+            c.setBounds((int) Math.min((long) in.left + (long) xOffsets[i], Integer.MAX_VALUE),
+                        (int) Math.min((long) in.top + (long) yOffsets[i], Integer.MAX_VALUE),
+                        xSpans[i], ySpans[i]);
         }
     }
 
-    private static void alignedPositions(int allocated, Req total, Req[] children, int[] offsets, int[] spans) {
-        int totalAscent = (int) (allocated * total.alignment);
-        int totalDescent = allocated - totalAscent;
-        for (int i = 0; i < children.length; i++) {
-            Req r = children[i];
-            int maxAscent = (int) (r.maximum * r.alignment);
-            int maxDescent = r.maximum - maxAscent;
-            int ascent = Math.min(totalAscent, maxAscent);
-            int descent = Math.min(totalDescent, maxDescent);
-            offsets[i] = totalAscent - ascent;
-            spans[i] = clamp((long) ascent + descent);
+    void checkContainer(Container target) {
+        if (this.target != target) {
+            throw new AWTError("BoxLayout can't be shared");
         }
     }
 
-    /** kind: 0 = minimum, 1 = preferred, 2 = maximum. */
-    private Dimension layoutSize(Container t, int kind) {
-        Req[] xs = requests(t, true), ys = requests(t, false);
-        Req xt = isXAxis() ? tiledTotal(xs) : alignedTotal(xs);
-        Req yt = isXAxis() ? alignedTotal(ys) : tiledTotal(ys);
-        Insets in = t.getInsets();
-        long w = kind == 0 ? xt.minimum : kind == 1 ? xt.preferred : xt.maximum;
-        long h = kind == 0 ? yt.minimum : kind == 1 ? yt.preferred : yt.maximum;
-        return new Dimension(clamp(w + in.left + in.right), clamp(h + in.top + in.bottom));
-    }
-
-    @Override public Dimension preferredLayoutSize(Container t) { return layoutSize(t, 1); }
-    @Override public Dimension minimumLayoutSize(Container t) { return layoutSize(t, 0); }
-    @Override public Dimension maximumLayoutSize(Container t) { return layoutSize(t, 2); }
-
-    @Override public float getLayoutAlignmentX(Container t) {
-        return isXAxis() ? 0.5f : alignedTotal(requests(t, true)).alignment;
-    }
-    @Override public float getLayoutAlignmentY(Container t) {
-        return isXAxis() ? alignedTotal(requests(t, false)).alignment : 0.5f;
-    }
-
-    @Override
-    public void layoutContainer(Container t) {
-        int n = t.getComponentCount();
-        if (n == 0) return;
-        Insets in = t.getInsets();
-        int allocW = Math.max(0, t.getWidth() - in.left - in.right);
-        int allocH = Math.max(0, t.getHeight() - in.top - in.bottom);
-        int[] xOffsets = new int[n], xSpans = new int[n], yOffsets = new int[n], ySpans = new int[n];
-
-        Req[] xs = requests(t, true);
-        if (isXAxis()) {
-            tiledPositions(allocW, xs, xOffsets, xSpans);
-            Req[] ys = requests(t, false);
-            alignedPositions(allocH, alignedTotal(ys), ys, yOffsets, ySpans);
-        } else {
-            alignedPositions(allocW, alignedTotal(xs), xs, xOffsets, xSpans);
-            // Wrapped controls (HTML labels, line-wrapped text) must measure their height at
-            // the width they are about to get, so size them across first.
+    void checkRequests() {
+        // The JDK keeps the requests until invalidateLayout; the shadow Container does not
+        // call invalidateLayout on every invalidate, so the target subtree's generation
+        // also expires them. Without a cache, measuring a BoxLayout asks every child for
+        // min, pref and max, and a nested BoxLayout re-measures its subtree for each:
+        // 3^depth (Loot Lookup's nested result rows froze the EDT for seconds per search).
+        long gen = generation(target);
+        if (gen != NO_GENERATION && gen != cachedGeneration) {
+            xChildren = null;
+        }
+        if (xChildren == null || yChildren == null) {
+            int n = target.getComponentCount();
+            SizeRequirements[] xs = new SizeRequirements[n];
+            SizeRequirements[] ys = new SizeRequirements[n];
             for (int i = 0; i < n; i++) {
-                Component c = t.getComponent(i);
-                if (c.isVisible() && c.getWidth() != xSpans[i]) c.setSize(xSpans[i], Math.max(0, c.getHeight()));
+                Component c = target.getComponent(i);
+                if (!c.isVisible()) {
+                    xs[i] = new SizeRequirements(0, 0, 0, c.getAlignmentX());
+                    ys[i] = new SizeRequirements(0, 0, 0, c.getAlignmentY());
+                    continue;
+                }
+                Dimension min = c.getMinimumSize();
+                Dimension typ = c.getPreferredSize();
+                Dimension max = c.getMaximumSize();
+                xs[i] = new SizeRequirements(min.width, typ.width, max.width, c.getAlignmentX());
+                ys[i] = new SizeRequirements(min.height, typ.height, max.height, c.getAlignmentY());
             }
-            Req[] ys = requests(t, false);
-            tiledPositions(allocH, ys, yOffsets, ySpans);
-        }
-        for (int i = 0; i < n; i++) {
-            Component c = t.getComponent(i);
-            c.setBounds(clamp((long) in.left + xOffsets[i]), clamp((long) in.top + yOffsets[i]), xSpans[i], ySpans[i]);
+            xChildren = xs;
+            yChildren = ys;
+            if (resolveAxis(axis) == X_AXIS) {
+                xTotal = SizeRequirements.getTiledSizeRequirements(xChildren);
+                yTotal = SizeRequirements.getAlignedSizeRequirements(yChildren);
+            } else {
+                xTotal = SizeRequirements.getAlignedSizeRequirements(xChildren);
+                yTotal = SizeRequirements.getTiledSizeRequirements(yChildren);
+            }
+            // Measuring a child may itself invalidate (a wrapping text component sizing
+            // itself); keep the result only if the tree stood still while it was taken.
+            long after = generation(target);
+            cachedGeneration = after == gen ? gen : STALE;
         }
     }
+
+    private static int resolveAxis(int axis) {
+        return axis == LINE_AXIS ? X_AXIS : axis == PAGE_AXIS ? Y_AXIS : axis;
+    }
+
+    private static final long NO_GENERATION = LayoutGeneration.NONE;
+    private static final long STALE = Long.MAX_VALUE;
+
+    private static long generation(Container target) {
+        return LayoutGeneration.of(target);
+    }
+
+    private transient SizeRequirements[] xChildren;
+    private transient SizeRequirements[] yChildren;
+    private transient SizeRequirements xTotal;
+    private transient SizeRequirements yTotal;
+    private transient long cachedGeneration = NO_GENERATION;
 }

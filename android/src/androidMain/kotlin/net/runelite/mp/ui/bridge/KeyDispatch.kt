@@ -196,6 +196,9 @@ object KeyDispatch {
             return false
         }
         val numLock = (event.metaState and AndroidKeyEvent.META_NUM_LOCK_ON) != 0
+        net.runelite.awt.impl.HostToolkit.updateLockingKeys(
+            (event.metaState and AndroidKeyEvent.META_CAPS_LOCK_ON) != 0, numLock,
+            (event.metaState and AndroidKeyEvent.META_SCROLL_LOCK_ON) != 0)
         val vk = androidKeyCodeToAwt(event.keyCode, numLock)
         val mods = androidMetaToAwtModifiers(event.metaState) or ModifierState.modifierMask()
         val keyChar = desktopKeyChar(event, vk, mods)
@@ -249,9 +252,10 @@ object KeyDispatch {
             java.awt.EventQueue.invokeLater { dispatchAwtEvent(ev) }
             return
         }
-        // 1. KeyboardFocusManager dispatchers (e.g. ClientUI hotkeys)
+        // 1. KeyboardFocusManager dispatchers (e.g. ClientUI hotkeys). Only the chain: the full
+        // dispatchKeyEvent redispatches to the target, and step 2 delivers it, so it would arrive twice.
         try {
-            if (KeyboardFocusManager.getCurrentKeyboardFocusManager().dispatchKeyEvent(ev) || ev.isConsumed) return
+            if (KeyboardFocusManager.getCurrentKeyboardFocusManager().dispatchToKeyEventDispatchers(ev) || ev.isConsumed) return
         } catch (t: Throwable) {
             android.util.Log.w(TAG, "KeyboardFocusManager dispatch failed", t)
         }

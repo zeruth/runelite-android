@@ -1,8 +1,40 @@
+/*
+ * Copyright (c) 2026, Tyler Bochard
+ * All rights reserved.
+ *
+ * Part of android-awt, the Android shadow of the desktop JDK surface used by
+ * runelite-android. Original work of this project, not derived from OpenJDK;
+ * licensed under the BSD 2-Clause License (see the LICENSE file at the
+ * repository root). Files ported from OpenJDK carry the OpenJDK header instead;
+ * see android-awt/LICENSE.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ *    list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
 package java.awt;
 
 import java.awt.event.ComponentListener;
 import java.awt.event.FocusListener;
 import java.awt.event.HierarchyListener;
+import java.awt.event.InputMethodEvent;
+import java.awt.event.InputMethodListener;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 import java.awt.event.MouseEvent;
@@ -23,7 +55,8 @@ import java.util.List;
  */
 public abstract class Component implements ImageObserver, Serializable, MenuContainer {
     private static final long serialVersionUID = -7644114512714619750L;
-    private static final Object TREE_LOCK = new Object();
+    /** The AWT tree lock; package-private as on the JDK so MenuComponent.getTreeLock shares it. */
+    static final Object LOCK = new Object();
     private boolean ignoreRepaint;
     private final java.util.List<PopupMenu> popupMenus = new java.util.ArrayList<>();
     public void add(PopupMenu popup) {
@@ -53,9 +86,40 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
     public void firePropertyChange(String name, float oldValue, float newValue) { if (oldValue != newValue) firePropertyChange(name, Float.valueOf(oldValue), Float.valueOf(newValue)); }
     public void firePropertyChange(String name, double oldValue, double newValue) { if (oldValue != newValue) firePropertyChange(name, Double.valueOf(oldValue), Double.valueOf(newValue)); }
 
-    public final Object getTreeLock() { return TREE_LOCK; }
+    public final Object getTreeLock() { return LOCK; }
     public void setIgnoreRepaint(boolean ignoreRepaint) { this.ignoreRepaint = ignoreRepaint; }
     public boolean getIgnoreRepaint() { return ignoreRepaint; }
+
+    // Package access as in the JDK: Window seeds it without firing a property change.
+    java.util.Locale locale;
+
+    /**
+     * Gets the locale of this component, or of its parent when none was set.
+     *
+     * @exception IllegalComponentStateException if the component has neither
+     *            its own locale nor a parent to take one from
+     */
+    public java.util.Locale getLocale() {
+        java.util.Locale locale = this.locale;
+        if (locale != null) {
+            return locale;
+        }
+        Container parent = this.parent;
+        if (parent == null) {
+            throw new IllegalComponentStateException("This component must have a parent in order to determine its locale");
+        }
+        return parent.getLocale();
+    }
+
+    /** Sets the locale of this component; a bound property. */
+    public void setLocale(java.util.Locale l) {
+        java.util.Locale oldValue = locale;
+        locale = l;
+        firePropertyChange("locale", oldValue, l);
+        // As the JDK's invalidateIfValid: JComponent's constructor sets the default locale
+        // before subclass fields exist, so an unlaid-out component must not invalidate.
+        if (isValid()) invalidate();
+    }
 
     protected int x, y, width, height;
     // Defaults tuned for RuneLite's theme. On desktop FlatLaf populates
@@ -80,11 +144,22 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
     protected Container parent;
     /** Mouse cursor — Android can't actually show one but RuneLite plugins
      *  (CustomCursorPlugin, drag handlers) call setCursor/getCursor a lot and
-     *  hit NoSuchMethodError if these aren't here. */
-    protected Cursor cursor = Cursor.getDefaultCursor();
+     *  hit NoSuchMethodError if these aren't here. Null until set, so an unset
+     *  component inherits its parent's cursor as on the JDK. */
+    protected Cursor cursor;
 
-    public Cursor getCursor() { return cursor; }
+    public Cursor getCursor() {
+        Cursor c = cursor;
+        for (Component comp = this; c == null; c = comp.cursor) {
+            if (comp instanceof Window) return Cursor.getDefaultCursor();
+            comp = comp.parent;
+            if (comp == null) return Cursor.getDefaultCursor();
+        }
+        return c;
+    }
     public void setCursor(Cursor cursor) { this.cursor = cursor; }
+    /** Whether a cursor was set on this component itself. */
+    public boolean isCursorSet() { return cursor != null; }
 
     // CopyOnWriteArrayList, so dispatch can iterate directly instead of taking a
     // defensive `new ArrayList<>(listeners)` snapshot on every event. Pointer moves
@@ -98,6 +173,11 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
     private final List<MouseListener> mouseListeners = new CopyOnWriteArrayList<>();
     private final List<MouseMotionListener> mouseMotionListeners = new CopyOnWriteArrayList<>();
     private final List<MouseWheelListener> mouseWheelListeners = new CopyOnWriteArrayList<>();
+    private final List<InputMethodListener> inputMethodListeners = new CopyOnWriteArrayList<>();
+    private boolean inputMethodsEnabled = true;
+    // The JDK gives every Window one input context shared by its tree. Android panel trees are
+    // mounted without a Window (setHostShowing), so their root holds the shared context instead.
+    private transient java.awt.im.InputContext rootInputContext;
 
     protected Component() {
     }
@@ -145,6 +225,19 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
     }
     public Dimension getSize()    { return new Dimension(width, height); }
 
+    /**
+     * Stores the width/height of this component into "return value" <b>rv</b>
+     * and returns <b>rv</b>; a new <code>Dimension</code> is allocated when
+     * <b>rv</b> is <code>null</code>.
+     */
+    public Dimension getSize(Dimension rv) {
+        if (rv == null) {
+            return new Dimension(width, height);
+        }
+        rv.setSize(width, height);
+        return rv;
+    }
+
     private Dimension preferredSize;
     private Dimension minimumSize;
     private Dimension maximumSize;
@@ -160,19 +253,29 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
     public boolean isMaximumSizeSet() { return maximumSize != null; }
     public Rectangle getBounds()  { return new Rectangle(x, y, width, height); }
 
-    public void setLocation(int x, int y) {
-        boolean moved = this.x != x || this.y != y;
-        this.x = x; this.y = y;
-        if (moved) { repaint(); fireComponentMoved(); }
-    }
+    // As in the JDK, moving and resizing are setBounds, so a subclass overriding setBounds
+    // or reshape sees them; reshape fires the moved/resized and ancestor events. Not through
+    // move/resize: Applet.resize calls setSize.
+    public void setLocation(int x, int y)       { setBounds(x, y, width, height); }
     public void setLocation(Point p)            { setLocation(p.x, p.y); }
-    public void setSize(int w, int h) {
-        boolean resized = width != w || height != h;
-        width = w; height = h;
-        if (resized) { invalidate(); fireComponentResized(); }
-    }
+    public void setSize(int w, int h)           { setBounds(x, y, w, h); }
     public void setSize(Dimension d)            { setSize(d.width, d.height); }
-    public void setBounds(int x, int y, int w, int h) {
+    /** @deprecated As of JDK version 1.1, replaced by {@code setLocation(int, int)}. */
+    @Deprecated
+    public void move(int x, int y) { setLocation(x, y); }
+    /** @deprecated As of JDK version 1.1, replaced by {@code setSize(int, int)}. */
+    @Deprecated
+    public void resize(int width, int height) { setSize(width, height); }
+    /** @deprecated As of JDK version 1.1, replaced by {@code setSize(Dimension)}. */
+    @Deprecated
+    public void resize(Dimension d) { setSize(d.width, d.height); }
+
+    /** The JDK's setBounds is reshape, so a subclass overriding reshape (JViewport-style) sees every setBounds. */
+    public void setBounds(int x, int y, int w, int h) { reshape(x, y, w, h); }
+
+    /** @deprecated As of JDK version 1.1, replaced by {@code setBounds(int, int, int, int)}. */
+    @Deprecated
+    public void reshape(int x, int y, int w, int h) {
         boolean moved = this.x != x || this.y != y;
         boolean resized = this.width != w || this.height != h;
         this.x = x; this.y = y; this.width = w; this.height = h;
@@ -182,8 +285,8 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
         // size falls back to getSize(). The JDK invalidates on move too; doing that here
         // would just make every layout pass re-dirty the tree it had just laid out.
         if (resized) invalidate();
-        if (moved) { repaint(); fireComponentMoved(); }
-        if (resized) fireComponentResized();
+        if (moved) { repaint(); fireComponentMoved(); fireAncestorBounds(java.awt.event.HierarchyEvent.ANCESTOR_MOVED); }
+        if (resized) { fireComponentResized(); fireAncestorBounds(java.awt.event.HierarchyEvent.ANCESTOR_RESIZED); }
     }
     public void setBounds(Rectangle r)          { setBounds(r.x, r.y, r.width, r.height); }
 
@@ -276,15 +379,14 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
     public void repaint() { repaint(0, 0, 0, width, height); }
     public void repaint(long tm) { repaint(tm, 0, 0, width, height); }
     public void repaint(int x, int y, int width, int height) { repaint(0, x, y, width, height); }
+    /**
+     * A lightweight's repaint reaches its root's host through the RepaintManager, as a
+     * JComponent's does: there is no heavyweight peer to post a paint event to, and the hosts
+     * (the game Window walker, the sidebar panel host) read their dirty regions from there.
+     */
     public void repaint(long tm, int x, int y, int width, int height) {
-        long generation = repaintSequence.incrementAndGet();
-        for (Component c = this; c != null; c = c.parent) c.subtreePaintGeneration = generation;
+        javax.swing.RepaintManager.currentManager(this).hostAddDirtyRegion(this, x, y, width, height);
     }
-
-    private static final java.util.concurrent.atomic.AtomicLong repaintSequence = new java.util.concurrent.atomic.AtomicLong();
-    private volatile long subtreePaintGeneration;
-    /** Repaint requests within this tree, consumed by detached Android panel hosts. */
-    public final long subtreePaintGeneration() { return subtreePaintGeneration; }
 
     public void paint(Graphics g) {
         // Default: fill with background if we have one. Subclasses extend.
@@ -296,7 +398,12 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
         }
     }
     public void update(Graphics g) { paint(g); }
-    public void paintAll(Graphics g) { paint(g); }
+    /** Paints this component and its subcomponents, when showing. */
+    public void paintAll(Graphics g) {
+        if (isShowing()) {
+            paint(g);
+        }
+    }
     /**
      * Layout validity.
      *
@@ -382,73 +489,428 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
         return new java.awt.image.ProducerImage(producer);
     }
 
+    // Unscaled images only: the JDK's -1/-1 request is the image's own size, which is the only
+    // size a produced image has here. MediaTracker goes through these.
+    public boolean prepareImage(Image image, java.awt.image.ImageObserver observer) {
+        return prepareImage(image, -1, -1, observer);
+    }
+
+    public boolean prepareImage(Image image, int width, int height, java.awt.image.ImageObserver observer) {
+        return Toolkit.getDefaultToolkit().prepareImage(image, width, height, observer);
+    }
+
+    public int checkImage(Image image, java.awt.image.ImageObserver observer) {
+        return checkImage(image, -1, -1, observer);
+    }
+
+    public int checkImage(Image image, int width, int height, java.awt.image.ImageObserver observer) {
+        return Toolkit.getDefaultToolkit().checkImage(image, width, height, observer);
+    }
+
     public boolean imageUpdate(Image img, int infoflags, int x, int y, int w, int h) {
         if ((infoflags & (SOMEBITS | FRAMEBITS | ALLBITS)) != 0) repaint();
         return (infoflags & (ALLBITS | ABORT)) == 0;
     }
 
+    /**
+     * Checks whether this component "contains" the specified point, where {@code x} and
+     * {@code y} are relative to this component's coordinate system.
+     */
+    public boolean contains(int x, int y) {
+        return inside(x, y);
+    }
+
+    /** @deprecated As of JDK version 1.1, replaced by contains(int, int). */
+    @Deprecated
     public boolean inside(int x, int y) {
         return x >= 0 && x < width && y >= 0 && y < height;
     }
 
-    public boolean requestFocus(boolean temporary) { return requestFocusInWindow(); }
-    public void requestFocus() { requestFocusInWindow(); }
-    public boolean requestFocusInWindow() { return KeyboardFocusManager.getCurrentKeyboardFocusManager().requestFocus(this); }
+    public boolean contains(Point p) {
+        return contains(p.x, p.y);
+    }
+
+    /** Returns this component when it contains the point, otherwise {@code null}. */
+    public Component getComponentAt(int x, int y) {
+        return locate(x, y);
+    }
+
+    /** @deprecated As of JDK version 1.1, replaced by getComponentAt(int, int). */
+    @Deprecated
+    public Component locate(int x, int y) {
+        return contains(x, y) ? this : null;
+    }
+
+    public Component getComponentAt(Point p) {
+        return getComponentAt(p.x, p.y);
+    }
+
+    /**
+     * Opaque means "paints every pixel of its bounds": true for a native widget once it has
+     * its (here notional) peer, i.e. after addNotify, false before that and for lightweight
+     * components, which JComponent refines with setOpaque.
+     */
+    public boolean isOpaque() {
+        return notified && !isLightweight();
+    }
+
+    boolean isRecursivelyVisible() {
+        return visible && (parent == null || parent.isRecursivelyVisible());
+    }
+
+    /** Component's version ignores children: only the component itself counts. */
+    boolean isSameOrAncestorOf(Component comp, boolean allowChildren) {
+        return comp == this;
+    }
+
+    /** The topmost ancestor: a Window on desktop, a host-mounted panel root on Android. */
+    final Component getRoot() {
+        Component root = this;
+        while (root.parent != null) root = root.parent;
+        return root;
+    }
+
+    /**
+     * The JDK asks the native pointer peer whether this component's window is under the
+     * mouse, then searches that window. Here the "window" is the tree the last host pointer
+     * event was dispatched into ({@link MouseInfo}): another tree, or no pointer yet, means
+     * the pointer is somewhere else.
+     */
+    final Component findUnderMouseInWindow(PointerInfo pi) {
+        if (!isShowing()) {
+            return null;
+        }
+        Component root = getRoot();
+        if (!MouseInfo.isUnderPointer(root)) {
+            return null;
+        }
+        Point p = root.pointRelativeToComponent(pi.getLocation());
+        if (root instanceof Container) {
+            return ((Container) root).findComponentAt(p.x, p.y, true);
+        }
+        return root.contains(p.x, p.y) ? root : null;
+    }
+
+    final Point pointRelativeToComponent(Point point) {
+        Point compCoords = getLocationOnScreen();
+        return new Point(point.x - compCoords.x, point.y - compCoords.y);
+    }
+
+    /**
+     * Returns the position of the pointer in this component's coordinates when the
+     * component is directly under it (not obscured by a child or sibling), else
+     * {@code null}. The JDK throws HeadlessException in a headless toolkit; the Android
+     * host always has a pointer, so this answers from the last host pointer event.
+     */
+    public Point getMousePosition() throws HeadlessException {
+        PointerInfo pi = MouseInfo.getPointerInfo();
+        synchronized (getTreeLock()) {
+            Component inTheSameWindow = findUnderMouseInWindow(pi);
+            if (!isSameOrAncestorOf(inTheSameWindow, true)) {
+                return null;
+            }
+            return pointRelativeToComponent(pi.getLocation());
+        }
+    }
+
+    private ComponentOrientation componentOrientation = ComponentOrientation.UNKNOWN;
+
+    /**
+     * Sets the language-sensitive orientation used to order elements or text within this
+     * component; layout managers such as FlowLayout read it. Fires a
+     * "componentOrientation" property change.
+     */
+    public void setComponentOrientation(ComponentOrientation o) {
+        ComponentOrientation oldValue = componentOrientation;
+        componentOrientation = o;
+        firePropertyChange("componentOrientation", oldValue, o);
+        invalidate();
+    }
+
+    public ComponentOrientation getComponentOrientation() {
+        return componentOrientation;
+    }
+
+    /** Sets the orientation of this component and, for a container, of every descendant. */
+    public void applyComponentOrientation(ComponentOrientation orientation) {
+        if (orientation == null) {
+            throw new NullPointerException();
+        }
+        setComponentOrientation(orientation);
+    }
+
+    /** Enumeration of the common ways the baseline of a component can change as the size changes. */
+    public enum BaselineResizeBehavior {
+        CONSTANT_ASCENT,
+        CONSTANT_DESCENT,
+        CENTER_OFFSET,
+        OTHER
+    }
+
+    /**
+     * Returns the baseline, measured from the top, or a value &lt; 0 if this component has
+     * none; the default has none.
+     *
+     * @throws IllegalArgumentException if width or height is &lt; 0
+     */
+    public int getBaseline(int width, int height) {
+        if (width < 0 || height < 0) {
+            throw new IllegalArgumentException("Width and height must be >= 0");
+        }
+        return -1;
+    }
+
+    public BaselineResizeBehavior getBaselineResizeBehavior() {
+        return BaselineResizeBehavior.OTHER;
+    }
+
+    /** Prints this component; by default it paints. */
+    public void print(Graphics g) {
+        paint(g);
+    }
+
+    /** Prints this component and its subcomponents, when showing. */
+    public void printAll(Graphics g) {
+        if (isShowing()) {
+            print(g);
+        }
+    }
+
+    /**
+     * Returns the listeners of the given type registered on this component, an empty array
+     * of that type when there are none.
+     *
+     * @throws ClassCastException if listenerType is not a java.util.EventListener
+     */
+    @SuppressWarnings("unchecked")
+    public <T extends java.util.EventListener> T[] getListeners(Class<T> listenerType) {
+        List<? extends java.util.EventListener> l = null;
+        if (listenerType == ComponentListener.class) {
+            l = componentListeners;
+        } else if (listenerType == FocusListener.class) {
+            l = focusListeners;
+        } else if (listenerType == HierarchyListener.class) {
+            l = hierarchyListeners;
+        } else if (listenerType == KeyListener.class) {
+            l = keyListeners;
+        } else if (listenerType == MouseListener.class) {
+            l = mouseListeners;
+        } else if (listenerType == MouseMotionListener.class) {
+            l = mouseMotionListeners;
+        } else if (listenerType == MouseWheelListener.class) {
+            l = mouseWheelListeners;
+        } else if (listenerType == InputMethodListener.class) {
+            l = inputMethodListeners;
+        } else if (listenerType == java.beans.PropertyChangeListener.class) {
+            return (T[]) getPropertyChangeListeners();
+        }
+        if (!java.util.EventListener.class.isAssignableFrom(listenerType)) {
+            throw new ClassCastException(listenerType.getName());
+        }
+        T[] result = (T[]) java.lang.reflect.Array.newInstance(listenerType, 0);
+        return l == null ? result : l.toArray(result);
+    }
+
+    // --- focus (after OpenJDK 8u Component; requests complete synchronously, see KeyboardFocusManager) ---
+
+    public void requestFocus() { requestFocusHelper(false, java.awt.event.FocusEvent.Cause.UNKNOWN); }
+    // JDK 9+ (9)
+    public void requestFocus(java.awt.event.FocusEvent.Cause cause) { requestFocusHelper(false, cause); }
+    /** Protected on the JDK; public here because host code calls it on plain Components. */
+    public boolean requestFocus(boolean temporary) { return requestFocusHelper(temporary, java.awt.event.FocusEvent.Cause.UNKNOWN); }
+    // JDK 9+ (9)
+    protected boolean requestFocus(boolean temporary, java.awt.event.FocusEvent.Cause cause) { return requestFocusHelper(temporary, cause); }
+    public boolean requestFocusInWindow() { return requestFocusHelper(false, java.awt.event.FocusEvent.Cause.UNKNOWN); }
+    // JDK 9+ (9)
+    public boolean requestFocusInWindow(java.awt.event.FocusEvent.Cause cause) { return requestFocusHelper(false, cause); }
+    protected boolean requestFocusInWindow(boolean temporary) { return requestFocusHelper(temporary, java.awt.event.FocusEvent.Cause.UNKNOWN); }
+    // There is one native window on Android, so a request may always change the focused Window:
+    // requestFocus and requestFocusInWindow behave alike.
+    private boolean requestFocusHelper(boolean temporary, java.awt.event.FocusEvent.Cause cause) {
+        return KeyboardFocusManager.getCurrentKeyboardFocusManager().requestFocus(this, cause, temporary);
+    }
     public boolean isFocusOwner() { return KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner() == this; }
     public float getAlignmentX() { return 0.5f; }
     public float getAlignmentY() { return 0.5f; }
     public boolean hasFocus() { return isFocusOwner(); }
+
+    private static final int FOCUS_TRAVERSABLE_UNKNOWN = 0, FOCUS_TRAVERSABLE_DEFAULT = 1, FOCUS_TRAVERSABLE_SET = 2;
+    private static final String[] FOCUS_TRAVERSAL_KEY_PROPERTY_NAMES = {
+        "forwardFocusTraversalKeys", "backwardFocusTraversalKeys", "upCycleFocusTraversalKeys", "downCycleFocusTraversalKeys"
+    };
     private boolean focusable = true, focusTraversalKeysEnabled = true;
-    private final java.util.Map<Integer, java.util.Set<AWTKeyStroke>> traversalKeys = new java.util.HashMap<>();
-    public void setFocusTraversalKeysEnabled(boolean v) { focusTraversalKeysEnabled = v; }
+    // UNKNOWN until isFocusTraversable runs un-overridden: a subclass overriding the deprecated
+    // isFocusTraversable keeps it UNKNOWN, which DefaultFocusTraversalPolicy reads as explicit.
+    private int isFocusTraversableOverridden = FOCUS_TRAVERSABLE_UNKNOWN;
+    @SuppressWarnings("unchecked")
+    private final java.util.Set<AWTKeyStroke>[] focusTraversalKeys = new java.util.Set[KeyboardFocusManager.TRAVERSAL_KEY_LENGTH];
+
+    public void setFocusTraversalKeysEnabled(boolean focusTraversalKeysEnabled) {
+        boolean old = this.focusTraversalKeysEnabled;
+        this.focusTraversalKeysEnabled = focusTraversalKeysEnabled;
+        firePropertyChange("focusTraversalKeysEnabled", old, focusTraversalKeysEnabled);
+    }
     public boolean getFocusTraversalKeysEnabled() { return focusTraversalKeysEnabled; }
     public void setFocusable(boolean focusable) {
-        boolean old = this.focusable;
-        this.focusable = focusable;
-        if (!focusable) KeyboardFocusManager.getCurrentKeyboardFocusManager().clearFocusIn(this);
+        boolean old;
+        synchronized (this) {
+            old = this.focusable;
+            this.focusable = focusable;
+        }
+        isFocusTraversableOverridden = FOCUS_TRAVERSABLE_SET;
         firePropertyChange("focusable", old, focusable);
-    }
-    public boolean isFocusable() { return focusable; }
-    public void setFocusTraversalKeys(int id, java.util.Set<? extends AWTKeyStroke> keys) {
-        if (id < 0 || id > 3) throw new IllegalArgumentException("invalid traversal key id");
-        if (keys == null) { traversalKeys.remove(id); return; }
-        java.util.Set<AWTKeyStroke> copy = new java.util.HashSet<>(keys);
-        for (AWTKeyStroke key : copy)
-            if (key == null || key.getKeyEventType() == KeyEvent.KEY_TYPED)
-                throw new IllegalArgumentException("invalid traversal key");
-        traversalKeys.put(id, java.util.Collections.unmodifiableSet(copy));
-    }
-    public java.util.Set<AWTKeyStroke> getFocusTraversalKeys(int id) {
-        if (id < 0 || id > 3) throw new IllegalArgumentException("invalid traversal key id");
-        java.util.Set<AWTKeyStroke> keys = traversalKeys.get(id);
-        return keys != null ? keys : parent != null ? parent.getFocusTraversalKeys(id) : java.util.Collections.emptySet();
-    }
-    public boolean areFocusTraversalKeysSet(int id) {
-        if (id < 0 || id > 3) throw new IllegalArgumentException("invalid traversal key id");
-        return traversalKeys.containsKey(id);
-    }
-    public void transferFocus() { transferFocus(false); }
-    public void transferFocusUpCycle() { if (parent != null) parent.requestFocusInWindow(); }
-    public void transferFocusBackward() { transferFocus(true); }
-    private void transferFocus(boolean backwards) {
-        Component root = this;
-        while (root.parent != null) root = root.parent;
-        java.util.List<Component> candidates = new java.util.ArrayList<>();
-        collectFocusable(root, candidates);
-        int size = candidates.size(), index = candidates.indexOf(this);
-        for (int offset = 1; offset <= size; offset++) {
-            Component next = candidates.get(Math.floorMod(index + (backwards ? -offset : offset), size));
-            if (next.requestFocusInWindow()) return;
+        if (old && !focusable) {
+            if (isFocusOwner()) transferFocus(true);
+            KeyboardFocusManager.clearMostRecentFocusOwner(this);
         }
     }
-    private static void collectFocusable(Component component, java.util.List<Component> out) {
-        if (!component.isVisible() || !component.isEnabled()) return;
-        if (component.isFocusable()) out.add(component);
-        if (component instanceof Container)
-            for (Component child : ((Container) component).getComponents()) collectFocusable(child, out);
+    /** @deprecated As of 1.4, replaced by {@link #isFocusable()}. */
+    @Deprecated
+    public boolean isFocusTraversable() {
+        if (isFocusTraversableOverridden == FOCUS_TRAVERSABLE_UNKNOWN) isFocusTraversableOverridden = FOCUS_TRAVERSABLE_DEFAULT;
+        return focusable;
     }
-    public java.awt.Container getFocusCycleRootAncestor() { return parent; }
-    public boolean isFocusCycleRoot(java.awt.Container container) { return false; }
+    public boolean isFocusable() { return isFocusTraversable(); }
+    final boolean isFocusTraversableOverridden() { return isFocusTraversableOverridden != FOCUS_TRAVERSABLE_DEFAULT; }
+
+    /**
+     * Without peers this answers by class, as the desktop peers would: the heavyweight
+     * java.awt components and their subclasses are not lightweight, everything else is.
+     */
+    public boolean isLightweight() {
+        if (this instanceof Window || this instanceof Canvas || this instanceof Panel) return false;
+        // By name: the remaining heavyweights are not all in the shadow.
+        for (Class<?> type = getClass(); type != Component.class; type = type.getSuperclass()) {
+            String name = type.getName();
+            if (name.equals("java.awt.Button") || name.equals("java.awt.Label") || name.equals("java.awt.Checkbox")
+                || name.equals("java.awt.Choice") || name.equals("java.awt.List") || name.equals("java.awt.Scrollbar")
+                || name.equals("java.awt.ScrollPane") || name.equals("java.awt.TextComponent")) return false;
+        }
+        return true;
+    }
+    final boolean canBeFocusOwner() { return isEnabled() && isDisplayable() && isVisible() && isFocusable(); }
+
+    /** Number of traversal key ids this component takes: a Component has no down-cycle keys. */
+    int focusTraversalKeyLength() { return KeyboardFocusManager.TRAVERSAL_KEY_LENGTH - 1; }
+
+    public void setFocusTraversalKeys(int id, java.util.Set<? extends AWTKeyStroke> keystrokes) {
+        if (id < 0 || id >= focusTraversalKeyLength()) throw new IllegalArgumentException("invalid focus traversal key identifier");
+        setFocusTraversalKeys_NoIDCheck(id, keystrokes);
+    }
+    public java.util.Set<AWTKeyStroke> getFocusTraversalKeys(int id) {
+        if (id < 0 || id >= focusTraversalKeyLength()) throw new IllegalArgumentException("invalid focus traversal key identifier");
+        return getFocusTraversalKeys_NoIDCheck(id);
+    }
+    public boolean areFocusTraversalKeysSet(int id) {
+        if (id < 0 || id >= focusTraversalKeyLength()) throw new IllegalArgumentException("invalid focus traversal key identifier");
+        return focusTraversalKeys[id] != null;
+    }
+    final void setFocusTraversalKeys_NoIDCheck(int id, java.util.Set<? extends AWTKeyStroke> keystrokes) {
+        java.util.Set<AWTKeyStroke> oldKeys;
+        synchronized (this) {
+            if (keystrokes != null) {
+                for (AWTKeyStroke keystroke : keystrokes) {
+                    if (keystroke == null) throw new IllegalArgumentException("cannot set null focus traversal key");
+                    if (keystroke.getKeyEventType() == KeyEvent.KEY_TYPED)
+                        throw new IllegalArgumentException("focus traversal keys cannot map to KEY_TYPED events");
+                    for (int i = 0; i < focusTraversalKeyLength(); i++) {
+                        if (i == id) continue;
+                        if (getFocusTraversalKeys_NoIDCheck(i).contains(keystroke))
+                            throw new IllegalArgumentException("focus traversal keys must be unique for a Component");
+                    }
+                }
+            }
+            oldKeys = focusTraversalKeys[id];
+            focusTraversalKeys[id] = keystrokes != null
+                ? java.util.Collections.unmodifiableSet(new java.util.HashSet<AWTKeyStroke>(keystrokes)) : null;
+        }
+        firePropertyChange(FOCUS_TRAVERSAL_KEY_PROPERTY_NAMES[id], oldKeys, keystrokes);
+    }
+    final java.util.Set<AWTKeyStroke> getFocusTraversalKeys_NoIDCheck(int id) {
+        java.util.Set<AWTKeyStroke> keystrokes = focusTraversalKeys[id];
+        if (keystrokes != null) return keystrokes;
+        Container parent = this.parent;
+        return parent != null ? parent.getFocusTraversalKeys(id)
+            : KeyboardFocusManager.getCurrentKeyboardFocusManager().getDefaultFocusTraversalKeys(id);
+    }
+
+    public void transferFocus() { transferFocus(false); }
+    boolean transferFocus(boolean clearOnFailure) {
+        Component toFocus = getNextFocusCandidate();
+        boolean res = false;
+        if (toFocus != null && !toFocus.isFocusOwner() && toFocus != this) {
+            res = toFocus.requestFocusInWindow(java.awt.event.FocusEvent.Cause.TRAVERSAL_FORWARD);
+        }
+        if (clearOnFailure && !res) KeyboardFocusManager.getCurrentKeyboardFocusManager().clearGlobalFocusOwner();
+        return res;
+    }
+    final Component getNextFocusCandidate() {
+        Component[] comp = {this};
+        Container rootAncestor = traversalRoot(comp);
+        Component toFocus = null;
+        if (rootAncestor != null) {
+            FocusTraversalPolicy policy = rootAncestor.getFocusTraversalPolicy();
+            toFocus = policy.getComponentAfter(rootAncestor, comp[0]);
+            if (toFocus == null) toFocus = policy.getDefaultComponent(rootAncestor);
+        }
+        return toFocus;
+    }
+    public void transferFocusBackward() { transferFocusBackward(false); }
+    boolean transferFocusBackward(boolean clearOnFailure) {
+        Component[] comp = {this};
+        Container rootAncestor = traversalRoot(comp);
+        boolean res = false;
+        if (rootAncestor != null) {
+            FocusTraversalPolicy policy = rootAncestor.getFocusTraversalPolicy();
+            Component toFocus = policy.getComponentBefore(rootAncestor, comp[0]);
+            if (toFocus == null) toFocus = policy.getDefaultComponent(rootAncestor);
+            if (toFocus != null) res = toFocus.requestFocusInWindow(java.awt.event.FocusEvent.Cause.TRAVERSAL_BACKWARD);
+        }
+        if (clearOnFailure && !res) KeyboardFocusManager.getCurrentKeyboardFocusManager().clearGlobalFocusOwner();
+        return res;
+    }
+    /** The first showing, focusable traversal root above comp[0]; comp[0] becomes the component below it. */
+    private Container traversalRoot(Component[] comp) {
+        Container rootAncestor = getTraversalRoot();
+        while (rootAncestor != null && !(rootAncestor.isShowing() && rootAncestor.canBeFocusOwner())) {
+            comp[0] = rootAncestor;
+            rootAncestor = rootAncestor.getFocusCycleRootAncestor();
+        }
+        return rootAncestor;
+    }
+    Container getTraversalRoot() { return getFocusCycleRootAncestor(); }
+    /**
+     * A tree the Android host mounts directly (the sidebar panels) stands in for the client
+     * frame it sits in on the desktop, so its root is a focus cycle root like that Window.
+     */
+    final boolean isHostMountedRoot() { return parent == null && hostShowing; }
+    public void transferFocusUpCycle() {
+        Container rootAncestor = getFocusCycleRootAncestor();
+        while (rootAncestor != null && !(rootAncestor.isShowing() && rootAncestor.isFocusable() && rootAncestor.isEnabled())) {
+            rootAncestor = rootAncestor.getFocusCycleRootAncestor();
+        }
+        KeyboardFocusManager manager = KeyboardFocusManager.getCurrentKeyboardFocusManager();
+        if (rootAncestor != null) {
+            Container rootAncestorRootAncestor = rootAncestor.getFocusCycleRootAncestor();
+            manager.setGlobalCurrentFocusCycleRootPriv(rootAncestorRootAncestor != null ? rootAncestorRootAncestor : rootAncestor);
+            rootAncestor.requestFocus(java.awt.event.FocusEvent.Cause.TRAVERSAL_UP);
+        } else {
+            Window window = KeyboardFocusManager.windowOf(this);
+            if (window != null) {
+                Component toFocus = window.getFocusTraversalPolicy().getDefaultComponent(window);
+                if (toFocus != null) {
+                    manager.setGlobalCurrentFocusCycleRootPriv(window);
+                    toFocus.requestFocus(java.awt.event.FocusEvent.Cause.TRAVERSAL_UP);
+                }
+            }
+        }
+    }
+    public Container getFocusCycleRootAncestor() {
+        Container rootAncestor = this.parent;
+        while (rootAncestor != null && !rootAncestor.isFocusCycleRoot()) rootAncestor = rootAncestor.parent;
+        return rootAncestor;
+    }
+    public boolean isFocusCycleRoot(Container container) { return getFocusCycleRootAncestor() == container; }
 
     public void addComponentListener(ComponentListener l)       { if (l != null) componentListeners.add(l); }
     public void removeComponentListener(ComponentListener l)    { componentListeners.remove(l); }
@@ -464,10 +926,123 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
     public void removeMouseMotionListener(MouseMotionListener l) { mouseMotionListeners.remove(l); }
     public void addMouseWheelListener(MouseWheelListener l)     { if (l != null) mouseWheelListeners.add(l); }
     public void removeMouseWheelListener(MouseWheelListener l)  { mouseWheelListeners.remove(l); }
+    public void addInputMethodListener(InputMethodListener l)   { if (l != null) inputMethodListeners.add(l); }
+    public void removeInputMethodListener(InputMethodListener l) { inputMethodListeners.remove(l); }
+    public InputMethodListener[] getInputMethodListeners() { return inputMethodListeners.toArray(new InputMethodListener[0]); }
+
+    /**
+     * Gets the input method request handler which supports requests from input methods
+     * for this component. A component that supports on-the-spot text input must override
+     * this method to return an {@code InputMethodRequests} instance. By default this
+     * method returns {@code null}.
+     *
+     * @since 1.2
+     */
+    public java.awt.im.InputMethodRequests getInputMethodRequests() { return null; }
+
+    /**
+     * Gets the input context used by this component for handling the communication with
+     * input methods when text is entered in this component. By default, the input context
+     * used for the parent component is returned; the root of the tree (a Window, or the root
+     * of a host-mounted Android panel) owns one context shared by the tree.
+     *
+     * @since 1.2
+     */
+    public java.awt.im.InputContext getInputContext() {
+        Container p = parent;
+        if (p != null) return p.getInputContext();
+        if (!(this instanceof Window) && !hostShowing) return null;
+        synchronized (getTreeLock()) {
+            if (rootInputContext == null) rootInputContext = java.awt.im.InputContext.getInstance();
+            return rootInputContext;
+        }
+    }
+
+    /**
+     * Enables or disables input method support for this component. If input method support
+     * is enabled and the component also processes key events, incoming events are offered
+     * to the current input method. Disabling it ends any composition in progress.
+     *
+     * @since 1.2
+     */
+    public void enableInputMethods(boolean enable) {
+        if (!enable && inputMethodsEnabled) {
+            java.awt.im.InputContext context = getInputContext();
+            if (context != null) {
+                context.endComposition();
+                context.removeNotify(this);
+            }
+        }
+        inputMethodsEnabled = enable;
+    }
+
+    /**
+     * Not in the JDK: whether this component is an active input method client, which the
+     * desktop input context decides from {@link #enableInputMethods} and
+     * {@link #getInputMethodRequests}. The Android keyboard bridge sends its composition to
+     * such a component as {@link InputMethodEvent}s and types into any other one with keys.
+     */
+    public boolean isInputMethodClient() {
+        return inputMethodsEnabled && getInputMethodRequests() != null;
+    }
+
+    private java.awt.dnd.DropTarget dropTarget;
+
+    /**
+     * Associate a {@code DropTarget} with this component, as the JDK does: the old
+     * target is detached and the new one is made reachable by the in-process drag.
+     */
+    public synchronized void setDropTarget(java.awt.dnd.DropTarget dt) {
+        if (dt == dropTarget || (dropTarget != null && dropTarget.equals(dt))) return;
+        java.awt.dnd.DropTarget old;
+        if ((old = dropTarget) != null) {
+            dropTarget.removeNotify();
+            java.awt.dnd.DropTarget t = dropTarget;
+            dropTarget = null;
+            try { t.setComponent(null); } catch (IllegalArgumentException iae) { /* the JDK ignores it too */ }
+        }
+        if ((dropTarget = dt) != null) {
+            try {
+                dropTarget.setComponent(this);
+                dropTarget.addNotify();
+            } catch (IllegalArgumentException iae) {
+                if (old != null) {
+                    try { old.setComponent(this); old.addNotify(); } catch (IllegalArgumentException iae1) { /* as the JDK */ }
+                }
+            }
+        }
+    }
+
+    public synchronized java.awt.dnd.DropTarget getDropTarget() { return dropTarget; }
 
     private String name = "";
-    public String getName() { return name; }
-    public void setName(String name) { String old = this.name; this.name = name; firePropertyChange("name", old, name); }
+    private boolean nameExplicitlySet, nameConstructed;
+    /**
+     * The heavyweight widgets answer a generated name ({@code button0}, {@code label3}) until one is
+     * set, as on the JDK; every other component keeps this shadow's historical empty default.
+     */
+    public String getName() {
+        if (!nameExplicitlySet && !nameConstructed) {
+            synchronized (this) {
+                if (!nameExplicitlySet && !nameConstructed) {
+                    String constructed = constructComponentName();
+                    if (constructed != null) name = constructed;
+                    nameConstructed = true;
+                }
+            }
+        }
+        return name;
+    }
+    public void setName(String name) { String old = getName(); this.name = name; nameExplicitlySet = true; firePropertyChange("name", old, name); }
+    /** The generated name of an unnamed component, or null for none; the widgets override it. */
+    String constructComponentName() { return null; }
+
+    /** The state string the JDK's subclasses extend in their own paramString. */
+    protected String paramString() {
+        String thisName = getName() == null ? "" : getName();
+        return thisName + ',' + x + ',' + y + ',' + width + 'x' + height
+            + (isValid() ? "" : ",invalid") + (visible ? "" : ",hidden") + (enabled ? "" : ",disabled");
+    }
 
     public ComponentListener[] getComponentListeners() { return componentListeners.toArray(new ComponentListener[0]); }
     public FocusListener[] getFocusListeners() { return focusListeners.toArray(new FocusListener[0]); }
@@ -496,60 +1071,209 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
      */
     public void dispatchMouseEvent(MouseEvent e) {
         if (e == null) return;
+        // Every host pointer event passes through here; it is where the pointer "is" for
+        // MouseInfo and getMousePosition.
+        MouseInfo.pointerAt(getRoot(), e.getXOnScreen(), e.getYOnScreen());
+        // Through the JDK's per-kind hooks, so AWT widgets and plugin subclasses that override
+        // processMouseEvent see host-injected input as they would on desktop.
         switch (e.getID()) {
-            case MouseEvent.MOUSE_PRESSED:
-                for (MouseListener l : mouseListeners) l.mousePressed(e);
-                break;
-            case MouseEvent.MOUSE_RELEASED:
-                for (MouseListener l : mouseListeners) l.mouseReleased(e);
-                break;
-            case MouseEvent.MOUSE_CLICKED:
-                for (MouseListener l : mouseListeners) l.mouseClicked(e);
-                break;
-            case MouseEvent.MOUSE_ENTERED:
-                for (MouseListener l : mouseListeners) l.mouseEntered(e);
-                break;
-            case MouseEvent.MOUSE_EXITED:
-                for (MouseListener l : mouseListeners) l.mouseExited(e);
-                break;
             case MouseEvent.MOUSE_MOVED:
-                for (MouseMotionListener l : mouseMotionListeners) l.mouseMoved(e);
-                break;
             case MouseEvent.MOUSE_DRAGGED:
-                for (MouseMotionListener l : mouseMotionListeners) l.mouseDragged(e);
+                processMouseMotionEvent(e);
                 break;
             case MouseEvent.MOUSE_WHEEL:
-                if (e instanceof MouseWheelEvent) {
-                    MouseWheelEvent we = (MouseWheelEvent) e;
-                    for (MouseWheelListener l : mouseWheelListeners) l.mouseWheelMoved(we);
-                }
+                if (e instanceof MouseWheelEvent) processMouseWheelEvent((MouseWheelEvent) e);
+                break;
+            default:
+                processMouseEvent(e);
                 break;
         }
     }
 
-    /** Desktop entry point for plugins sending input to a component's listeners. */
+    /**
+     * The JDK pipeline: the Toolkit's AWTEventListeners see the event first, a key event then
+     * goes to the KeyboardFocusManager's dispatchers, and what is left reaches
+     * {@link #processEvent} only when {@link #eventEnabled} says a listener or an
+     * {@link #enableEvents} mask wants it, so subclasses overriding processMouseEvent and
+     * friends see exactly what they would on the desktop.
+     */
     public final void dispatchEvent(AWTEvent event) {
         if (event == null) throw new NullPointerException("event");
         AWTEvent previous = EventQueue.beginDispatch(event);
-        try { processEvent(event); } finally { EventQueue.endDispatch(previous); }
+        try { dispatchEventImpl(event); } finally { EventQueue.endDispatch(previous); }
+    }
+
+    void dispatchEventImpl(AWTEvent event) {
+        if (event instanceof KeyEvent) {
+            // As Component.dispatchEventImpl: a KeyEvent first goes to the focus manager (dispatcher
+            // chain, then redispatchEvent back here); on the way back traversal keys are handled
+            // before the listeners see it. The AWTEventListeners see it on that second pass, once.
+            KeyboardFocusManager manager = KeyboardFocusManager.getCurrentKeyboardFocusManager();
+            if (!KeyboardFocusManager.isRedispatching(event)) {
+                if (manager.dispatchEvent(event)) return;
+            } else {
+                Toolkit.getDefaultToolkit().notifyAWTEventListeners(event);
+                manager.processKeyEvent(this, (KeyEvent) event);
+                if (((KeyEvent) event).isConsumed()) return;
+                if (eventEnabled(event)) processEvent(event);
+                return;
+            }
+        }
+        Toolkit.getDefaultToolkit().notifyAWTEventListeners(event);
+        if (eventEnabled(event)) processEvent(event);
+    }
+
+    /** Event types {@link #enableEvents} turned on, independent of registered listeners. */
+    long eventMask;
+
+    protected final void enableEvents(long eventsToEnable) {
+        synchronized (this) { eventMask |= eventsToEnable; }
+    }
+
+    protected final void disableEvents(long eventsToDisable) {
+        synchronized (this) { eventMask &= ~eventsToDisable; }
+    }
+
+    /**
+     * Whether processEvent should see the event, as in the JDK. Ids outside the component,
+     * focus, key, mouse, input method and hierarchy ranges (an ActionEvent sent to a
+     * Button, an id above {@link AWTEvent#RESERVED_ID_MAX}) are passed on: the shadow's
+     * Button, TextField and friends do not override this the way the JDK's do.
+     */
+    boolean eventEnabled(AWTEvent event) {
+        int id = event.getID();
+        switch (id) {
+            case java.awt.event.ComponentEvent.COMPONENT_MOVED:
+            case java.awt.event.ComponentEvent.COMPONENT_RESIZED:
+            case java.awt.event.ComponentEvent.COMPONENT_SHOWN:
+            case java.awt.event.ComponentEvent.COMPONENT_HIDDEN:
+                return (eventMask & AWTEvent.COMPONENT_EVENT_MASK) != 0 || !componentListeners.isEmpty();
+            case java.awt.event.FocusEvent.FOCUS_GAINED:
+            case java.awt.event.FocusEvent.FOCUS_LOST:
+                return (eventMask & AWTEvent.FOCUS_EVENT_MASK) != 0 || !focusListeners.isEmpty();
+            case KeyEvent.KEY_PRESSED:
+            case KeyEvent.KEY_RELEASED:
+            case KeyEvent.KEY_TYPED:
+                return (eventMask & AWTEvent.KEY_EVENT_MASK) != 0 || !keyListeners.isEmpty();
+            case MouseEvent.MOUSE_PRESSED:
+            case MouseEvent.MOUSE_RELEASED:
+            case MouseEvent.MOUSE_ENTERED:
+            case MouseEvent.MOUSE_EXITED:
+            case MouseEvent.MOUSE_CLICKED:
+                return (eventMask & AWTEvent.MOUSE_EVENT_MASK) != 0 || !mouseListeners.isEmpty();
+            case MouseEvent.MOUSE_MOVED:
+            case MouseEvent.MOUSE_DRAGGED:
+                return (eventMask & AWTEvent.MOUSE_MOTION_EVENT_MASK) != 0 || !mouseMotionListeners.isEmpty();
+            case MouseEvent.MOUSE_WHEEL:
+                return (eventMask & AWTEvent.MOUSE_WHEEL_EVENT_MASK) != 0 || !mouseWheelListeners.isEmpty();
+            case java.awt.event.InputMethodEvent.INPUT_METHOD_TEXT_CHANGED:
+            case java.awt.event.InputMethodEvent.CARET_POSITION_CHANGED:
+                return (eventMask & AWTEvent.INPUT_METHOD_EVENT_MASK) != 0 || !inputMethodListeners.isEmpty();
+            case java.awt.event.HierarchyEvent.HIERARCHY_CHANGED:
+                return (eventMask & AWTEvent.HIERARCHY_EVENT_MASK) != 0 || !hierarchyListeners.isEmpty();
+            case java.awt.event.HierarchyEvent.ANCESTOR_MOVED:
+            case java.awt.event.HierarchyEvent.ANCESTOR_RESIZED:
+                return (eventMask & AWTEvent.HIERARCHY_BOUNDS_EVENT_MASK) != 0 || !hierarchyBoundsListeners.isEmpty();
+            default:
+                return true;
+        }
     }
 
     protected void processEvent(AWTEvent event) {
-        if (event instanceof KeyEvent) {
-            KeyEvent key = (KeyEvent) event;
-            if (!key.isConsumed()
-                    && !KeyboardFocusManager.getCurrentKeyboardFocusManager().dispatchKeyEvent(key)
-                    && !key.isConsumed()) {
-                dispatchKeyEvent(key);
-            }
-        } else if (event instanceof MouseEvent) {
-            dispatchMouseEvent((MouseEvent) event);
-        } else if (event instanceof java.awt.event.FocusEvent) {
+        if (event instanceof java.awt.event.FocusEvent) {
             processFocusEvent((java.awt.event.FocusEvent) event);
-        } else if (event instanceof java.awt.event.HierarchyEvent) {
-            processHierarchyEvent((java.awt.event.HierarchyEvent) event);
-        } else if (event instanceof java.awt.event.ComponentEvent) {
+        } else if (event instanceof MouseEvent) {
+            switch (event.getID()) {
+                case MouseEvent.MOUSE_PRESSED:
+                case MouseEvent.MOUSE_RELEASED:
+                case MouseEvent.MOUSE_CLICKED:
+                case MouseEvent.MOUSE_ENTERED:
+                case MouseEvent.MOUSE_EXITED:
+                    processMouseEvent((MouseEvent) event);
+                    break;
+                case MouseEvent.MOUSE_MOVED:
+                case MouseEvent.MOUSE_DRAGGED:
+                    processMouseMotionEvent((MouseEvent) event);
+                    break;
+                case MouseEvent.MOUSE_WHEEL:
+                    if (event instanceof MouseWheelEvent) processMouseWheelEvent((MouseWheelEvent) event);
+                    break;
+            }
+        } else if (event instanceof KeyEvent) {
+            processKeyEvent((KeyEvent) event);
+        } else if (event instanceof java.awt.event.ComponentEvent
+                && !(event instanceof java.awt.event.ContainerEvent)
+                && !(event instanceof java.awt.event.WindowEvent)
+                && !(event instanceof java.awt.event.InputEvent)
+                && !(event instanceof java.awt.event.PaintEvent)) {
             processComponentEvent((java.awt.event.ComponentEvent) event);
+        } else if (event instanceof java.awt.event.InputMethodEvent) {
+            processInputMethodEvent((java.awt.event.InputMethodEvent) event);
+        } else if (event instanceof java.awt.event.HierarchyEvent) {
+            switch (event.getID()) {
+                case java.awt.event.HierarchyEvent.HIERARCHY_CHANGED:
+                    processHierarchyEvent((java.awt.event.HierarchyEvent) event);
+                    break;
+                case java.awt.event.HierarchyEvent.ANCESTOR_MOVED:
+                case java.awt.event.HierarchyEvent.ANCESTOR_RESIZED:
+                    processHierarchyBoundsEvent((java.awt.event.HierarchyEvent) event);
+                    break;
+            }
+        }
+    }
+
+    protected void processMouseEvent(MouseEvent e) {
+        switch (e.getID()) {
+            case MouseEvent.MOUSE_PRESSED: for (MouseListener l : mouseListeners) l.mousePressed(e); break;
+            case MouseEvent.MOUSE_RELEASED: for (MouseListener l : mouseListeners) l.mouseReleased(e); break;
+            case MouseEvent.MOUSE_CLICKED: for (MouseListener l : mouseListeners) l.mouseClicked(e); break;
+            case MouseEvent.MOUSE_ENTERED: for (MouseListener l : mouseListeners) l.mouseEntered(e); break;
+            case MouseEvent.MOUSE_EXITED: for (MouseListener l : mouseListeners) l.mouseExited(e); break;
+        }
+    }
+
+    protected void processMouseMotionEvent(MouseEvent e) {
+        switch (e.getID()) {
+            case MouseEvent.MOUSE_MOVED: for (MouseMotionListener l : mouseMotionListeners) l.mouseMoved(e); break;
+            case MouseEvent.MOUSE_DRAGGED: for (MouseMotionListener l : mouseMotionListeners) l.mouseDragged(e); break;
+        }
+    }
+
+    protected void processMouseWheelEvent(MouseWheelEvent e) {
+        for (MouseWheelListener l : mouseWheelListeners) l.mouseWheelMoved(e);
+    }
+
+    protected void processHierarchyBoundsEvent(java.awt.event.HierarchyEvent e) {
+        for (java.awt.event.HierarchyBoundsListener l : hierarchyBoundsListeners) {
+            switch (e.getID()) {
+                case java.awt.event.HierarchyEvent.ANCESTOR_MOVED: l.ancestorMoved(e); break;
+                case java.awt.event.HierarchyEvent.ANCESTOR_RESIZED: l.ancestorResized(e); break;
+            }
+        }
+    }
+
+    private final List<java.awt.event.HierarchyBoundsListener> hierarchyBoundsListeners = new CopyOnWriteArrayList<>();
+    /** Components with a HierarchyBoundsListener, so a move or resize skips the subtree walk when none exist. */
+    private static final java.util.concurrent.atomic.AtomicInteger boundsListenerCount = new java.util.concurrent.atomic.AtomicInteger();
+
+    public void addHierarchyBoundsListener(java.awt.event.HierarchyBoundsListener l) {
+        if (l != null) { hierarchyBoundsListeners.add(l); boundsListenerCount.incrementAndGet(); }
+    }
+    public void removeHierarchyBoundsListener(java.awt.event.HierarchyBoundsListener l) {
+        if (hierarchyBoundsListeners.remove(l)) boundsListenerCount.decrementAndGet();
+    }
+    public java.awt.event.HierarchyBoundsListener[] getHierarchyBoundsListeners() { return hierarchyBoundsListeners.toArray(new java.awt.event.HierarchyBoundsListener[0]); }
+
+    /** ANCESTOR_MOVED/ANCESTOR_RESIZED to every descendant that wants it, after this one moved or resized. */
+    private void fireAncestorBounds(int id) {
+        if (!(this instanceof Container)) return;
+        if (boundsListenerCount.get() == 0 && !Toolkit.enabledOnToolkit(AWTEvent.HIERARCHY_BOUNDS_EVENT_MASK)) return;
+        for (Component child : ((Container) this).getComponents()) child.ancestorBoundsChanged(this, id);
+    }
+    private void ancestorBoundsChanged(Component changed, int id) {
+        dispatchEvent(new java.awt.event.HierarchyEvent(this, id, changed, changed.getParent()));
+        if (this instanceof Container) {
+            for (Component child : ((Container) this).getComponents()) child.ancestorBoundsChanged(changed, id);
         }
     }
 
@@ -557,6 +1281,18 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
         for (FocusListener listener : focusListeners) {
             if (event.getID() == java.awt.event.FocusEvent.FOCUS_GAINED) listener.focusGained(event);
             else if (event.getID() == java.awt.event.FocusEvent.FOCUS_LOST) listener.focusLost(event);
+        }
+    }
+    /**
+     * Processes input method events occurring on this component by dispatching them to
+     * any registered {@code InputMethodListener} objects.
+     *
+     * @since 1.2
+     */
+    protected void processInputMethodEvent(InputMethodEvent event) {
+        for (InputMethodListener listener : inputMethodListeners) {
+            if (event.getID() == InputMethodEvent.INPUT_METHOD_TEXT_CHANGED) listener.inputMethodTextChanged(event);
+            else if (event.getID() == InputMethodEvent.CARET_POSITION_CHANGED) listener.caretPositionChanged(event);
         }
     }
     protected void processHierarchyEvent(java.awt.event.HierarchyEvent event) {
@@ -571,9 +1307,16 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
         }
     }
 
-    /** Dispatches a {@link KeyEvent} to the registered {@link KeyListener}s. */
+    /**
+     * Dispatches a {@link KeyEvent} to the registered {@link KeyListener}s, through
+     * {@link #processKeyEvent} so the AWT widgets and plugin subclasses that override it see
+     * host-injected keys as they would on desktop.
+     */
     public void dispatchKeyEvent(KeyEvent e) {
-        if (e == null) return;
+        if (e != null) processKeyEvent(e);
+    }
+
+    protected void processKeyEvent(KeyEvent e) {
         switch (e.getID()) {
             case KeyEvent.KEY_PRESSED:
                 for (KeyListener l : keyListeners) l.keyPressed(e);
@@ -584,6 +1327,337 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
             case KeyEvent.KEY_TYPED:
                 for (KeyListener l : keyListeners) l.keyTyped(e);
                 break;
+        }
+    }
+
+    // --- Accessibility support ---
+
+    /**
+     * The {@code AccessibleContext} associated with this {@code Component}, created lazily by
+     * the subclasses that implement {@link javax.accessibility.Accessible}.
+     */
+    protected javax.accessibility.AccessibleContext accessibleContext = null;
+
+    /** Null here; each accessible subclass creates its own context on first use. */
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        return accessibleContext;
+    }
+
+    /** Index among the parent's {@link javax.accessibility.Accessible} children, or -1. */
+    int getAccessibleIndexInParent() {
+        synchronized (getTreeLock()) {
+            int index = -1;
+            Container parent = this.getParent();
+            if (parent != null && parent instanceof javax.accessibility.Accessible) {
+                Component[] ca = parent.getComponents();
+                for (int i = 0; i < ca.length; i++) {
+                    if (ca[i] instanceof javax.accessibility.Accessible) index++;
+                    if (this.equals(ca[i])) return index;
+                }
+            }
+            return -1;
+        }
+    }
+
+    /** The state set every AWT and Swing context starts from. */
+    javax.accessibility.AccessibleStateSet getAccessibleStateSet() {
+        synchronized (getTreeLock()) {
+            javax.accessibility.AccessibleStateSet states = new javax.accessibility.AccessibleStateSet();
+            if (this.isEnabled()) states.add(javax.accessibility.AccessibleState.ENABLED);
+            if (this.isFocusTraversable()) states.add(javax.accessibility.AccessibleState.FOCUSABLE);
+            if (this.isVisible()) states.add(javax.accessibility.AccessibleState.VISIBLE);
+            if (this.isShowing()) states.add(javax.accessibility.AccessibleState.SHOWING);
+            if (this.isFocusOwner()) states.add(javax.accessibility.AccessibleState.FOCUSED);
+            if (this instanceof javax.accessibility.Accessible) {
+                javax.accessibility.AccessibleContext ac = ((javax.accessibility.Accessible) this).getAccessibleContext();
+                if (ac != null) {
+                    javax.accessibility.Accessible ap = ac.getAccessibleParent();
+                    if (ap != null) {
+                        javax.accessibility.AccessibleContext pac = ap.getAccessibleContext();
+                        if (pac != null) {
+                            javax.accessibility.AccessibleSelection as = pac.getAccessibleSelection();
+                            if (as != null) {
+                                states.add(javax.accessibility.AccessibleState.SELECTABLE);
+                                int i = ac.getAccessibleIndexInParent();
+                                if (i >= 0 && as.isAccessibleChildSelected(i)) {
+                                    states.add(javax.accessibility.AccessibleState.SELECTED);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if (this instanceof javax.swing.JComponent && ((javax.swing.JComponent) this).isOpaque()) {
+                states.add(javax.accessibility.AccessibleState.OPAQUE);
+            }
+            return states;
+        }
+    }
+
+    /**
+     * Accessibility support shared by every component: geometry, colours, font and focus
+     * come straight from the component; visibility and focus changes are reported as
+     * {@link javax.accessibility.AccessibleContext#ACCESSIBLE_STATE_PROPERTY} changes while
+     * anyone listens.
+     */
+    protected abstract class AccessibleAWTComponent extends javax.accessibility.AccessibleContext
+            implements Serializable, javax.accessibility.AccessibleComponent {
+
+        private static final long serialVersionUID = 642321655757800191L;
+
+        protected AccessibleAWTComponent() {
+        }
+
+        private volatile transient int propertyListenersCount = 0;
+
+        protected ComponentListener accessibleAWTComponentHandler = null;
+        protected FocusListener accessibleAWTFocusHandler = null;
+
+        /** Fires visibility property changes for the component's show and hide. */
+        protected class AccessibleAWTComponentHandler implements ComponentListener {
+            public void componentHidden(java.awt.event.ComponentEvent e) {
+                if (accessibleContext != null) {
+                    accessibleContext.firePropertyChange(
+                        javax.accessibility.AccessibleContext.ACCESSIBLE_STATE_PROPERTY,
+                        javax.accessibility.AccessibleState.VISIBLE, null);
+                }
+            }
+            public void componentShown(java.awt.event.ComponentEvent e) {
+                if (accessibleContext != null) {
+                    accessibleContext.firePropertyChange(
+                        javax.accessibility.AccessibleContext.ACCESSIBLE_STATE_PROPERTY,
+                        null, javax.accessibility.AccessibleState.VISIBLE);
+                }
+            }
+            public void componentMoved(java.awt.event.ComponentEvent e) {
+            }
+            public void componentResized(java.awt.event.ComponentEvent e) {
+            }
+        }
+
+        /** Fires focus property changes for the component's focus gain and loss. */
+        protected class AccessibleAWTFocusHandler implements FocusListener {
+            public void focusGained(java.awt.event.FocusEvent event) {
+                if (accessibleContext != null) {
+                    accessibleContext.firePropertyChange(
+                        javax.accessibility.AccessibleContext.ACCESSIBLE_STATE_PROPERTY,
+                        null, javax.accessibility.AccessibleState.FOCUSED);
+                }
+            }
+            public void focusLost(java.awt.event.FocusEvent event) {
+                if (accessibleContext != null) {
+                    accessibleContext.firePropertyChange(
+                        javax.accessibility.AccessibleContext.ACCESSIBLE_STATE_PROPERTY,
+                        javax.accessibility.AccessibleState.FOCUSED, null);
+                }
+            }
+        }
+
+        public void addPropertyChangeListener(java.beans.PropertyChangeListener listener) {
+            if (accessibleAWTComponentHandler == null) {
+                accessibleAWTComponentHandler = new AccessibleAWTComponentHandler();
+            }
+            if (accessibleAWTFocusHandler == null) {
+                accessibleAWTFocusHandler = new AccessibleAWTFocusHandler();
+            }
+            if (propertyListenersCount++ == 0) {
+                Component.this.addComponentListener(accessibleAWTComponentHandler);
+                Component.this.addFocusListener(accessibleAWTFocusHandler);
+            }
+            super.addPropertyChangeListener(listener);
+        }
+
+        public void removePropertyChangeListener(java.beans.PropertyChangeListener listener) {
+            if (--propertyListenersCount == 0) {
+                Component.this.removeComponentListener(accessibleAWTComponentHandler);
+                Component.this.removeFocusListener(accessibleAWTFocusHandler);
+            }
+            super.removePropertyChangeListener(listener);
+        }
+
+        public String getAccessibleName() {
+            return accessibleName;
+        }
+
+        public String getAccessibleDescription() {
+            return accessibleDescription;
+        }
+
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.AWT_COMPONENT;
+        }
+
+        public javax.accessibility.AccessibleStateSet getAccessibleStateSet() {
+            return Component.this.getAccessibleStateSet();
+        }
+
+        public javax.accessibility.Accessible getAccessibleParent() {
+            if (accessibleParent != null) {
+                return accessibleParent;
+            }
+            Container parent = getParent();
+            if (parent instanceof javax.accessibility.Accessible) {
+                return (javax.accessibility.Accessible) parent;
+            }
+            return null;
+        }
+
+        public int getAccessibleIndexInParent() {
+            return Component.this.getAccessibleIndexInParent();
+        }
+
+        public int getAccessibleChildrenCount() {
+            return 0;
+        }
+
+        public javax.accessibility.Accessible getAccessibleChild(int i) {
+            return null;
+        }
+
+        public java.util.Locale getLocale() {
+            return Component.this.getLocale();
+        }
+
+        public javax.accessibility.AccessibleComponent getAccessibleComponent() {
+            return this;
+        }
+
+        // AccessibleComponent
+
+        public Color getBackground() {
+            return Component.this.getBackground();
+        }
+
+        public void setBackground(Color c) {
+            Component.this.setBackground(c);
+        }
+
+        public Color getForeground() {
+            return Component.this.getForeground();
+        }
+
+        public void setForeground(Color c) {
+            Component.this.setForeground(c);
+        }
+
+        public Cursor getCursor() {
+            return Component.this.getCursor();
+        }
+
+        public void setCursor(Cursor cursor) {
+            Component.this.setCursor(cursor);
+        }
+
+        public Font getFont() {
+            return Component.this.getFont();
+        }
+
+        public void setFont(Font f) {
+            Component.this.setFont(f);
+        }
+
+        public FontMetrics getFontMetrics(Font f) {
+            return f == null ? null : Component.this.getFontMetrics(f);
+        }
+
+        public boolean isEnabled() {
+            return Component.this.isEnabled();
+        }
+
+        public void setEnabled(boolean b) {
+            boolean old = Component.this.isEnabled();
+            Component.this.setEnabled(b);
+            if (b != old && accessibleContext != null) {
+                if (b) {
+                    accessibleContext.firePropertyChange(
+                        javax.accessibility.AccessibleContext.ACCESSIBLE_STATE_PROPERTY,
+                        null, javax.accessibility.AccessibleState.ENABLED);
+                } else {
+                    accessibleContext.firePropertyChange(
+                        javax.accessibility.AccessibleContext.ACCESSIBLE_STATE_PROPERTY,
+                        javax.accessibility.AccessibleState.ENABLED, null);
+                }
+            }
+        }
+
+        public boolean isVisible() {
+            return Component.this.isVisible();
+        }
+
+        public void setVisible(boolean b) {
+            boolean old = Component.this.isVisible();
+            Component.this.setVisible(b);
+            if (b != old && accessibleContext != null) {
+                if (b) {
+                    accessibleContext.firePropertyChange(
+                        javax.accessibility.AccessibleContext.ACCESSIBLE_STATE_PROPERTY,
+                        null, javax.accessibility.AccessibleState.VISIBLE);
+                } else {
+                    accessibleContext.firePropertyChange(
+                        javax.accessibility.AccessibleContext.ACCESSIBLE_STATE_PROPERTY,
+                        javax.accessibility.AccessibleState.VISIBLE, null);
+                }
+            }
+        }
+
+        public boolean isShowing() {
+            return Component.this.isShowing();
+        }
+
+        public boolean contains(Point p) {
+            return Component.this.contains(p);
+        }
+
+        /** Null while the component is not showing, as on the JDK. */
+        public Point getLocationOnScreen() {
+            synchronized (Component.this.getTreeLock()) {
+                return Component.this.isShowing() ? Component.this.getLocationOnScreen() : null;
+            }
+        }
+
+        public Point getLocation() {
+            return Component.this.getLocation();
+        }
+
+        public void setLocation(Point p) {
+            Component.this.setLocation(p);
+        }
+
+        public Rectangle getBounds() {
+            return Component.this.getBounds();
+        }
+
+        public void setBounds(Rectangle r) {
+            Component.this.setBounds(r);
+        }
+
+        public Dimension getSize() {
+            return Component.this.getSize();
+        }
+
+        public void setSize(Dimension d) {
+            Component.this.setSize(d);
+        }
+
+        public javax.accessibility.Accessible getAccessibleAt(Point p) {
+            return null;
+        }
+
+        @SuppressWarnings("deprecation")
+        public boolean isFocusTraversable() {
+            return Component.this.isFocusTraversable();
+        }
+
+        public void requestFocus() {
+            Component.this.requestFocus();
+        }
+
+        public void addFocusListener(FocusListener l) {
+            Component.this.addFocusListener(l);
+        }
+
+        public void removeFocusListener(FocusListener l) {
+            Component.this.removeFocusListener(l);
         }
     }
 }
