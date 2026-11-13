@@ -1,3 +1,33 @@
+/*
+ * Copyright (c) 2026, Tyler Bochard
+ * All rights reserved.
+ *
+ * Part of android-awt, the Android shadow of the desktop JDK surface used by
+ * runelite-android. Original work of this project, not derived from OpenJDK;
+ * licensed under the BSD 2-Clause License (see the LICENSE file at the
+ * repository root). Files ported from OpenJDK carry the OpenJDK header instead;
+ * see android-awt/LICENSE.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ *    list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
 package net.runelite.awt.impl;
 
 import java.awt.AlphaComposite;
@@ -420,7 +450,7 @@ public class BufferedImageGraphics2D extends Graphics2D {
         if (it == null) return null;
         Contours c = CONTOUR_SCRATCH.get()[0];
         c.reset();
-        c.appendFlattened(it, transform, deviceScale, 0.25);
+        c.appendFlattened(it, transform, deviceScale, Contours.JDK_FLATNESS);
         return ClipRegion.rasterize(c, c.isEvenOdd(), bx0, by0, bx1, by1);
     }
 
@@ -687,7 +717,7 @@ public class BufferedImageGraphics2D extends Graphics2D {
         }
         Contours c = CONTOUR_SCRATCH.get()[0];
         c.reset();
-        c.appendFlattened(it, transform, deviceScale, 0.25);
+        c.appendFlattened(it, transform, deviceScale, Contours.JDK_FLATNESS);
         strokeDevice(c);
     }
 
@@ -1099,7 +1129,7 @@ public class BufferedImageGraphics2D extends Graphics2D {
         syncTarget();
         Contours c = CONTOUR_SCRATCH.get()[0];
         c.reset();
-        c.appendFlattened(it, transform, deviceScale, 0.25);
+        c.appendFlattened(it, transform, deviceScale, Contours.JDK_FLATNESS);
         if (renderingHints.get(RenderingHints.KEY_STROKE_CONTROL) != RenderingHints.VALUE_STROKE_PURE) normalize(c);
         fillContours(c, c.isEvenOdd());
     }
@@ -1114,10 +1144,15 @@ public class BufferedImageGraphics2D extends Graphics2D {
 
     @Override
     public void drawString(String str, int x, int y) {
+        drawTextRun(str, x, y, true);
+    }
+
+    /** drawString's cached-bitmap path; a GlyphVector run has no decorations to draw. */
+    private void drawTextRun(String str, int x, int y, boolean decorate) {
         if(str==null)throw new NullPointerException("text");
         if(str.isEmpty())return;
         if(generalRendering() || font.isTransformed() || font.getTracking() != 0){
-            drawGeneralText(str,x,y);
+            drawGeneralText(str,x,y,decorate);
             return;
         }
         syncTarget();
@@ -1138,7 +1173,35 @@ public class BufferedImageGraphics2D extends Graphics2D {
         // outside the viewport bounds (same bug pattern as blit()). 1:1 scale.
         blitDevice(r.pixels, r.w, r.h, 0, 0, r.w, r.h, dx, dy, dx + r.w, dy + r.h,
             compositeRule(), compositeAlpha());
-        if (font.isUnderlined() || font.isStrikethrough()) drawTextDecorations(str, baseX, baseY);
+        if (decorate && (font.isUnderlined() || font.isStrikethrough())) drawTextDecorations(str, baseX, baseY);
+    }
+
+    /**
+     * A vector that still has drawString's layout (an AndroidGlyphVector from
+     * createGlyphVector, positions and transforms untouched) is drawn as its text in its
+     * own font along drawString(String, float, float)'s route: the TextCache bitmap at an
+     * integer origin, drawGeneralText at a fractional one. Its pixels therefore equal
+     * drawString's at the same origin and deviceScale; only the integer-origin case shares
+     * the cached bitmap. Anything else, foreign vectors included, fills the outline with the
+     * current paint as the JDK's outline fallback does; that path follows the shape
+     * antialiasing hint rather than the text one.
+     */
+    @Override
+    public void drawGlyphVector(java.awt.font.GlyphVector g, float x, float y) {
+        if (g == null) throw new NullPointerException("glyphvector");
+        String run = g instanceof AndroidGlyphVector ? ((AndroidGlyphVector) g).defaultRun() : null;
+        if (run == null) {
+            fill(g.getOutline(x, y));
+            return;
+        }
+        Font saved = font;
+        font = g.getFont();
+        try {
+            if (x == (int) x && y == (int) y) drawTextRun(run, (int) x, (int) y, false);
+            else drawGeneralText(run, x, y, false);
+        } finally {
+            font = saved;
+        }
     }
 
     /**
@@ -1365,9 +1428,14 @@ public class BufferedImageGraphics2D extends Graphics2D {
 
     @Override public void drawString(String str, float x, float y) {
         if(x==(int)x && y==(int)y)drawString(str,(int)x,(int)y);
-        else drawGeneralText(str,x,y);
+        else drawGeneralText(str,x,y,true);
     }
-    private void drawGeneralText(String str,float x,float y){
+    /**
+     * Text through the Canvas path. configureText turns on Paint's underline/strike flags
+     * from the font; a GlyphVector run passes decorate=false because the JDK never draws
+     * TextAttribute decorations for a glyph vector, whatever its origin.
+     */
+    private void drawGeneralText(String str,float x,float y,boolean decorate){
         if(str==null)throw new NullPointerException("text");
         if(str.isEmpty())return;
         android.graphics.Paint metrics = new android.graphics.Paint();
@@ -1386,6 +1454,7 @@ public class BufferedImageGraphics2D extends Graphics2D {
             canvas.save();canvas.translate(x,y);
             AffineTransform ft=font.getTransform();android.graphics.Matrix matrix=new android.graphics.Matrix();
             matrix.setValues(new float[]{(float)ft.getScaleX(),(float)ft.getShearX(),(float)ft.getTranslateX(),(float)ft.getShearY(),(float)ft.getScaleY(),(float)ft.getTranslateY(),0,0,1});
+            if(!decorate){p.setUnderlineText(false);p.setStrikeThruText(false);}
             canvas.concat(matrix);canvas.drawText(str,0,0,p);canvas.restore();
         },true,local.createTransformedShape(bounds),true);
     }
@@ -1738,6 +1807,8 @@ public class BufferedImageGraphics2D extends Graphics2D {
     }
     private static BufferedImage buffered(java.awt.Image source){
         if(source instanceof BufferedImage)return (BufferedImage)source;
+        // The live raster, not getSnapshot(): stretched mode blits a volatile image every frame.
+        if(source instanceof BufferedBackedVolatileImage)return ((BufferedBackedVolatileImage)source).backing();
         if(source instanceof java.awt.image.VolatileImage)return ((java.awt.image.VolatileImage)source).getSnapshot();
         if(source instanceof java.awt.image.ProducerImage)return ((java.awt.image.ProducerImage)source).getBufferedImage();
         return source==null?null:new java.awt.image.ProducerImage(source.getSource()).getBufferedImage();

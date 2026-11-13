@@ -1,3 +1,33 @@
+/*
+ * Copyright (c) 2026, Tyler Bochard
+ * All rights reserved.
+ *
+ * Part of android-awt, the Android shadow of the desktop JDK surface used by
+ * runelite-android. Original work of this project, not derived from OpenJDK;
+ * licensed under the BSD 2-Clause License (see the LICENSE file at the
+ * repository root). Files ported from OpenJDK carry the OpenJDK header instead;
+ * see android-awt/LICENSE.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ *    list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
 package java.awt;
 
 import java.awt.color.ColorSpace;
@@ -33,7 +63,18 @@ public class Color implements Paint, Serializable {
     public static final Color blue      = new Color(0, 0, 255);
     public static final Color BLUE      = blue;
 
-    private final int value;
+    /* Package-private and non-final as in OpenJDK: desktop natives read it by JNI field ID. */
+    int value;
+
+    /*
+     * OpenJDK 8u keeps the float components a Color was created from, so
+     * getComponents/getRGBComponents return them unquantized; all four are
+     * null/0 for colours made from ints, exactly as on desktop.
+     */
+    private float frgbvalue[] = null;
+    private float fvalue[] = null;
+    private float falpha = 0.0f;
+    private ColorSpace cs = null;
 
     public Color(int r, int g, int b) {
         this(r, g, b, 255);
@@ -57,12 +98,65 @@ public class Color implements Paint, Serializable {
 
     public Color(float r, float g, float b) {
         this((int) (r * 255f + 0.5f), (int) (g * 255f + 0.5f), (int) (b * 255f + 0.5f));
+        frgbvalue = new float[3];
+        frgbvalue[0] = r;
+        frgbvalue[1] = g;
+        frgbvalue[2] = b;
+        falpha = 1.0f;
+        fvalue = frgbvalue;
     }
 
     public Color(float r, float g, float b, float a) {
         this((int) (r * 255f + 0.5f), (int) (g * 255f + 0.5f),
              (int) (b * 255f + 0.5f), (int) (a * 255f + 0.5f));
+        frgbvalue = new float[3];
+        frgbvalue[0] = r;
+        frgbvalue[1] = g;
+        frgbvalue[2] = b;
+        falpha = a;
+        fvalue = frgbvalue;
     }
+
+    /**
+     * Creates a color in the specified <code>ColorSpace</code>
+     * with the color components specified in the <code>float</code>
+     * array and the specified alpha.
+     */
+    public Color(ColorSpace cspace, float components[], float alpha) {
+        this(rgbOf(cspace, components, alpha), true);
+        int n = cspace.getNumComponents();
+        fvalue = new float[n];
+        for (int i = 0; i < n; i++) {
+            if (components[i] < 0.0 || components[i] > 1.0) {
+                throw new IllegalArgumentException("Color parameter outside of expected range: "
+                    + "Component " + i);
+            }
+            fvalue[i] = components[i];
+        }
+        if (alpha < 0.0 || alpha > 1.0) {
+            throw new IllegalArgumentException("Color parameter outside of "
+                + "expected range: Alpha");
+        }
+        falpha = alpha;
+        frgbvalue = cspace.toRGB(fvalue);
+        cs = cspace;
+    }
+
+    /* The packed sRGB value the desktop constructor derives through toRGB. */
+    private static int rgbOf(ColorSpace cspace, float[] components, float alpha) {
+        int n = cspace.getNumComponents();
+        if (components.length < n) {
+            throw new IllegalArgumentException("Components array too short");
+        }
+        float[] comps = new float[n];
+        System.arraycopy(components, 0, comps, 0, n);
+        float[] rgb = cspace.toRGB(comps);
+        return ((int) (alpha * 255 + 0.5) & 0xFF) << 24
+            | ((int) (rgb[0] * 255 + 0.5) & 0xFF) << 16
+            | ((int) (rgb[1] * 255 + 0.5) & 0xFF) << 8
+            | ((int) (rgb[2] * 255 + 0.5) & 0xFF);
+    }
+
 
     public int getRed()   { return (value >> 16) & 0xFF; }
     public int getGreen() { return (value >> 8) & 0xFF; }
@@ -103,23 +197,117 @@ public class Color implements Paint, Serializable {
 
     public float[] getRGBComponents(float[] compArray) {
         float[] f = (compArray == null) ? new float[4] : compArray;
-        f[0] = getRed() / 255f;
-        f[1] = getGreen() / 255f;
-        f[2] = getBlue() / 255f;
-        f[3] = getAlpha() / 255f;
+        if (frgbvalue == null) {
+            f[0] = getRed() / 255f;
+            f[1] = getGreen() / 255f;
+            f[2] = getBlue() / 255f;
+            f[3] = getAlpha() / 255f;
+        } else {
+            f[0] = frgbvalue[0];
+            f[1] = frgbvalue[1];
+            f[2] = frgbvalue[2];
+            f[3] = falpha;
+        }
         return f;
     }
 
     public float[] getRGBColorComponents(float[] compArray) {
         float[] f = (compArray == null) ? new float[3] : compArray;
-        f[0] = getRed() / 255f;
-        f[1] = getGreen() / 255f;
-        f[2] = getBlue() / 255f;
+        if (frgbvalue == null) {
+            f[0] = getRed() / 255f;
+            f[1] = getGreen() / 255f;
+            f[2] = getBlue() / 255f;
+        } else {
+            f[0] = frgbvalue[0];
+            f[1] = frgbvalue[1];
+            f[2] = frgbvalue[2];
+        }
         return f;
     }
 
+    public float[] getComponents(float[] compArray) {
+        if (fvalue == null) {
+            return getRGBComponents(compArray);
+        }
+        int n = fvalue.length;
+        float[] f = (compArray == null) ? new float[n + 1] : compArray;
+        for (int i = 0; i < n; i++) {
+            f[i] = fvalue[i];
+        }
+        f[n] = falpha;
+        return f;
+    }
+
+    public float[] getColorComponents(float[] compArray) {
+        if (fvalue == null) {
+            return getRGBColorComponents(compArray);
+        }
+        int n = fvalue.length;
+        float[] f = (compArray == null) ? new float[n] : compArray;
+        for (int i = 0; i < n; i++) {
+            f[i] = fvalue[i];
+        }
+        return f;
+    }
+
+    public float[] getComponents(ColorSpace cspace, float[] compArray) {
+        if (cs == null) {
+            cs = ColorSpace.getInstance(ColorSpace.CS_sRGB);
+        }
+        float f[];
+        if (fvalue == null) {
+            f = new float[3];
+            f[0] = getRed() / 255f;
+            f[1] = getGreen() / 255f;
+            f[2] = getBlue() / 255f;
+        } else {
+            f = fvalue;
+        }
+        float tmp[] = cs.toCIEXYZ(f);
+        float tmpout[] = cspace.fromCIEXYZ(tmp);
+        if (compArray == null) {
+            compArray = new float[tmpout.length + 1];
+        }
+        for (int i = 0; i < tmpout.length; i++) {
+            compArray[i] = tmpout[i];
+        }
+        if (fvalue == null) {
+            compArray[tmpout.length] = getAlpha() / 255f;
+        } else {
+            compArray[tmpout.length] = falpha;
+        }
+        return compArray;
+    }
+
+    public float[] getColorComponents(ColorSpace cspace, float[] compArray) {
+        if (cs == null) {
+            cs = ColorSpace.getInstance(ColorSpace.CS_sRGB);
+        }
+        float f[];
+        if (fvalue == null) {
+            f = new float[3];
+            f[0] = getRed() / 255f;
+            f[1] = getGreen() / 255f;
+            f[2] = getBlue() / 255f;
+        } else {
+            f = fvalue;
+        }
+        float tmp[] = cs.toCIEXYZ(f);
+        float tmpout[] = cspace.fromCIEXYZ(tmp);
+        if (compArray == null) {
+            return tmpout;
+        }
+        for (int i = 0; i < tmpout.length; i++) {
+            compArray[i] = tmpout[i];
+        }
+        return compArray;
+    }
+
     public ColorSpace getColorSpace() {
-        return ColorSpace.getInstance(ColorSpace.CS_sRGB);
+        if (cs == null) {
+            cs = ColorSpace.getInstance(ColorSpace.CS_sRGB);
+        }
+        return cs;
     }
 
     public int getTransparency() {

@@ -1,3 +1,33 @@
+/*
+ * Copyright (c) 2026, Tyler Bochard
+ * All rights reserved.
+ *
+ * Part of android-awt, the Android shadow of the desktop JDK surface used by
+ * runelite-android. Original work of this project, not derived from OpenJDK;
+ * licensed under the BSD 2-Clause License (see the LICENSE file at the
+ * repository root). Files ported from OpenJDK carry the OpenJDK header instead;
+ * see android-awt/LICENSE.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ *    list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
 package java.awt.image;
 
 public class MultiPixelPackedSampleModel extends SampleModel {
@@ -26,9 +56,19 @@ public class MultiPixelPackedSampleModel extends SampleModel {
     public int getTransferType() { return bits <= 8 ? DataBuffer.TYPE_BYTE : bits <= 16 ? DataBuffer.TYPE_USHORT : DataBuffer.TYPE_INT; }
     public int getSampleSize(int band) { if (band != 0) throw new ArrayIndexOutOfBoundsException(band); return bits; }
     public int[] getSampleSize() { return new int[]{bits}; }
-    public int[] getSampleSize(int band, int[] out) { if (out == null) out = new int[1]; out[0] = getSampleSize(band); return out; }
-    public int getSample(int x, int y, int band, DataBuffer data) { return data.getElem(getOffset(x, y)) >>> (elementBits - getBitOffset(x) - bits) & mask; }
+    private void checkPixel(int x, int y) {
+        if (x < 0 || y < 0 || x >= width || y >= height) throw new ArrayIndexOutOfBoundsException("Coordinate out of bounds!");
+    }
+    public Object getDataElements(int x, int y, Object obj, DataBuffer data) {
+        Object result = transferArray(obj, 1);
+        transferSet(result, 0, getSample(x, y, 0, data));
+        return result;
+    }
+    public void setDataElements(int x, int y, Object obj, DataBuffer data) { setSample(x, y, 0, transferGet(obj, 0), data); }
+    public int getSample(int x, int y, int band, DataBuffer data) { checkPixel(x, y); if (band != 0) throw new ArrayIndexOutOfBoundsException("Invalid band"); return data.getElem(getOffset(x, y)) >>> (elementBits - getBitOffset(x) - bits) & mask; }
     public void setSample(int x, int y, int band, int value, DataBuffer data) {
+        checkPixel(x, y);
+        if (band != 0) throw new ArrayIndexOutOfBoundsException("Invalid band");
         int offset = getOffset(x, y), shift = elementBits - getBitOffset(x) - bits;
         data.setElem(offset, data.getElem(offset) & ~(mask << shift) | (value & mask) << shift);
     }

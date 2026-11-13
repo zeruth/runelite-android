@@ -1,3 +1,33 @@
+/*
+ * Copyright (c) 2026, Tyler Bochard
+ * All rights reserved.
+ *
+ * Part of android-awt, the Android shadow of the desktop JDK surface used by
+ * runelite-android. Original work of this project, not derived from OpenJDK;
+ * licensed under the BSD 2-Clause License (see the LICENSE file at the
+ * repository root). Files ported from OpenJDK carry the OpenJDK header instead;
+ * see android-awt/LICENSE.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ *    list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
 package java.awt;
 
 public abstract class GraphicsEnvironment {
@@ -23,9 +53,31 @@ public abstract class GraphicsEnvironment {
         Dimension size = Toolkit.getDefaultToolkit().getScreenSize();
         return new Rectangle(0, 0, size.width, size.height);
     }
-    public boolean registerFont(Font font) { return true; }
+    /**
+     * {@code Font.createFont} already registers every face it loads (see
+     * {@code AwtFontRegistry}), so this only reports whether {@code font} is such a font:
+     * false for logical, system and unknown names, as desktop answers for fonts that are not
+     * created fonts.
+     */
+    public boolean registerFont(Font font) {
+        if (font == null) {
+            throw new NullPointerException("font cannot be null.");
+        }
+        return net.runelite.awt.impl.FontFamilies.registered(font.getName()) != null;
+    }
+
+    /** Deliberate no-op: each logical family maps to one Android typeface, so there is no
+     *  locale-specific font ordering to change. */
+    public void preferLocaleFonts() {
+    }
+
+    /** Deliberate no-op: each logical family maps to one Android typeface, so there is no
+     *  proportional/non-proportional ordering to change. */
+    public void preferProportionalFonts() {
+    }
 
     public Point getCenterPoint() { Rectangle bounds = getMaximumWindowBounds(); return new Point(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2); }
+    /** Family names are not localized on Android; the list is the same for every locale. */
     public String[] getAvailableFontFamilyNames(java.util.Locale locale) { java.util.Objects.requireNonNull(locale); return getAvailableFontFamilyNames(); }
 
     private static final class HeadlessGraphicsEnvironment extends GraphicsEnvironment {
@@ -34,9 +86,33 @@ public abstract class GraphicsEnvironment {
             return net.runelite.awt.impl.HeadlessGraphicsConfiguration.INSTANCE.getDevice();
         }
         @Override public Graphics2D createGraphics(java.awt.image.BufferedImage img) { return img.createGraphics(); }
-        @Override public Font[] getAllFonts() { return new Font[]{new Font(Font.DIALOG, Font.PLAIN, 12)}; }
+        /**
+         * One size-1 font per face, as desktop returns: the four styles of each logical
+         * family, each registered style of a created family, and the regular face of each
+         * Android system family. Sorted by face name.
+         */
+        @Override public Font[] getAllFonts() {
+            java.util.TreeMap<String, Font> fonts = new java.util.TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+            for (String family : getAvailableFontFamilyNames()) {
+                int styles;
+                if (net.runelite.awt.impl.FontFamilies.logical(family) != null) {
+                    styles = 0xF;
+                } else {
+                    styles = net.runelite.awt.impl.FontFamilies.registeredStyles(family);
+                    if (styles == 0) styles = 1;
+                }
+                for (int style = 0; style < 4; style++) {
+                    if ((styles & (1 << style)) == 0) continue;
+                    Font font = new Font(family, style, 1);
+                    fonts.put(font.getFontName(), font);
+                }
+            }
+            return fonts.values().toArray(new Font[0]);
+        }
+        /** Logical families, families registered by {@code Font.createFont} and the Android
+         *  system families from {@code /system/etc/fonts.xml}. */
         @Override public String[] getAvailableFontFamilyNames() {
-            return new String[]{Font.DIALOG, Font.SANS_SERIF, Font.SERIF, Font.MONOSPACED};
+            return net.runelite.awt.impl.FontFamilies.availableFamilies();
         }
     }
 }
