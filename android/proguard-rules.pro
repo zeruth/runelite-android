@@ -286,6 +286,12 @@
 # ----------------------------------------------------------------------------
 -keep class okhttp3.** { *; }
 -keep class okio.** { *; }
+# okio 3's public API names Kotlin types in its signatures (function types, sequences,
+# coroutines, the synthetic DefaultConstructorMarker). Kept okio members still lost their
+# original descriptors when R8 renamed those Kotlin classes, so a plugin compiled against okio 3
+# could not link them (verifyReleasePluginApi: 45 okio mismatches). Keep the Kotlin names; this
+# keeps names only, so unused Kotlin classes are still removed.
+-keepnames class kotlin.** { *; }
 # android-awt's java.net.http.WebSocket loads its okhttp transport by this name
 # (WebSocketTransport.ANDROID_TRANSPORT) and falls back to a plain socket client without it.
 -keep class net.runelite.mp.http.OkHttpWebSocketTransport { <init>(); }
