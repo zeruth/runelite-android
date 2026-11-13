@@ -1,16 +1,55 @@
+/*
+ * Copyright (c) 2026, Tyler Bochard
+ * All rights reserved.
+ *
+ * Part of android-awt, the Android shadow of the desktop JDK surface used by
+ * runelite-android. Original work of this project, not derived from OpenJDK;
+ * licensed under the BSD 2-Clause License (see the LICENSE file at the
+ * repository root). Files ported from OpenJDK carry the OpenJDK header instead;
+ * see android-awt/LICENSE.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ *    list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
 package javax.management;
 
 /**
- * Stub of {@code javax.management.MBeanServer}. Android has no JMX; methods accept calls
- * but record nothing.
+ * The in-process subset of {@code javax.management.MBeanServer}. Android has no JMX agent or
+ * remote connector; {@link MBeanServerFactory} hands out an in-memory registry that introspects
+ * Standard MBean and MXBean interfaces by reflection.
  */
+@net.runelite.awt.ShadowStub("registration, attributes, invoke and queries only: no MBeanInfo, notifications, open-type mapping, class-loader repository or deserialization")
 public interface MBeanServer {
     ObjectInstance registerMBean(Object obj, ObjectName name) throws Exception;
     void unregisterMBean(ObjectName name) throws Exception;
+    ObjectInstance getObjectInstance(ObjectName name) throws InstanceNotFoundException;
     boolean isRegistered(ObjectName name);
     Object getAttribute(ObjectName name, String attribute) throws Exception;
+    AttributeList getAttributes(ObjectName name, String[] attributes) throws Exception;
     void setAttribute(ObjectName name, Attribute attribute) throws Exception;
+    AttributeList setAttributes(ObjectName name, AttributeList attributes) throws Exception;
     Object invoke(ObjectName name, String op, Object[] params, String[] signature) throws Exception;
     java.util.Set<ObjectName> queryNames(ObjectName name, QueryExp query);
+    java.util.Set<ObjectInstance> queryMBeans(ObjectName name, QueryExp query);
     Integer getMBeanCount();
+    String getDefaultDomain();
+    String[] getDomains();
+    boolean isInstanceOf(ObjectName name, String className) throws InstanceNotFoundException;
 }

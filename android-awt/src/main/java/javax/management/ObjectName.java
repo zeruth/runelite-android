@@ -1,10 +1,49 @@
+/*
+ * Copyright (c) 2026, Tyler Bochard
+ * All rights reserved.
+ *
+ * Part of android-awt, the Android shadow of the desktop JDK surface used by
+ * runelite-android. Original work of this project, not derived from OpenJDK;
+ * licensed under the BSD 2-Clause License (see the LICENSE file at the
+ * repository root). Files ported from OpenJDK carry the OpenJDK header instead;
+ * see android-awt/LICENSE.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ *    list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
 package javax.management;
 
 import java.io.Serializable;
 
-public class ObjectName implements Serializable {
+public class ObjectName implements Comparable<ObjectName>, QueryExp, Serializable {
     private static final long serialVersionUID = 1L;
-    private final String name, domain, canonical;
+    /** {@code *:*}, the pattern that matches every name. */
+    public static final ObjectName WILDCARD;
+    static {
+        try {
+            WILDCARD = new ObjectName("*:*");
+        } catch (MalformedObjectNameException impossible) {
+            throw new ExceptionInInitializerError(impossible);
+        }
+    }
+    private final String name, domain, canonical, keyPropertyList;
     private final java.util.TreeMap<String, String> properties = new java.util.TreeMap<>();
     private final boolean listPattern;
 
@@ -17,6 +56,7 @@ public class ObjectName implements Serializable {
         domain = name.substring(0, colon);
         String body = name.substring(colon + 1);
         boolean pattern = false;
+        StringBuilder ordered = new StringBuilder();
         if (body.isEmpty()) throw malformed();
         for (int p = 0; p < body.length();) {
             if (body.charAt(p) == '*') {
@@ -44,10 +84,13 @@ public class ObjectName implements Serializable {
                     }
                 }
                 if (properties.put(key, body.substring(start, p)) != null) throw malformed();
+                if (ordered.length() != 0) ordered.append(',');
+                ordered.append(key).append('=').append(body, start, p);
             }
             if (p < body.length() && (body.charAt(p++) != ',' || p == body.length())) throw malformed();
         }
         listPattern = pattern;
+        keyPropertyList = ordered.toString();
         canonical = domain + ":" + join(properties) + (pattern ? (properties.isEmpty() ? "*" : ",*") : "");
     }
 
@@ -75,7 +118,8 @@ public class ObjectName implements Serializable {
     public String getKeyProperty(String property) { return properties.get(property); }
     public java.util.Hashtable<String, String> getKeyPropertyList() { return new java.util.Hashtable<>(properties); }
     public String getCanonicalKeyPropertyListString() { return join(properties); }
-    public String getKeyPropertyListString() { return join(properties); }
+    /** The key properties in the order the name was written with. */
+    public String getKeyPropertyListString() { return keyPropertyList; }
     private static boolean wildcard(String value) {
         boolean escaped = false;
         for (int i = 0; i < value.length(); i++) {
@@ -128,6 +172,19 @@ public class ObjectName implements Serializable {
             result.append(c);
         }
         return result.toString();
+    }
+
+    /** An ObjectName used as a query selects nothing beyond the pattern itself. */
+    @Override public void setMBeanServer(MBeanServer server) {}
+
+    /** Domain first, then the {@code type} key, then the canonical name, as the JDK orders names. */
+    @Override public int compareTo(ObjectName other) {
+        if (other == this) return 0;
+        int byDomain = domain.compareTo(other.domain);
+        if (byDomain != 0) return byDomain;
+        String type = properties.get("type"), otherType = other.properties.get("type");
+        int byType = (type == null ? "" : type).compareTo(otherType == null ? "" : otherType);
+        return byType != 0 ? byType : canonical.compareTo(other.canonical);
     }
 
     @Override public String toString() { return name; }

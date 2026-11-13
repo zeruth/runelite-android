@@ -1,3 +1,33 @@
+/*
+ * Copyright (c) 2026, Tyler Bochard
+ * All rights reserved.
+ *
+ * Part of android-awt, the Android shadow of the desktop JDK surface used by
+ * runelite-android. Original work of this project, not derived from OpenJDK;
+ * licensed under the BSD 2-Clause License (see the LICENSE file at the
+ * repository root). Files ported from OpenJDK carry the OpenJDK header instead;
+ * see android-awt/LICENSE.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ *    list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
 package java.net.http;
 
 import java.io.*;
@@ -27,7 +57,9 @@ public abstract class HttpClient {
     public abstract Optional<Executor> executor();
     public abstract <T> HttpResponse<T> send(HttpRequest request, HttpResponse.BodyHandler<T> handler) throws IOException, InterruptedException;
     public abstract <T> CompletableFuture<HttpResponse<T>> sendAsync(HttpRequest request, HttpResponse.BodyHandler<T> handler);
+    // Pushes are never offered: the transport is HTTP/1.1, so the handler is never called.
     public <T> CompletableFuture<HttpResponse<T>> sendAsync(HttpRequest request, HttpResponse.BodyHandler<T> handler, HttpResponse.PushPromiseHandler<T> pushHandler) { return sendAsync(request, handler); }
+    public WebSocket.Builder newWebSocketBuilder() { throw new UnsupportedOperationException("java.net.http.HttpClient.newWebSocketBuilder()"); }
     public interface Builder {
         Builder cookieHandler(CookieHandler handler); Builder connectTimeout(Duration timeout); Builder sslContext(SSLContext context);
         Builder sslParameters(SSLParameters parameters); Builder executor(Executor executor); Builder followRedirects(Redirect policy);
@@ -40,7 +72,7 @@ public abstract class HttpClient {
     private static final ScheduledExecutorService TIMER = Executors.newSingleThreadScheduledExecutor(task -> { Thread thread = new Thread(task,"HttpClient-timeout"); thread.setDaemon(true); return thread; });
     static final class ClientBuilder implements Builder {
         CookieHandler cookies; Duration timeout; SSLContext ssl; SSLParameters parameters; Executor executor; Redirect redirects=Redirect.NEVER;
-        Version version=Version.HTTP_2; ProxySelector proxy;
+        Version version=Version.HTTP_2; ProxySelector proxy; Authenticator authenticator;
         public Builder cookieHandler(CookieHandler handler){cookies=Objects.requireNonNull(handler);return this;}
         public Builder connectTimeout(Duration timeout){if(timeout.isNegative()||timeout.isZero())throw new IllegalArgumentException("Positive timeout required");this.timeout=timeout;return this;}
         public Builder sslContext(SSLContext context){ssl=Objects.requireNonNull(context);return this;}
@@ -50,7 +82,7 @@ public abstract class HttpClient {
         public Builder version(Version version){this.version=Objects.requireNonNull(version);return this;}
         public Builder priority(int priority){if(priority<1||priority>256)throw new IllegalArgumentException("Priority outside 1..256");return this;}
         public Builder proxy(ProxySelector proxy){this.proxy=Objects.requireNonNull(proxy);return this;}
-        public Builder authenticator(Authenticator authenticator){Objects.requireNonNull(authenticator);throw new UnsupportedOperationException("Per-client authenticators are unavailable in Android HttpURLConnection; set an Authorization request header");}
+        public Builder authenticator(Authenticator authenticator){this.authenticator=Objects.requireNonNull(authenticator);return this;}
         public HttpClient build(){return new UrlClient(this);}
     }
     private static SSLParameters copy(SSLParameters source) {
@@ -63,15 +95,16 @@ public abstract class HttpClient {
     }
     private static int millis(Duration timeout) { return (int)Math.min(Integer.MAX_VALUE,Math.max(1,timeout.toMillis())); }
     static final class UrlClient extends HttpClient {
-        final CookieHandler cookies; final Duration timeout; final SSLContext ssl; final SSLParameters parameters; final Executor executor; final Redirect redirects; final Version version; final ProxySelector proxy;
+        final CookieHandler cookies; final Duration timeout; final SSLContext ssl; final SSLParameters parameters; final Executor executor; final Redirect redirects; final Version version; final ProxySelector proxy; final Authenticator authenticator;
         UrlClient(ClientBuilder builder) {
-            cookies=builder.cookies;timeout=builder.timeout;parameters=builder.parameters;executor=builder.executor;redirects=builder.redirects;version=builder.version;proxy=builder.proxy;
+            cookies=builder.cookies;timeout=builder.timeout;parameters=builder.parameters;executor=builder.executor;redirects=builder.redirects;version=builder.version;proxy=builder.proxy;authenticator=builder.authenticator;
             try { ssl=builder.ssl==null?SSLContext.getDefault():builder.ssl; }catch(java.security.NoSuchAlgorithmException e){throw new IllegalStateException(e);}
         }
         public Optional<CookieHandler> cookieHandler(){return Optional.ofNullable(cookies);} public Optional<Duration> connectTimeout(){return Optional.ofNullable(timeout);}
         public Redirect followRedirects(){return redirects;} public Optional<ProxySelector> proxy(){return Optional.ofNullable(proxy);}
         public SSLContext sslContext(){return ssl;} public SSLParameters sslParameters(){return copy(parameters==null?ssl.getDefaultSSLParameters():parameters);}
-        public Optional<Authenticator> authenticator(){return Optional.empty();} public Version version(){return version;} public Optional<Executor> executor(){return Optional.ofNullable(executor);}
+        public Optional<Authenticator> authenticator(){return Optional.ofNullable(authenticator);} public Version version(){return version;} public Optional<Executor> executor(){return Optional.ofNullable(executor);}
+        public WebSocket.Builder newWebSocketBuilder(){return new WebSocketImpl.BuilderImpl(this);}
         public <T> HttpResponse<T> send(HttpRequest request,HttpResponse.BodyHandler<T> handler)throws IOException,InterruptedException {
             CompletableFuture<HttpResponse<T>> future=sendAsync(request,handler);
             try{return future.get();}catch(InterruptedException e){future.cancel(true);throw e;}
@@ -96,6 +129,7 @@ public abstract class HttpClient {
         private <T> void exchange(HttpRequest request,HttpResponse.BodyHandler<T> handler,CompletableFuture<HttpResponse<T>> result,AtomicReference<HttpURLConnection> active)throws Exception {
             URI uri=request.uri();String method=request.method();HttpRequest.BodyPublisher body=request.bodyPublisher().orElse(null);boolean sameOrigin=true;
             HttpResponse<T> previous = null;
+            String authorization=null,proxyAuthorization=null;int authTries=0;
             for(int redirectsTaken=0;;redirectsTaken++) {
                 if(result.isDone())return;
                 Proxy selected=Proxy.NO_PROXY;
@@ -115,16 +149,31 @@ public abstract class HttpClient {
                     for(String value:header.getValue())connection.addRequestProperty(header.getKey(),value);
                 }
                 if(cookies!=null)for(Map.Entry<String,List<String>> header:cookies.get(uri,Collections.unmodifiableMap(sentHeaders)).entrySet())for(String value:header.getValue())connection.addRequestProperty(header.getKey(),value);
+                if(authorization!=null&&!sentHeaders.containsKey("Authorization"))connection.setRequestProperty("Authorization",authorization);
+                if(proxyAuthorization!=null&&!sentHeaders.containsKey("Proxy-Authorization"))connection.setRequestProperty("Proxy-Authorization",proxyAuthorization);
                 if(request.expectContinue())connection.setRequestProperty("Expect","100-continue");
                 boolean readMethod = method.equals("GET") || method.equals("HEAD");
-                if (readMethod && body != null && body.contentLength() != 0) throw new UnsupportedOperationException("HttpURLConnection cannot preserve GET/HEAD bodies");
-                if(body!=null&&!readMethod){
-                    connection.setDoOutput(true);if(body.contentLength()>=0)connection.setFixedLengthStreamingMode(body.contentLength());else connection.setChunkedStreamingMode(8192);
-                    try(OutputStream output=connection.getOutputStream()){publish(body,output);}
-                }
-                int status=connection.getResponseCode();HttpHeaders headers=HttpHeaders.of(connection.getHeaderFields(),(key,value)->true);
+                if (readMethod && body != null && body.contentLength() != 0) throw net.runelite.awt.AwtUnsupported.fail("java.net.http.HttpClient.send(HttpRequest, BodyHandler)", "HttpURLConnection cannot send a GET/HEAD body");
+                boolean sending=body!=null&&!readMethod;
+                if(sending){connection.setDoOutput(true);if(body.contentLength()>=0)connection.setFixedLengthStreamingMode(body.contentLength());else connection.setChunkedStreamingMode(8192);}
+                // Connect on its own so a connect timeout surfaces as the JDK's HttpConnectTimeoutException.
+                try{connection.connect();}catch(SocketTimeoutException e){HttpConnectTimeoutException timedOut=new HttpConnectTimeoutException("HTTP connect timed out");timedOut.initCause(e);throw timedOut;}
+                if(sending)try(OutputStream output=connection.getOutputStream()){publish(body,output);}
+                int status;
+                try{status=connection.getResponseCode();}catch(SocketTimeoutException e){HttpTimeoutException timedOut=new HttpTimeoutException("request timed out");timedOut.initCause(e);throw timedOut;}
+                HttpHeaders headers=HttpHeaders.of(connection.getHeaderFields(),(key,value)->true);
                 SSLSession session = sockets.socket == null ? null : sockets.socket.getSession();
                 if(cookies!=null)cookies.put(uri,connection.getHeaderFields());
+                if((status==401||status==407)&&authenticator!=null&&authTries<3){
+                    boolean forProxy=status==407;
+                    String realm=basicRealm(headers.allValues(forProxy?"Proxy-Authenticate":"WWW-Authenticate"));
+                    PasswordAuthentication credentials=realm==null?null:credentials(authenticator,uri,forProxy,realm,selected);
+                    if(credentials!=null){
+                        String token="Basic "+Base64.getEncoder().encodeToString((credentials.getUserName()+":"+new String(credentials.getPassword())).getBytes(java.nio.charset.StandardCharsets.ISO_8859_1));
+                        if(forProxy)proxyAuthorization=token;else authorization=token;
+                        authTries++;redirectsTaken--;drain(connection);connection.disconnect();continue;
+                    }
+                }
                 String location=connection.getHeaderField("Location");
                 if(location!=null&&redirects!=Redirect.NEVER&&(status==301||status==302||status==303||status==307||status==308)){
                     URI next=uri.resolve(location);boolean downgrade="https".equalsIgnoreCase(uri.getScheme())&&!"https".equalsIgnoreCase(next.getScheme());
@@ -133,6 +182,7 @@ public abstract class HttpClient {
                         if(redirectsTaken>=5)throw new IOException("Too many HTTP redirects");
                         previous = new Response<T>(status, request, headers, null, session, uri, previous);
                         sameOrigin=sameOrigin&&Objects.equals(uri.getHost(),next.getHost())&&uri.getPort()==next.getPort()&&Objects.equals(uri.getScheme(),next.getScheme());
+                        if(!sameOrigin)authorization=null;
                         if((status==303&&!method.equals("HEAD"))||((status==301||status==302)&&method.equals("POST"))){method="GET";body=null;}
                         connection.disconnect();uri=next;continue;
                     }
@@ -154,6 +204,60 @@ public abstract class HttpClient {
                 }catch(Throwable error){subscriber.onError(error);throw error;}
                 return;
             }
+        }
+        // The JDK client answers Basic challenges only; any other scheme leaves the 401/407 to the caller.
+        private static String basicRealm(List<String> challenges){
+            for(String challenge:challenges){
+                String trimmed=challenge.trim();
+                if(trimmed.regionMatches(true,0,"Basic",0,5)&&(trimmed.length()==5||trimmed.charAt(5)==' ')){
+                    java.util.regex.Matcher realm=java.util.regex.Pattern.compile("realm=\"([^\"]*)\"|realm=([^\\s,]+)",java.util.regex.Pattern.CASE_INSENSITIVE).matcher(trimmed);
+                    return realm.find()?(realm.group(1)!=null?realm.group(1):realm.group(2)):"";
+                }
+            }
+            return null;
+        }
+        private static PasswordAuthentication credentials(Authenticator authenticator,URI uri,boolean forProxy,String realm,Proxy selected)throws IOException{
+            String host=uri.getHost();int port=uri.getPort()>=0?uri.getPort():"https".equalsIgnoreCase(uri.getScheme())?443:80;
+            if(forProxy&&selected.address() instanceof InetSocketAddress){InetSocketAddress address=(InetSocketAddress)selected.address();host=address.getHostString();port=address.getPort();}
+            Authenticator.RequestorType type=forProxy?Authenticator.RequestorType.PROXY:Authenticator.RequestorType.SERVER;
+            try{
+                // JDK 9+ instance entry point fills the requesting host/port/realm the authenticator reads.
+                // The JDK client names the scheme in lower case ("basic"), unlike HttpURLConnection.
+                java.lang.reflect.Method instance=Authenticator.class.getMethod("requestPasswordAuthenticationInstance",String.class,InetAddress.class,int.class,String.class,String.class,String.class,URL.class,Authenticator.RequestorType.class);
+                return (PasswordAuthentication)instance.invoke(authenticator,host,null,port,uri.getScheme(),realm,"basic",uri.toURL(),type);
+            }catch(NoSuchMethodException older){
+                return legacyCredentials(authenticator,host,port,uri,realm,type);
+            }catch(ReflectiveOperationException e){throw new IOException("Authenticator failed",e.getCause()==null?e:e.getCause());}
+        }
+        /**
+         * Android's Authenticator is the JDK 8 one, without requestPasswordAuthenticationInstance: do what
+         * that JDK 9 method does, under the same lock, by filling the private requesting* fields the
+         * protected getters read (libcore keeps OpenJDK 8's names) before calling getPasswordAuthentication.
+         * Those fields are non-SDK; where hidden-API policy denies one, its getter keeps the value from
+         * the last request, and the authenticator is still asked rather than the 401/407 returned.
+         */
+        private static PasswordAuthentication legacyCredentials(Authenticator authenticator,String host,int port,URI uri,String realm,Authenticator.RequestorType type)throws IOException{
+            URL url=uri.toURL();
+            synchronized(authenticator){
+                requesting(authenticator,"requestingHost",host);requesting(authenticator,"requestingSite",null);
+                requesting(authenticator,"requestingPort",port);requesting(authenticator,"requestingProtocol",uri.getScheme());
+                requesting(authenticator,"requestingPrompt",realm);requesting(authenticator,"requestingScheme","basic");
+                requesting(authenticator,"requestingURL",url);requesting(authenticator,"requestingAuthType",type);
+                try{
+                    java.lang.reflect.Method hook=Authenticator.class.getDeclaredMethod("getPasswordAuthentication");hook.setAccessible(true);
+                    return (PasswordAuthentication)hook.invoke(authenticator);
+                }catch(java.lang.reflect.InvocationTargetException e){throw new IOException("Authenticator failed",e.getCause());}
+                catch(ReflectiveOperationException|RuntimeException e){throw new IOException("Authenticator unavailable",e);}
+            }
+        }
+        private static void requesting(Authenticator authenticator,String name,Object value){
+            try{java.lang.reflect.Field field=Authenticator.class.getDeclaredField(name);field.setAccessible(true);field.set(authenticator,value);}
+            catch(ReflectiveOperationException|RuntimeException denied){
+                // Hidden-API policy or a renamed libcore field: see legacyCredentials.
+            }
+        }
+        private static void drain(HttpURLConnection connection){
+            try(InputStream stream=connection.getErrorStream()){if(stream!=null){byte[] skip=new byte[4096];while(stream.read(skip)>=0){}}}catch(IOException ignored){}
         }
         private static void publish(HttpRequest.BodyPublisher body,OutputStream output)throws Exception {
             CompletableFuture<Void> complete=new CompletableFuture<>();
