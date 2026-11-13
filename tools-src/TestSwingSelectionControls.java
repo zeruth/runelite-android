@@ -1,3 +1,4 @@
+// host-contract
 import java.awt.*;
 import java.awt.event.InputEvent;
 import java.awt.event.MouseEvent;
@@ -101,6 +102,32 @@ public class TestSwingSelectionControls {
         });
         sized.setPrototypeCellValue("representative");
         check(sized.getFixedCellWidth() == 53 && sized.getFixedCellHeight() == 19, "prototype determines cell size");
+
+        // JList.setSelectedIndex(-1) hands -1 to DefaultListSelectionModel.setSelectionInterval,
+        // which returns without a change; only clearSelection empties the list's selection.
+        sized.setSelectedIndex(1);
+        sized.setSelectedIndex(-1);
+        check(sized.getSelectedIndex() == 1, "setSelectedIndex(-1) keeps the selection");
+        // 8u (and the shadow) hands null to setSelectedIndex(-1) and so keeps the selection; the
+        // host JDK 21 clears it instead. JList is not patched here, so this checks the host's.
+        sized.setSelectedValue(null, false);
+        boolean jdk8 = System.getProperty("java.specification.version").startsWith("1.");
+        check(sized.getSelectedIndex() == (jdk8 ? 1 : -1), "setSelectedValue(null) follows the host JDK");
+        sized.setSelectedIndex(1);
+        sized.setSelectedValue("absent", true);
+        check(sized.getSelectedIndex() == 1, "setSelectedValue(absent) keeps the selection");
+        sized.setSelectedIndex(7);
+        check(sized.getSelectedIndex() == 1, "an index past the model is ignored");
+        sized.setSelectedValue("a", false);
+        check(sized.getSelectedIndex() == 0 && "a".equals(sized.getSelectedValue()), "setSelectedValue selects a present value");
+        sized.clearSelection();
+        check(sized.getSelectedIndex() == -1 && sized.isSelectionEmpty(), "clearSelection empties the selection");
+        // BasicComboPopup clears its list itself when the combo deselects.
+        combo.setSelectedIndex(-1);
+        check(combo.getSelectedItem() == null && combo.getSelectedIndex() == -1, "combo setSelectedIndex(-1) deselects");
+        check(ui.rows.isSelectionEmpty(), "deselecting the combo clears the popup list");
+        combo.setSelectedIndex(0);
+        check(ui.rows.getSelectedIndex() == 0, "selecting the combo reselects the popup list");
         combo.setLightWeightPopupEnabled(false);
         check(!combo.isLightWeightPopupEnabled(), "combo popup weight hint");
         JTextField search = new JTextField();

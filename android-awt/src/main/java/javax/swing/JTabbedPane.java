@@ -1,10 +1,117 @@
+/*
+ * Copyright (c) 2026, Tyler Bochard
+ * All rights reserved.
+ *
+ * Part of android-awt, the Android shadow of the desktop JDK surface used by
+ * runelite-android. Original work of this project, not derived from OpenJDK;
+ * licensed under the BSD 2-Clause License (see the LICENSE file at the
+ * repository root). Files ported from OpenJDK carry the OpenJDK header instead;
+ * see android-awt/LICENSE.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ *    list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
 package javax.swing;
 
 import java.awt.Color;
 import java.awt.Component;
 import javax.swing.event.ChangeListener;
 
-public class JTabbedPane extends JComponent implements SwingConstants {
+public class JTabbedPane extends JComponent implements SwingConstants, javax.accessibility.Accessible {
+    private static final String uiClassID = "TabbedPaneUI";
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJTabbedPane();
+        }
+        return accessibleContext;
+    }
+
+    /**
+     * Accessibility support for tabbed panes: role PAGE_TAB_LIST; the children are the tabs
+     * (role PAGE_TAB, named by their titles), each holding its page component.
+     */
+    protected class AccessibleJTabbedPane extends AccessibleJComponent {
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.PAGE_TAB_LIST;
+        }
+
+        public int getAccessibleChildrenCount() {
+            return getTabCount();
+        }
+
+        public javax.accessibility.Accessible getAccessibleChild(int i) {
+            if (i < 0 || i >= getTabCount()) {
+                return null;
+            }
+            return new AccessiblePage(i);
+        }
+    }
+
+    /** One tab of the pane as the accessibility tree sees it. */
+    private final class AccessiblePage extends javax.accessibility.AccessibleContext
+            implements javax.accessibility.Accessible {
+        private final int index;
+
+        AccessiblePage(int index) {
+            this.index = index;
+            setAccessibleParent(JTabbedPane.this);
+        }
+
+        public javax.accessibility.AccessibleContext getAccessibleContext() {
+            return this;
+        }
+
+        public String getAccessibleName() {
+            return accessibleName != null ? accessibleName : getTitleAt(index);
+        }
+
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.PAGE_TAB;
+        }
+
+        public javax.accessibility.AccessibleStateSet getAccessibleStateSet() {
+            javax.accessibility.AccessibleStateSet states = new javax.accessibility.AccessibleStateSet();
+            if (JTabbedPane.this.isEnabled()) states.add(javax.accessibility.AccessibleState.ENABLED);
+            states.add(javax.accessibility.AccessibleState.SELECTABLE);
+            if (getSelectedIndex() == index) states.add(javax.accessibility.AccessibleState.SELECTED);
+            return states;
+        }
+
+        public int getAccessibleIndexInParent() {
+            return index;
+        }
+
+        public int getAccessibleChildrenCount() {
+            return getComponentAt(index) instanceof javax.accessibility.Accessible ? 1 : 0;
+        }
+
+        public javax.accessibility.Accessible getAccessibleChild(int i) {
+            java.awt.Component page = getComponentAt(index);
+            return i == 0 && page instanceof javax.accessibility.Accessible ? (javax.accessibility.Accessible) page : null;
+        }
+
+        public java.util.Locale getLocale() {
+            return JTabbedPane.this.getLocale();
+        }
+    }
     private static final long serialVersionUID = 1L;
     public static final int WRAP_TAB_LAYOUT = 0;
     public static final int SCROLL_TAB_LAYOUT = 1;
@@ -21,7 +128,7 @@ public class JTabbedPane extends JComponent implements SwingConstants {
 
     private static class Page {
         String tip; Icon disabledIcon; Color foreground,background; boolean enabled=true;
-        int mnemonic,displayedMnemonic=-1; Component tabComponent;
+        int mnemonic=-1,displayedMnemonic=-1; Component tabComponent;
     }
     private final java.util.List<Page> pages=new java.util.ArrayList<>();
     public JTabbedPane() { init(); }
@@ -43,23 +150,25 @@ public class JTabbedPane extends JComponent implements SwingConstants {
         setForeground(new java.awt.Color(0xC0C0C0));
         addMouseListener(new java.awt.event.MouseAdapter() {
             public void mousePressed(java.awt.event.MouseEvent event) {
-                if(!isEnabled() || event.getButton()!=java.awt.event.MouseEvent.BUTTON1)return;
+                if(uiGeometry() || !isEnabled() || event.getButton()!=java.awt.event.MouseEvent.BUTTON1)return;
                 int direction=overflowDirection(event.getX(),event.getY());
                 if(direction!=0){scrollTabs(direction);event.consume();}
             }
         });
-        addMouseWheelListener(event->{if(inStrip(event.getX(),event.getY())&&hasOverflow()){scrollTabs(event.getWheelRotation());event.consume();}});
+        addMouseWheelListener(event->{if(!uiGeometry()&&inStrip(event.getX(),event.getY())&&hasOverflow()){scrollTabs(event.getWheelRotation());event.consume();}});
+        updateUI();
     }
 
     /**
-     * Render the tab strip ourselves since android-awt has no UI delegate. For tabPlacement
-     * RIGHT/LEFT, tabs stack vertically; for TOP/BOTTOM, horizontally. Each tab is a slot of
-     * fixed size with the icon centered. Selected tab gets a brighter background.
+     * The pane's own strip, kept for the RuneLite sidebar (tabPlacement RIGHT) and for a pane
+     * without a delegate. For tabPlacement RIGHT/LEFT, tabs stack vertically; for TOP/BOTTOM,
+     * horizontally. Each tab is a slot of fixed size with the icon centered. Selected tab gets a
+     * brighter background. Every other placement is painted by the delegate.
      */
     @Override
     protected void paintComponent(java.awt.Graphics g) {
         super.paintComponent(g);
-        if (tabs.isEmpty()) return;
+        if (tabs.isEmpty() || uiGeometry()) return;
 
         boolean vertical = (tabPlacement == LEFT || tabPlacement == RIGHT);
         int trailing = trailingExtent();
@@ -82,8 +191,9 @@ public class JTabbedPane extends JComponent implements SwingConstants {
             int slot = i - firstVisibleTab;
             int x = baseX + (vertical ? 0 : slot * slotW);
             int y = baseY + (vertical ? slot * slotH : 0);
-            if (i == selectedIndex) {
-                g.setColor(selBg);
+            java.awt.Color tabBg = i == selectedIndex ? selBg : pages.get(i).background;
+            if (tabBg != null) {
+                g.setColor(tabBg);
                 g.fillRect(x, y, slotW, slotH);
             }
             if(pages.get(i).tabComponent!=null)continue;
@@ -128,12 +238,14 @@ public class JTabbedPane extends JComponent implements SwingConstants {
      * FlatLaf-style trailing component: RuneLite hangs its top toolbar off the sidebar
      * via {@code FlatClientProperties.TABBED_PANE_TRAILING_COMPONENT}. We mount it as a
      * direct child and lay it out at the top (or bottom) of the tab strip.
+     * <p>
+     * Overrides the shadow JComponent's hook; no {@code @Override} because the host contracts
+     * compile this class against the JDK's JComponent, which has no such hook.
      */
-    @Override
     protected void onClientPropertySet(Object key, Object value) {
         if ("JTabbedPane.trailingComponent".equals(key)) {
             if (trailingComponent != null) {
-                super.remove(trailingComponent);
+                removeChild(trailingComponent);
                 trailingComponent = null;
             }
             if (value instanceof Component) {
@@ -180,7 +292,7 @@ public class JTabbedPane extends JComponent implements SwingConstants {
     @Override
     public void doLayout() {
         super.doLayout();
-        if (getWidth() <= 0 || getHeight() <= 0) return;
+        if (uiGeometry() || getWidth() <= 0 || getHeight() <= 0) return;
         boolean vertical = (tabPlacement == LEFT || tabPlacement == RIGHT);
         int trailing = trailingExtent();
 
@@ -206,6 +318,7 @@ public class JTabbedPane extends JComponent implements SwingConstants {
 
     @Override
     public java.awt.Dimension getPreferredSize() {
+        if (uiGeometry() || isPreferredSizeSet()) return super.getPreferredSize();
         // Don't delegate to super — Container.getPreferredSize sums child widths via the
         // layout manager, and our hidden tab panels are 225px wide each, so we'd report
         // a huge preferred size and the sidebar would stay expanded even when closed.
@@ -219,12 +332,56 @@ public class JTabbedPane extends JComponent implements SwingConstants {
     }
 
     @Override
-    public java.awt.Dimension getMinimumSize() { return getPreferredSize(); }
+    public java.awt.Dimension getMinimumSize() { return uiGeometry() || isMinimumSizeSet() ? super.getMinimumSize() : getPreferredSize(); }
 
+    public javax.swing.plaf.TabbedPaneUI getUI() { return (javax.swing.plaf.TabbedPaneUI) ui; }
+    public void setUI(javax.swing.plaf.TabbedPaneUI ui) { super.setUI(ui); }
+    /**
+     * The JDK installs the look and feel's delegate. A look and feel compiled against
+     * BasicTabbedPaneUI members this shadow does not have yet fails to link while installing;
+     * the pane then takes the Basic delegate.
+     */
+    public void updateUI() {
+        try {
+            setUI((javax.swing.plaf.TabbedPaneUI) UIManager.getUI(this));
+        } catch (LinkageError incompatible) {
+            ui = null;
+            setUI(new javax.swing.plaf.basic.BasicTabbedPaneUI());
+        }
+    }
+    public String getUIClassID() { return uiClassID; }
     public int getTabPlacement() { return tabPlacement; }
-    public void setTabPlacement(int p) { this.tabPlacement = p; }
+    public void setTabPlacement(int tabPlacement) {
+        if (tabPlacement != TOP && tabPlacement != LEFT && tabPlacement != BOTTOM && tabPlacement != RIGHT) {
+            throw new IllegalArgumentException("illegal tab placement: must be TOP, BOTTOM, LEFT, or RIGHT");
+        }
+        int old = this.tabPlacement;
+        this.tabPlacement = tabPlacement;
+        if (old != tabPlacement) { firePropertyChange("tabPlacement", old, tabPlacement); revalidate(); repaint(); }
+    }
     public int getTabLayoutPolicy() { return tabLayoutPolicy; }
-    public void setTabLayoutPolicy(int policy) { this.tabLayoutPolicy = policy; }
+    public void setTabLayoutPolicy(int tabLayoutPolicy) {
+        if (tabLayoutPolicy != WRAP_TAB_LAYOUT && tabLayoutPolicy != SCROLL_TAB_LAYOUT) {
+            throw new IllegalArgumentException("illegal tab layout policy: must be WRAP_TAB_LAYOUT or SCROLL_TAB_LAYOUT");
+        }
+        int old = this.tabLayoutPolicy;
+        this.tabLayoutPolicy = tabLayoutPolicy;
+        if (old != tabLayoutPolicy) { firePropertyChange("tabLayoutPolicy", old, tabLayoutPolicy); revalidate(); }
+    }
+    private void checkIndex(int index) {
+        if (index < 0 || index >= pages.size()) {
+            throw new IndexOutOfBoundsException("Index: " + index + ", Tab count: " + pages.size());
+        }
+    }
+    /** SwingUtilities.findDisplayedMnemonicIndex: the first occurrence of the mnemonic in either case. */
+    private static int displayedMnemonicIndex(String text, int mnemonic) {
+        if (text == null || mnemonic == '\0') return -1;
+        char upper = Character.toUpperCase((char) mnemonic), lower = Character.toLowerCase((char) mnemonic);
+        int u = text.indexOf(upper), l = text.indexOf(lower);
+        if (u == -1) return l;
+        if (l == -1) return u;
+        return Math.min(u, l);
+    }
     public int getSelectedIndex() { return selectedIndex; }
     public void setSelectedIndex(int index) {
         if(index < -1 || index >= tabs.size())throw new IndexOutOfBoundsException("tab index");
@@ -256,7 +413,7 @@ public class JTabbedPane extends JComponent implements SwingConstants {
     public void insertTab(String title,Icon icon,Component component,String tip,int index) {
         if(index<0||index>tabs.size())throw new IndexOutOfBoundsException("tab index");
         int existing=component==null?-1:tabs.indexOf(component);if(existing>=0){removeTabAt(existing);if(existing<index)index--;}
-        Page page=new Page();page.tip=tip;tabs.add(index,component);titles.add(index,title==null?"":title);icons.add(index,icon);pages.add(index,page);
+        Page page=new Page();page.tip=tip;if(tip!=null)ToolTipManager.sharedInstance().registerComponent(this);tabs.add(index,component);titles.add(index,title==null?"":title);icons.add(index,icon);pages.add(index,page);
         if(component!=null){super.add(component);component.setVisible(false);}
         if(tabs.size()==1)setSelectedIndex(0);else if(selectedIndex>=index)selectedIndex++;
         updateVisibleTabs();revalidate();repaint();
@@ -264,11 +421,23 @@ public class JTabbedPane extends JComponent implements SwingConstants {
     private void updateVisibleTabs(){for(int i=0;i<tabs.size();i++)if(tabs.get(i)!=null)tabs.get(i).setVisible(i==selectedIndex);}
     public Component add(Component component) { addTab(component==null?"":component.getName(),component);return component; }
     public Component add(String title,Component component) { addTab(title,component);return component; }
-    public void remove(Component component) { int index=tabs.indexOf(component);if(index>=0)removeTabAt(index);else super.remove(component); }
+    public void remove(Component component) { int index=tabs.indexOf(component);if(index>=0)removeTabAt(index);else removeChild(component); }
     public void remove(int index) { removeTabAt(index); }
+    /**
+     * Drops a child by its container index, as the JDK's removeTabAt does: Container.remove(Component)
+     * dispatches to remove(int), which on this class means a tab index.
+     */
+    private void removeChild(Component child) {
+        if (child == null) return;
+        Component[] children = getComponents();
+        for (int i = children.length - 1; i >= 0; i--) {
+            if (children[i] == child) { super.remove(i); return; }
+        }
+    }
     public void removeTabAt(int index) {
+        checkIndex(index);
         Component removed=tabs.remove(index);titles.remove(index);icons.remove(index);Page page=pages.remove(index);
-        if(removed!=null)super.remove(removed);if(page.tabComponent!=null)super.remove(page.tabComponent);
+        removeChild(removed);removeChild(page.tabComponent);
         int previous=selectedIndex;
         if(previous==index){selectedIndex=-2;setSelectedIndex(tabs.isEmpty()?-1:Math.min(index,tabs.size()-1));}
         else if(previous>index)selectedIndex--;
@@ -276,25 +445,39 @@ public class JTabbedPane extends JComponent implements SwingConstants {
     }
     public void removeAll() { while(!tabs.isEmpty())removeTabAt(tabs.size()-1); }
     public int getTabCount() { return tabs.size(); }
-    public int getTabRunCount() { return 1; }
+    /**
+     * Whether the delegate owns tab geometry, layout and painting: the JDK's arrangement for every
+     * placement but RIGHT. RIGHT is the RuneLite sidebar, whose fixed-slot icon strip the pane keeps
+     * drawing itself; a Basic delegate answers from the pane there.
+     */
+    private boolean uiGeometry() { return ui != null && tabPlacement != RIGHT; }
+    private javax.swing.plaf.TabbedPaneUI geometryDelegate() { return uiGeometry() ? getUI() : null; }
+    public int getTabRunCount() { javax.swing.plaf.TabbedPaneUI delegate=geometryDelegate();return delegate!=null?delegate.getTabRunCount(this):tabs.isEmpty()?0:1; }
     public String getTitleAt(int index) { return titles.get(index); }
-    public void setTitleAt(int index, String title) { titles.set(index, title); invalidate(); }
+    public void setTitleAt(int index, String title) { checkIndex(index);titles.set(index, title);Page page=pages.get(index);if(page.mnemonic!=-1)page.displayedMnemonic=displayedMnemonicIndex(title,page.mnemonic);revalidate();repaint(); }
     public Icon getIconAt(int index) { return icons.get(index); }
     public void setIconAt(int index, Icon icon) { icons.set(index,icon);revalidate();repaint(); }
     public Icon getDisabledIconAt(int index) { return pages.get(index).disabledIcon; }
     public void setDisabledIconAt(int index, Icon value) { pages.get(index).disabledIcon=value;repaint(); }
     public String getToolTipTextAt(int index) { return pages.get(index).tip; }
-    public void setToolTipTextAt(int index, String value) { pages.get(index).tip=value;repaint(); }
-    public Color getForegroundAt(int index) { return pages.get(index).foreground; }
+    public void setToolTipTextAt(int index, String value) { pages.get(index).tip=value;if(value!=null)ToolTipManager.sharedInstance().registerComponent(this);repaint(); }
+    /** The JDK's per-tab tip: the tab under the pointer (disabled tabs included), else the pane's own. */
+    @Override public String getToolTipText(java.awt.event.MouseEvent event) {
+        int index=indexAtLocation(event.getX(),event.getY());
+        if(index>=0&&index<pages.size())return pages.get(index).tip;
+        return super.getToolTipText(event);
+    }
+    // An unset per-tab color falls back to the pane's, as the JDK's Page does.
+    public Color getForegroundAt(int index) { Color c=pages.get(index).foreground;return c!=null?c:getForeground(); }
     public void setForegroundAt(int index, Color value) { pages.get(index).foreground=value;repaint(); }
-    public Color getBackgroundAt(int index) { return pages.get(index).background; }
+    public Color getBackgroundAt(int index) { Color c=pages.get(index).background;return c!=null?c:getBackground(); }
     public void setBackgroundAt(int index, Color value) { pages.get(index).background=value;repaint(); }
     public boolean isEnabledAt(int index) { return pages.get(index).enabled; }
     public void setEnabledAt(int index, boolean enabled) { pages.get(index).enabled=enabled;repaint(); }
     public Component getComponentAt(int index) { return tabs.get(index); }
-    public void setComponentAt(int index, Component c) { Component old=tabs.set(index,c);if(old!=null)super.remove(old);if(c!=null){super.add(c);c.setVisible(index==selectedIndex);}revalidate();repaint(); }
+    public void setComponentAt(int index, Component c) { Component old=tabs.set(index,c);removeChild(old);if(c!=null){super.add(c);c.setVisible(index==selectedIndex);}revalidate();repaint(); }
     public int getMnemonicAt(int tabIndex) { return pages.get(tabIndex).mnemonic; }
-    public void setMnemonicAt(int tabIndex, int mnemonic) { pages.get(tabIndex).mnemonic=mnemonic; }
+    public void setMnemonicAt(int tabIndex, int mnemonic) { checkIndex(tabIndex);Page page=pages.get(tabIndex);page.mnemonic=mnemonic;page.displayedMnemonic=displayedMnemonicIndex(titles.get(tabIndex),mnemonic);repaint(); }
     public int getDisplayedMnemonicIndexAt(int tabIndex) { return pages.get(tabIndex).displayedMnemonic; }
     public void setDisplayedMnemonicIndexAt(int tabIndex, int mnemonicIndex) { if(mnemonicIndex < -1 || mnemonicIndex>=titles.get(tabIndex).length())throw new IllegalArgumentException("mnemonic index");pages.get(tabIndex).displayedMnemonic=mnemonicIndex; }
     private boolean verticalTabs(){return tabPlacement==LEFT||tabPlacement==RIGHT;}
@@ -309,22 +492,26 @@ public class JTabbedPane extends JComponent implements SwingConstants {
         return axis<start?0:axis<start+OVERFLOW_CONTROL_SIZE?-1:1;
     }
     private void scrollTabs(int amount){firstVisibleTab+=amount;clampTabOffset();doLayout();repaint();}
+    /** Tabs scrolled out of the strip report an empty rectangle; a bad index throws, as on the JDK. */
     public java.awt.Rectangle getBoundsAt(int index) {
+        checkIndex(index);
+        javax.swing.plaf.TabbedPaneUI delegate=geometryDelegate();if(delegate!=null)return delegate.getTabBounds(this,index);
         int slot=index-firstVisibleTab;
-        if(index<0||index>=tabs.size()||slot<0||slot>=visibleTabCount())return new java.awt.Rectangle();
+        if(slot<0||slot>=visibleTabCount())return new java.awt.Rectangle();
         return verticalTabs()?new java.awt.Rectangle(stripX(),slot*TAB_SLOT_PX,STRIP_THICKNESS,TAB_SLOT_PX):new java.awt.Rectangle(slot*TAB_SLOT_PX,stripY(),TAB_SLOT_PX,STRIP_THICKNESS);
     }
     public int indexOfTab(String title) { return titles.indexOf(title); }
     public int indexOfTab(Icon icon) { return icons.indexOf(icon); }
     public int indexOfComponent(Component c) { return tabs.indexOf(c); }
     public int indexAtLocation(int x,int y) {
+        javax.swing.plaf.TabbedPaneUI delegate=geometryDelegate();if(delegate!=null)return delegate.tabForCoordinate(this,x,y);
         if(!inStrip(x,y)||overflowDirection(x,y)!=0)return -1;
         int slot=(verticalTabs()?y:x)/TAB_SLOT_PX;
         int index=firstVisibleTab+slot;
-        return slot<visibleTabCount()&&index<tabs.size()&&pages.get(index).enabled?index:-1;
+        return slot<visibleTabCount()&&index<tabs.size()?index:-1;
     }
     public Component getTabComponentAt(int index) { return pages.get(index).tabComponent; }
-    public void setTabComponentAt(int index, Component component) { Page page=pages.get(index);if(page.tabComponent!=null)super.remove(page.tabComponent);page.tabComponent=component;if(component!=null)super.add(component);revalidate();repaint(); }
+    public void setTabComponentAt(int index, Component component) { Page page=pages.get(index);removeChild(page.tabComponent);page.tabComponent=component;if(component!=null)super.add(component);revalidate();repaint(); }
     public int indexOfTabComponent(Component component) { for(int i=0;i<pages.size();i++)if(pages.get(i).tabComponent==component)return i;return -1; }
     private final java.util.List<javax.swing.event.ChangeListener> changeListeners = new java.util.ArrayList<>();
     public void addChangeListener(ChangeListener l) { if (l != null) changeListeners.add(l); }

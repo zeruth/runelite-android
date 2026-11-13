@@ -1,3 +1,4 @@
+// host-contract: runs=patched
 import java.net.URL;
 import java.util.Arrays;
 import javax.swing.JPanel;
@@ -6,11 +7,9 @@ import javax.swing.SpinnerListModel;
 import javax.swing.SpinnerNumberModel;
 
 /**
- * Run with only the compiled Android JSpinner*.class files patched into java.desktop:
- * java -Djava.awt.headless=true --patch-module java.desktop=<patch-dir>
- *      -cp <test-classes> TestAndroidSpinner
- * Other Swing dependencies use the host JDK; this checks the Android spinner shim,
- * not Android rendering or complete Swing model/editor synchronization.
+ * Runs through {@code python tools-src/run-awt-contracts.py --only TestAndroidSpinner}, patched
+ * only: it asserts the shadow JSpinner is the one loaded. Checks editor initialization and
+ * ownership, not Android rendering.
  */
 public final class TestAndroidSpinner {
     public static void main(String[] args) {
@@ -35,6 +34,8 @@ public final class TestAndroidSpinner {
             "A newly constructed spinner has no default editor");
         JSpinner.DefaultEditor editor = (JSpinner.DefaultEditor) spinner.getEditor();
         check((editor instanceof JSpinner.NumberEditor) == numeric, "Wrong editor type");
+        check((editor instanceof JSpinner.ListEditor) == (spinner.getModel() instanceof SpinnerListModel),
+            "A list model needs a ListEditor");
         check(editor.getSpinner() == spinner, "Editor does not retain its spinner");
         check(editor.getTextField() == editor.getTextField(), "Text field changes between calls");
         check(value.equals(editor.getTextField().getValue()), "Initial model value is missing");

@@ -1,3 +1,33 @@
+/*
+ * Copyright (c) 2026, Tyler Bochard
+ * All rights reserved.
+ *
+ * Part of android-awt, the Android shadow of the desktop JDK surface used by
+ * runelite-android. Original work of this project, not derived from OpenJDK;
+ * licensed under the BSD 2-Clause License (see the LICENSE file at the
+ * repository root). Files ported from OpenJDK carry the OpenJDK header instead;
+ * see android-awt/LICENSE.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ *    list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
 package javax.swing;
 
 import java.awt.event.ActionListener;
@@ -7,9 +37,110 @@ import javax.swing.event.ChangeListener;
 public abstract class AbstractButton extends JComponent {
     private static final long serialVersionUID = -937921912697029109L;
 
+    /**
+     * Accessibility support shared by buttons and menu items: named by their text, one
+     * "click" action that runs {@link #doClick()}, and a 0/1 value for the selected state.
+     */
+    protected abstract class AccessibleAbstractButton extends AccessibleJComponent
+            implements javax.accessibility.AccessibleAction, javax.accessibility.AccessibleValue {
+
+        public String getAccessibleName() {
+            String name = accessibleName;
+            if (name == null) {
+                name = (String) getClientProperty(javax.accessibility.AccessibleContext.ACCESSIBLE_NAME_PROPERTY);
+            }
+            if (name == null) {
+                name = AbstractButton.this.getText();
+            }
+            if (name == null) {
+                name = super.getAccessibleName();
+            }
+            return name;
+        }
+
+        public javax.accessibility.AccessibleStateSet getAccessibleStateSet() {
+            javax.accessibility.AccessibleStateSet states = super.getAccessibleStateSet();
+            if (getModel().isArmed()) {
+                states.add(javax.accessibility.AccessibleState.ARMED);
+            }
+            if (isFocusOwner()) {
+                states.add(javax.accessibility.AccessibleState.FOCUSED);
+            }
+            if (getModel().isPressed()) {
+                states.add(javax.accessibility.AccessibleState.PRESSED);
+            }
+            if (isSelected()) {
+                states.add(javax.accessibility.AccessibleState.CHECKED);
+            }
+            return states;
+        }
+
+        public javax.accessibility.AccessibleAction getAccessibleAction() {
+            return this;
+        }
+
+        public javax.accessibility.AccessibleValue getAccessibleValue() {
+            return this;
+        }
+
+        public int getAccessibleActionCount() {
+            return 1;
+        }
+
+        public String getAccessibleActionDescription(int i) {
+            // UIManager "AbstractButton.clickText" in every desktop look and feel.
+            return i == 0 ? "click" : null;
+        }
+
+        public boolean doAccessibleAction(int i) {
+            if (i == 0) {
+                doClick();
+                return true;
+            }
+            return false;
+        }
+
+        public Number getCurrentAccessibleValue() {
+            return Integer.valueOf(isSelected() ? 1 : 0);
+        }
+
+        public boolean setCurrentAccessibleValue(Number n) {
+            if (n == null) {
+                return false;
+            }
+            setSelected(n.intValue() != 0);
+            return true;
+        }
+
+        public Number getMinimumAccessibleValue() {
+            return Integer.valueOf(0);
+        }
+
+        public Number getMaximumAccessibleValue() {
+            return Integer.valueOf(1);
+        }
+    }
+
     public static final String TEXT_CHANGED_PROPERTY = "text";
     public static final String ICON_CHANGED_PROPERTY = "icon";
     public static final String SELECTED_CHANGED_PROPERTY = "selected";
+    public static final String MODEL_CHANGED_PROPERTY = "model";
+    public static final String MNEMONIC_CHANGED_PROPERTY = "mnemonic";
+    public static final String MARGIN_CHANGED_PROPERTY = "margin";
+    public static final String VERTICAL_ALIGNMENT_CHANGED_PROPERTY = "verticalAlignment";
+    public static final String HORIZONTAL_ALIGNMENT_CHANGED_PROPERTY = "horizontalAlignment";
+    public static final String VERTICAL_TEXT_POSITION_CHANGED_PROPERTY = "verticalTextPosition";
+    public static final String HORIZONTAL_TEXT_POSITION_CHANGED_PROPERTY = "horizontalTextPosition";
+    public static final String BORDER_PAINTED_CHANGED_PROPERTY = "borderPainted";
+    public static final String FOCUS_PAINTED_CHANGED_PROPERTY = "focusPainted";
+    public static final String ROLLOVER_ENABLED_CHANGED_PROPERTY = "rolloverEnabled";
+    public static final String CONTENT_AREA_FILLED_CHANGED_PROPERTY = "contentAreaFilled";
+    public static final String PRESSED_ICON_CHANGED_PROPERTY = "pressedIcon";
+    public static final String SELECTED_ICON_CHANGED_PROPERTY = "selectedIcon";
+    public static final String ROLLOVER_ICON_CHANGED_PROPERTY = "rolloverIcon";
+    public static final String ROLLOVER_SELECTED_ICON_CHANGED_PROPERTY = "rolloverSelectedIcon";
+    public static final String DISABLED_ICON_CHANGED_PROPERTY = "disabledIcon";
+    public static final String DISABLED_SELECTED_ICON_CHANGED_PROPERTY = "disabledSelectedIcon";
 
     public static final int HORIZONTAL = SwingConstants.HORIZONTAL;
     public static final int VERTICAL = SwingConstants.VERTICAL;
@@ -22,7 +153,7 @@ public abstract class AbstractButton extends JComponent {
     protected ButtonModel model = new DefaultButtonModel();
     protected String text = "";
     protected Icon icon;
-    private Icon pressedIcon, selectedIcon, rolloverIcon, disabledIcon, rolloverSelectedIcon;
+    private Icon pressedIcon, selectedIcon, rolloverIcon, disabledIcon, rolloverSelectedIcon, disabledSelectedIcon;
     private int horizontalAlignment = CENTER;
     private int horizontalTextPosition = TRAILING;
     private int verticalAlignment = CENTER;
@@ -37,42 +168,195 @@ public abstract class AbstractButton extends JComponent {
     // Swing's AbstractButton.init(): buttons default to LEFT_ALIGNMENT in BoxLayouts.
     public AbstractButton() { setAlignmentX(0f); setModel(model); }
 
+    // Unlike 8u the text is never null: the panel host and the painters read it unguarded.
     public String getText() { return text; }
-    public void setText(String text) { this.text = text == null ? "" : text; invalidate(); }
+    public void setText(String text) {
+        String old = this.text;
+        this.text = text == null ? "" : text;
+        firePropertyChange(TEXT_CHANGED_PROPERTY, old, this.text);
+        updateDisplayedMnemonicIndex(this.text, getMnemonic());
+        if (!this.text.equals(old)) { revalidate(); repaint(); }
+        invalidate();
+    }
     public Icon getIcon() { return icon; }
-    public void setIcon(Icon icon) { this.icon = icon; invalidate(); }
+    public void setIcon(Icon icon) {
+        Icon old = this.icon;
+        this.icon = icon;
+        // 8u drops a disabled icon it derived itself from the old default icon.
+        if (icon != old && disabledIcon instanceof javax.swing.plaf.UIResource) disabledIcon = null;
+        firePropertyChange(ICON_CHANGED_PROPERTY, old, icon);
+        if (icon != old) { revalidate(); repaint(); }
+        invalidate();
+    }
     public Icon getPressedIcon() { return pressedIcon; }
-    public void setPressedIcon(Icon icon) { this.pressedIcon = icon; }
+    public void setPressedIcon(Icon icon) { Icon old = pressedIcon; pressedIcon = icon; firePropertyChange(PRESSED_ICON_CHANGED_PROPERTY, old, icon); if (icon != old && getModel().isPressed()) repaint(); }
     public Icon getSelectedIcon() { return selectedIcon; }
-    public void setSelectedIcon(Icon icon) { this.selectedIcon = icon; }
+    public void setSelectedIcon(Icon icon) {
+        Icon old = selectedIcon;
+        selectedIcon = icon;
+        if (icon != old && disabledSelectedIcon instanceof javax.swing.plaf.UIResource) disabledSelectedIcon = null;
+        firePropertyChange(SELECTED_ICON_CHANGED_PROPERTY, old, icon);
+        if (icon != old && isSelected()) repaint();
+    }
     public Icon getRolloverIcon() { return rolloverIcon; }
-    public void setRolloverIcon(Icon icon) { this.rolloverIcon = icon; }
-    public Icon getDisabledIcon() { return disabledIcon; }
-    public void setDisabledIcon(Icon icon) { this.disabledIcon = icon; }
+    public void setRolloverIcon(Icon icon) {
+        Icon old = rolloverIcon;
+        rolloverIcon = icon;
+        firePropertyChange(ROLLOVER_ICON_CHANGED_PROPERTY, old, icon);
+        // As in 8u, giving a rollover icon turns rollover on.
+        setRolloverEnabled(true);
+        if (icon != old) repaint();
+    }
     // Shown when a button is both rolled-over AND selected. RuneLite's
     // SwingUtil.removeButtonDecorations() sets all icon variants including this one;
     // without it external plugin panels (quest-helper) crash at startUp with
     // NoSuchMethodError before any UI is built.
     public Icon getRolloverSelectedIcon() { return rolloverSelectedIcon; }
-    public void setRolloverSelectedIcon(Icon icon) { this.rolloverSelectedIcon = icon; }
+    public void setRolloverSelectedIcon(Icon icon) {
+        Icon old = rolloverSelectedIcon;
+        rolloverSelectedIcon = icon;
+        firePropertyChange(ROLLOVER_SELECTED_ICON_CHANGED_PROPERTY, old, icon);
+        setRolloverEnabled(true);
+        if (icon != old && isSelected()) repaint();
+    }
+    /** The disabled icon, derived from the default icon by the look and feel when none is set. */
+    public Icon getDisabledIcon() {
+        if (disabledIcon == null) {
+            disabledIcon = UIManager.getLookAndFeel() == null ? null : UIManager.getLookAndFeel().getDisabledIcon(this, getIcon());
+            if (disabledIcon != null) firePropertyChange(DISABLED_ICON_CHANGED_PROPERTY, null, disabledIcon);
+        }
+        return disabledIcon;
+    }
+    public void setDisabledIcon(Icon icon) { Icon old = disabledIcon; disabledIcon = icon; firePropertyChange(DISABLED_ICON_CHANGED_PROPERTY, old, icon); if (icon != old && !isEnabled()) repaint(); }
+    /** As in 8u: falls back to a disabled form of the selected icon, then to the disabled icon. */
+    public Icon getDisabledSelectedIcon() {
+        if (disabledSelectedIcon == null) {
+            if (selectedIcon == null) return getDisabledIcon();
+            disabledSelectedIcon = UIManager.getLookAndFeel() == null ? null
+                : UIManager.getLookAndFeel().getDisabledSelectedIcon(this, selectedIcon);
+        }
+        return disabledSelectedIcon;
+    }
+    public void setDisabledSelectedIcon(Icon icon) {
+        Icon old = disabledSelectedIcon;
+        disabledSelectedIcon = icon;
+        firePropertyChange(DISABLED_SELECTED_ICON_CHANGED_PROPERTY, old, icon);
+        if (icon != old && !isEnabled() && isSelected()) repaint();
+    }
 
     public int getHorizontalAlignment() { return horizontalAlignment; }
-    public void setHorizontalAlignment(int alignment) { this.horizontalAlignment = alignment; }
+    public void setHorizontalAlignment(int alignment) {
+        if (alignment == horizontalAlignment) return;
+        int old = horizontalAlignment;
+        horizontalAlignment = checkHorizontalKey(alignment, "horizontalAlignment");
+        firePropertyChange(HORIZONTAL_ALIGNMENT_CHANGED_PROPERTY, old, horizontalAlignment);
+        repaint();
+    }
     public int getHorizontalTextPosition() { return horizontalTextPosition; }
-    public void setHorizontalTextPosition(int textPosition) { this.horizontalTextPosition = textPosition; }
+    public void setHorizontalTextPosition(int textPosition) {
+        if (textPosition == horizontalTextPosition) return;
+        int old = horizontalTextPosition;
+        horizontalTextPosition = checkHorizontalKey(textPosition, "horizontalTextPosition");
+        firePropertyChange(HORIZONTAL_TEXT_POSITION_CHANGED_PROPERTY, old, horizontalTextPosition);
+        revalidate(); repaint();
+    }
     public int getVerticalAlignment() { return verticalAlignment; }
-    public void setVerticalAlignment(int alignment) { this.verticalAlignment = alignment; }
+    public void setVerticalAlignment(int alignment) {
+        if (alignment == verticalAlignment) return;
+        int old = verticalAlignment;
+        verticalAlignment = checkVerticalKey(alignment, "verticalAlignment");
+        firePropertyChange(VERTICAL_ALIGNMENT_CHANGED_PROPERTY, old, verticalAlignment);
+        repaint();
+    }
     public int getVerticalTextPosition() { return verticalTextPosition; }
-    public void setVerticalTextPosition(int textPosition) { this.verticalTextPosition = textPosition; }
+    public void setVerticalTextPosition(int textPosition) {
+        if (textPosition == verticalTextPosition) return;
+        int old = verticalTextPosition;
+        verticalTextPosition = checkVerticalKey(textPosition, "verticalTextPosition");
+        firePropertyChange(VERTICAL_TEXT_POSITION_CHANGED_PROPERTY, old, verticalTextPosition);
+        revalidate(); repaint();
+    }
+
+    protected int checkHorizontalKey(int key, String exception) {
+        if (key == LEFT || key == CENTER || key == RIGHT || key == SwingConstants.LEADING || key == TRAILING) return key;
+        throw new IllegalArgumentException(exception);
+    }
+
+    protected int checkVerticalKey(int key, String exception) {
+        if (key == TOP || key == CENTER || key == BOTTOM) return key;
+        throw new IllegalArgumentException(exception);
+    }
+
+    // As in 8u: set once a client calls the setter, so a look and feel's installProperty
+    // no longer overrides the client's choice.
+    private boolean borderPaintedSet, contentAreaFilledSet, rolloverEnabledSet, iconTextGapSet;
 
     public boolean isBorderPainted() { return borderPainted; }
-    public void setBorderPainted(boolean b) { this.borderPainted = b; }
+
+    /**
+     * 8u: paints the border only if borderPainted is set, so a button stripped with
+     * setBorderPainted(false) (RuneLite's SwingUtil.removeButtonDecorations) draws no
+     * look-and-feel border around its icon.
+     */
+    @Override
+    protected void paintBorder(java.awt.Graphics g) {
+        if (isBorderPainted()) {
+            super.paintBorder(g);
+        }
+    }
+    public void setBorderPainted(boolean b) { boolean old = borderPainted; borderPainted = b; borderPaintedSet = true; firePropertyChange(BORDER_PAINTED_CHANGED_PROPERTY, old, b); if (b != old) { revalidate(); repaint(); } }
     public boolean isContentAreaFilled() { return contentAreaFilled; }
-    public void setContentAreaFilled(boolean b) { this.contentAreaFilled = b; }
+    public void setContentAreaFilled(boolean b) { boolean old = contentAreaFilled; contentAreaFilled = b; contentAreaFilledSet = true; firePropertyChange(CONTENT_AREA_FILLED_CHANGED_PROPERTY, old, b); if (b != old) repaint(); }
     public boolean isFocusPainted() { return focusPainted; }
-    public void setFocusPainted(boolean b) { this.focusPainted = b; }
+    public void setFocusPainted(boolean b) { boolean old = focusPainted; focusPainted = b; firePropertyChange(FOCUS_PAINTED_CHANGED_PROPERTY, old, b); if (b != old && isFocusOwner()) { revalidate(); repaint(); } }
     public boolean isRolloverEnabled() { return rolloverEnabled; }
-    public void setRolloverEnabled(boolean b) { this.rolloverEnabled = b; }
+    public void setRolloverEnabled(boolean b) { boolean old = rolloverEnabled; rolloverEnabled = b; rolloverEnabledSet = true; firePropertyChange(ROLLOVER_ENABLED_CHANGED_PROPERTY, old, b); if (b != old) repaint(); }
+
+    /** 8u: the look and feel's defaults for the button's own properties, unless the client set them. */
+    @Override
+    void setUIProperty(String propertyName, Object value) {
+        if ("borderPainted".equals(propertyName)) {
+            if (!borderPaintedSet) {
+                setBorderPainted(((Boolean) value).booleanValue());
+                borderPaintedSet = false;
+            }
+        } else if ("rolloverEnabled".equals(propertyName)) {
+            if (!rolloverEnabledSet) {
+                setRolloverEnabled(((Boolean) value).booleanValue());
+                rolloverEnabledSet = false;
+            }
+        } else if ("iconTextGap".equals(propertyName)) {
+            if (!iconTextGapSet) {
+                setIconTextGap(((Number) value).intValue());
+                iconTextGapSet = false;
+            }
+        } else if ("contentAreaFilled".equals(propertyName)) {
+            if (!contentAreaFilledSet) {
+                setContentAreaFilled(((Boolean) value).booleanValue());
+                contentAreaFilledSet = false;
+            }
+        } else {
+            super.setUIProperty(propertyName, value);
+        }
+    }
+
+    /** 8u: the constructors' shared tail; installs the look and feel's delegate. */
+    protected void init(String text, Icon icon) {
+        if (text != null) setText(text);
+        if (icon != null) setIcon(icon);
+        updateUI();
+        // Component.LEFT_ALIGNMENT and CENTER_ALIGNMENT; the shadow Component lacks the constants.
+        setAlignmentX(0.0f);
+        setAlignmentY(0.5f);
+    }
+
+    private long multiClickThreshhold;
+    /** Clicks closer together than this many milliseconds produce one action event. */
+    public void setMultiClickThreshhold(long threshhold) {
+        if (threshhold < 0) throw new IllegalArgumentException("threshhold must be >= 0");
+        multiClickThreshhold = threshhold;
+    }
+    public long getMultiClickThreshhold() { return multiClickThreshhold; }
 
     public ButtonModel getModel() { return model; }
     public void setModel(ButtonModel newModel) {
@@ -87,7 +371,8 @@ public abstract class AbstractButton extends JComponent {
         model.addActionListener(modelActionListener);
         model.addItemListener(modelItemListener);
         model.addChangeListener(modelChangeListener);
-        firePropertyChange("model", old, newModel);
+        updateMnemonicProperties();
+        firePropertyChange(MODEL_CHANGED_PROPERTY, old, newModel);
         repaint();
     }
     @Override public void setEnabled(boolean enabled) {
@@ -95,11 +380,19 @@ public abstract class AbstractButton extends JComponent {
         if (model != null) model.setEnabled(enabled);
     }
     private final javax.swing.event.EventListenerList buttonListeners = new javax.swing.event.EventListenerList();
-    private final ActionListener modelActionListener = e -> {
+    private final ActionListener modelActionListener = e -> fireActionPerformed(e);
+
+    /**
+     * Notifies the action listeners with an event whose source is this button;
+     * the command falls back to the button's action command.
+     */
+    protected void fireActionPerformed(java.awt.event.ActionEvent e) {
+        String command = e.getActionCommand();
+        if (command == null) command = getActionCommand();
         java.awt.event.ActionEvent event = new java.awt.event.ActionEvent(this,
-            java.awt.event.ActionEvent.ACTION_PERFORMED, getActionCommand(), e.getWhen(), e.getModifiers());
+            java.awt.event.ActionEvent.ACTION_PERFORMED, command, e.getWhen(), e.getModifiers());
         for (ActionListener listener : getActionListeners()) listener.actionPerformed(event);
-    };
+    }
     private final ItemListener modelItemListener = e -> {
         java.awt.event.ItemEvent event = new java.awt.event.ItemEvent(this,
             java.awt.event.ItemEvent.ITEM_STATE_CHANGED, this, e.getStateChange());
@@ -110,6 +403,7 @@ public abstract class AbstractButton extends JComponent {
         repaint();
     };
     private final ChangeListener modelChangeListener = e -> {
+        updateMnemonicProperties();
         javax.swing.event.ChangeEvent event = new javax.swing.event.ChangeEvent(this);
         for (ChangeListener listener : getChangeListeners()) listener.stateChanged(event);
         repaint();
@@ -120,8 +414,7 @@ public abstract class AbstractButton extends JComponent {
     // overload — so without this typed method present, every plugin/RuneLite call that
     // strips a button's L&F decorations dies with NoSuchMethodError at panel build (this
     // hit quest-helper plus internal SkillCalculator/Info/LootTracker panels). The
-    // delegate isn't used for rendering here (we custom-paint), we just store it. JLabel
-    // and JProgressBar already carry the equivalent typed overloads.
+    // delegate paints the button: JComponent.paintComponent hands it to ui.update.
     public void setUI(javax.swing.plaf.ButtonUI ui) { super.setUI(ui); }
     public javax.swing.plaf.ButtonUI getUI() { return (javax.swing.plaf.ButtonUI) super.getUI(); }
 
@@ -130,7 +423,13 @@ public abstract class AbstractButton extends JComponent {
      *  etc. — without it Dalvik throws NoSuchMethodError at plugin startup. */
     private int iconTextGap = 4;
     public int getIconTextGap() { return iconTextGap; }
-    public void setIconTextGap(int gap) { this.iconTextGap = gap; invalidate(); }
+    public void setIconTextGap(int gap) {
+        int old = iconTextGap;
+        iconTextGap = gap;
+        iconTextGapSet = true;
+        firePropertyChange("iconTextGap", old, gap);
+        if (gap != old) { revalidate(); repaint(); }
+    }
 
     /** Insets between the border and the button's content. Stored but not honored by
      *  paint (we draw text/icon centered) — plugins set it as a layout hint, that's all
@@ -140,20 +439,34 @@ public abstract class AbstractButton extends JComponent {
     public void setMargin(java.awt.Insets m) { java.awt.Insets old=margin;margin=m==null?null:new java.awt.Insets(m.top,m.left,m.bottom,m.right);firePropertyChange("margin",old,margin);revalidate();repaint(); }
     @Override public java.awt.Insets getInsets(){java.awt.Insets in=super.getInsets();return margin==null?in:new java.awt.Insets(in.top+margin.top,in.left+margin.left,in.bottom+margin.bottom,in.right+margin.right);}
 
+    private transient boolean measuringByUI;
+
     /**
-     * Compute a sensible preferred size from text + icon + padding. JComponent's default
-     * delegates to Component.getSize() which is (0,0) before layout — DynamicGridLayout
-     * (and any other layout that consults preferred size) then placed buttons with
-     * height=0, so Reset/Back in the plugin config panel never appeared. Real Swing
-     * derives this from BasicButtonUI; we just measure directly.
+     * The delegate's preferred size, as JComponent of the JDK asks for it. Without a delegate
+     * answer, a measure from text + icon + padding: a 0x0 button made DynamicGridLayout
+     * place Reset/Back in the plugin config panel with height 0.
      */
     @Override
     public java.awt.Dimension getPreferredSize() {
         if (isPreferredSizeSet()) return super.getPreferredSize();
+        // JComponent.getPreferredSize of the JDK: the delegate answers first. A delegate that
+        // still measures through hostDefaultPreferredSize() re-enters here and gets the
+        // measurement below instead of recursing.
+        if (ui != null && !measuringByUI) {
+            measuringByUI = true;
+            try {
+                java.awt.Dimension d = ui.getPreferredSize(this);
+                if (d != null) return d;
+            } finally {
+                measuringByUI = false;
+            }
+        }
         int textW = 0, textH = 0;
         String t = text;
-        if (t != null && !t.isEmpty()) {
-            java.awt.FontMetrics fm = getFontMetrics(getFont());
+        java.awt.Font font = getFont();
+        // A button outside any tree may have no font yet; it is measured by its icon and padding.
+        if (t != null && !t.isEmpty() && font != null) {
+            java.awt.FontMetrics fm = getFontMetrics(font);
             if (fm != null) {
                 textW = fm.stringWidth(t);
                 textH = fm.getHeight();
@@ -168,17 +481,42 @@ public abstract class AbstractButton extends JComponent {
         return new java.awt.Dimension(w, h);
     }
 
-    // BasicButtonUI reports min = max = preferred, so a BoxLayout neither stretches nor
-    // squeezes a button unless the caller sets explicit bounds.
+    // As JComponent of the JDK the delegate answers first; BasicButtonUI reports min = max =
+    // preferred, so a BoxLayout neither stretches nor squeezes a button unless the caller
+    // sets explicit bounds. Without a delegate answer, the preferred size stands in.
     @Override
     public java.awt.Dimension getMinimumSize() {
-        return isMinimumSizeSet() ? super.getMinimumSize() : getPreferredSize();
+        if (isMinimumSizeSet()) return super.getMinimumSize();
+        if (ui != null && !boundingByUI) {
+            boundingByUI = true;
+            try {
+                java.awt.Dimension d = ui.getMinimumSize(this);
+                if (d != null) return d;
+            } finally {
+                boundingByUI = false;
+            }
+        }
+        return getPreferredSize();
     }
 
     @Override
     public java.awt.Dimension getMaximumSize() {
-        return isMaximumSizeSet() ? super.getMaximumSize() : getPreferredSize();
+        if (isMaximumSizeSet()) return super.getMaximumSize();
+        if (ui != null && !boundingByUI) {
+            boundingByUI = true;
+            try {
+                java.awt.Dimension d = ui.getMaximumSize(this);
+                if (d != null) return d;
+            } finally {
+                boundingByUI = false;
+            }
+        }
+        return getPreferredSize();
     }
+
+    // Its own guard, so a delegate whose minimum asks the button for its preferred size
+    // still reaches ui.getPreferredSize, and one that asks for the minimum does not recurse.
+    private transient boolean boundingByUI;
 
     public boolean isSelected() { return model.isSelected(); }
     public void setSelected(boolean b) { model.setSelected(b); }
@@ -187,6 +525,11 @@ public abstract class AbstractButton extends JComponent {
     private final java.util.List<ItemListener> itemListeners = new java.util.ArrayList<>();
 
     public void doClick() { doClick(68); }
+    /**
+     * Presses and releases the button through its model. Deliberately does not sleep
+     * {@code pressTime} as 8u does: 8u paints the pressed state in between, the panel host
+     * repaints only after the EDT task, so the sleep would stall the EDT for nothing.
+     */
     public void doClick(int pressTime) {
         if (!isEnabled()) return;
         model.setArmed(true);
@@ -195,12 +538,62 @@ public abstract class AbstractButton extends JComponent {
         model.setArmed(false);
     }
 
-    public void setMnemonic(int mnemonic) { model.setMnemonic(mnemonic); }
-    public int getMnemonic() { return model.getMnemonic(); }
-    public void setMnemonic(char mnemonic) { model.setMnemonic(mnemonic); }
+    // The mnemonic last published; the model's is the source of truth (8u updateMnemonicProperties).
+    private int mnemonic;
+
+    public void setMnemonic(int mnemonic) {
+        model.setMnemonic(mnemonic);
+        updateMnemonicProperties();
+    }
+    public int getMnemonic() { return mnemonic; }
+    /** As in 8u: a lower-case letter is taken as its VK_ code. */
+    public void setMnemonic(char mnemonic) {
+        int vk = mnemonic;
+        if (vk >= 'a' && vk <= 'z') vk -= ('a' - 'A');
+        setMnemonic(vk);
+    }
+
+    private void updateMnemonicProperties() {
+        int newMnemonic = model.getMnemonic();
+        if (mnemonic != newMnemonic) {
+            int old = mnemonic;
+            mnemonic = newMnemonic;
+            firePropertyChange(MNEMONIC_CHANGED_PROPERTY, old, mnemonic);
+            updateDisplayedMnemonicIndex(getText(), mnemonic);
+            revalidate();
+            repaint();
+        }
+    }
+
     private int displayedMnemonicIndex = -1;
-    public void setDisplayedMnemonicIndex(int index) { if (index < -1 || index >= text.length()) throw new IllegalArgumentException("index"); displayedMnemonicIndex = index; repaint(); }
+    public void setDisplayedMnemonicIndex(int index) {
+        int old = displayedMnemonicIndex;
+        if (index != -1) {
+            String t = getText();
+            int length = t == null ? 0 : t.length();
+            if (index < -1 || index >= length) throw new IllegalArgumentException("index == " + index);
+        }
+        displayedMnemonicIndex = index;
+        firePropertyChange("displayedMnemonicIndex", old, index);
+        if (index != old) { revalidate(); repaint(); }
+    }
     public int getDisplayedMnemonicIndex() { return displayedMnemonicIndex; }
+
+    private void updateDisplayedMnemonicIndex(String t, int key) {
+        setDisplayedMnemonicIndex(findDisplayedMnemonicIndex(t, key));
+    }
+
+    /** 8u SwingUtilities.findDisplayedMnemonicIndex: first case-insensitive match of the key. */
+    static int findDisplayedMnemonicIndex(String t, int key) {
+        if (t == null || key == '\0') return -1;
+        char upper = Character.toUpperCase((char) key);
+        char lower = Character.toLowerCase((char) key);
+        int upperIndex = t.indexOf(upper);
+        int lowerIndex = t.indexOf(lower);
+        if (upperIndex == -1) return lowerIndex;
+        if (lowerIndex == -1) return upperIndex;
+        return lowerIndex < upperIndex ? lowerIndex : upperIndex;
+    }
 
     public void setActionCommand(String s) { model.setActionCommand(s); }
     public String getActionCommand() { return model.getActionCommand() != null ? model.getActionCommand() : text; }
@@ -237,6 +630,7 @@ public abstract class AbstractButton extends JComponent {
         if (hide == hideActionText) return;
         hideActionText = hide;
         if (action != null) setTextFromAction(action, false);
+        firePropertyChange("hideActionText", !hide, hide);
     }
 
     protected void configurePropertiesFromAction(Action a) {
@@ -248,6 +642,17 @@ public abstract class AbstractButton extends JComponent {
         setEnabled(a == null || a.isEnabled());
         if (a != null && a.getValue(Action.SELECTED_KEY) != null && shouldUpdateSelectedStateFromAction()) {
             setSelectedFromAction(a);
+        }
+        setDisplayedMnemonicIndexFromAction(a, false);
+    }
+
+    private void setDisplayedMnemonicIndexFromAction(Action a, boolean fromPropertyChange) {
+        Object value = a == null ? null : a.getValue(Action.DISPLAYED_MNEMONIC_INDEX_KEY);
+        if (fromPropertyChange || value instanceof Integer) {
+            int index = value instanceof Integer ? (Integer) value : -1;
+            String t = getText();
+            if (t == null || index >= t.length()) index = -1;
+            setDisplayedMnemonicIndex(index);
         }
     }
 
@@ -279,6 +684,7 @@ public abstract class AbstractButton extends JComponent {
             case Action.SELECTED_KEY:
                 if (a.getValue(Action.SELECTED_KEY) != null && shouldUpdateSelectedStateFromAction()) setSelectedFromAction(a);
                 break;
+            case Action.DISPLAYED_MNEMONIC_INDEX_KEY: setDisplayedMnemonicIndexFromAction(a, true); break;
             default: break;
         }
     }
@@ -320,37 +726,4 @@ public abstract class AbstractButton extends JComponent {
     public ChangeListener[] getChangeListeners() { return buttonListeners.getListeners(ChangeListener.class); }
     public void addChangeListener(ChangeListener l) { buttonListeners.add(ChangeListener.class, l); }
     public void removeChangeListener(ChangeListener l) { buttonListeners.remove(ChangeListener.class, l); }
-
-    /**
-     * Render the button's icon and (very simplified) text. RuneLite's toolbar nav buttons
-     * are 23×23 with just an icon — that's the case we care about most.
-     */
-    @Override
-    protected void paintComponent(java.awt.Graphics g) {
-        super.paintComponent(g);
-        Icon ic = (model != null && model.isSelected() && selectedIcon != null) ? selectedIcon : icon;
-        if (ic == null || ic.getIconWidth() <= 0 || ic.getIconHeight() <= 0) return;
-
-        int iw = ic.getIconWidth();
-        int ih = ic.getIconHeight();
-        // Scale-to-fit when the icon overflows the button. For ImageIcon we can drawImage
-        // at a target size — for anything else, just clip via the existing graphics clip.
-        if (iw > getWidth() || ih > getHeight()) {
-            if (ic instanceof ImageIcon) {
-                java.awt.Image img = ((ImageIcon) ic).getImage();
-                if (img != null) {
-                    float s = Math.min(getWidth() / (float) iw, getHeight() / (float) ih);
-                    int dw = Math.max(1, Math.round(iw * s));
-                    int dh = Math.max(1, Math.round(ih * s));
-                    int ix = (getWidth() - dw) / 2;
-                    int iy = (getHeight() - dh) / 2;
-                    try { g.drawImage(img, ix, iy, dw, dh, this); } catch (Throwable ignored) {}
-                    return;
-                }
-            }
-        }
-        int ix = (getWidth() - iw) / 2;
-        int iy = (getHeight() - ih) / 2;
-        try { ic.paintIcon(this, g, ix, iy); } catch (Throwable ignored) {}
-    }
 }
