@@ -62,7 +62,26 @@ public class JPasswordField extends JTextField {
     @Override public void cut() { getToolkit().beep(); }
 
     public char getEchoChar() { return echoChar; }
-    public void setEchoChar(char c) { echoChar = c; }
+    public void setEchoChar(char c) { echoChar = c; echoCharSet = true; repaint(); revalidate(); }
+
+    /** 8u's flag: a client's setEchoChar wins over the look and feel's PasswordField.echoChar. */
+    private boolean echoCharSet;
+
+    /*
+     * As 8u: LookAndFeel.installProperty routes a JPasswordField here first, because
+     * JTextComponent sits outside javax.swing and setUIProperty cannot be overridden through
+     * it. Returns whether the property was handled.
+     */
+    boolean customSetUIProperty(String propertyName, Object value) {
+        if ("echoChar".equals(propertyName)) {
+            if (!echoCharSet) {
+                setEchoChar((Character) value);
+                echoCharSet = false;
+            }
+            return true;
+        }
+        return false;
+    }
     public boolean echoCharIsSet() { return echoChar != 0; }
     public char[] getPassword() { return getText() == null ? new char[0] : getText().toCharArray(); }
 }

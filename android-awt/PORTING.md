@@ -338,7 +338,7 @@ classes short of parity that way, with the open card that owns each:
 |---|---|---|
 | `GlyphVector` over Android glyphs, `Font.createGlyphVector`/`layoutGlyphVector` | in review | #25 |
 | `TextLayout` (measuring stub), `LineBreakMeasurer`, `TextMeasurer` (absent) | short | #26 |
-| `JInternalFrame`, `JDesktopPane` (partial), `DefaultDesktopManager` (absent) | short | #56 |
+| `JInternalFrame`, `JDesktopPane`, `DesktopManager`, `DefaultDesktopManager` | in review | #56 |
 | `BasicInternalFrameUI`, `BasicInternalFrameTitlePane`, `BasicDesktopPaneUI`, `BasicDesktopIconUI` | absent | #143 |
 | `GapContent`, `StringContent`, `AbstractDocument`/`DefaultStyledDocument` internals | ported (`AbstractDocument` keeps a `PlainDocument` line map for subclasses that do not declare `getDefaultRootElement`, until `PlainDocument`/`HTMLDocument` are ported; `updateBidi` re-runs over the whole document) | #144 |
 | `GlyphView`, `PlainView`, `FieldView`, `WrappedPlainView` and the rest of the view tree | absent | #66 |

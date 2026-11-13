@@ -27,9 +27,14 @@ package javax.swing;
 
 import java.awt.*;
 import java.beans.PropertyVetoException;
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
+import java.lang.reflect.UndeclaredThrowableException;
 import javax.accessibility.Accessible;
 import javax.accessibility.AccessibleContext;
 import javax.accessibility.AccessibleRole;
+import javax.accessibility.AccessibleValue;
 import javax.swing.event.InternalFrameEvent;
 import javax.swing.event.InternalFrameListener;
 import javax.swing.plaf.DesktopIconUI;
@@ -42,18 +47,27 @@ import javax.swing.plaf.InternalFrameUI;
  *
  * <p>The shadow port keeps the 8u state machine (the closed, icon, maximum and
  * selected properties, their vetoable changes, the internal frame events and the
- * default close operation). The desktop icon and the desktop manager are not
- * ported: there is no JDesktopPane on Android, so the frame lays itself out in
- * whatever container holds it.
+ * default close operation), the desktop icon and the desktop pane's
+ * <code>DesktopManager</code>. No <code>InternalFrameUI</code> delegate is ported
+ * yet, so while none is installed the frame drives the desktop manager from its
+ * property changes itself, as 8u's BasicInternalFrameUI does.
  *
  * @author David Kloba
  * @author Rich Schiavi
  */
 @SuppressWarnings("serial") // Same-version serialization only
 public class JInternalFrame extends JComponent implements
-        WindowConstants,
+        Accessible, WindowConstants,
         RootPaneContainer
 {
+    /** The cursor last set through setCursor, before a resize border changed it. */
+    private Cursor lastCursor;
+
+    /** Set by DefaultDesktopManager while the frame is dragged. */
+    boolean isDragging = false;
+    /** A paint arrived while dragging. */
+    boolean danger = false;
+
     /**
      * The <code>JRootPane</code> instance that manages the
      * content pane
@@ -306,6 +320,56 @@ public class JInternalFrame extends JComponent implements
         return (JDesktopPane) p;
     }
 
+    /** BasicInternalFrameUI's fallback manager, for frames outside any desktop. */
+    private static DesktopManager sharedDesktopManager;
+
+    /**
+     * Does what 8u's BasicInternalFrameUI property listener does for the closed, icon,
+     * maximum and selected properties, but only while no <code>InternalFrameUI</code> is
+     * installed: with a delegate installed, the delegate drives the desktop manager. It
+     * runs just before the property change fires, where the delegate's listener (the
+     * first one registered) would run.
+     */
+    private void driveDesktopManager(String property, Boolean oldValue, Boolean newValue) {
+        if (ui != null) {
+            return;
+        }
+        DesktopManager manager;
+        JDesktopPane desktop = getDesktopPane();
+        if (desktop != null && desktop.getDesktopManager() != null) {
+            manager = desktop.getDesktopManager();
+        } else {
+            if (sharedDesktopManager == null) {
+                sharedDesktopManager = new DefaultDesktopManager();
+            }
+            manager = sharedDesktopManager;
+        }
+        boolean on = newValue.booleanValue();
+        if (property == IS_CLOSED_PROPERTY) {
+            if (on) {
+                manager.closeFrame(this);
+            }
+        } else if (property == IS_MAXIMUM_PROPERTY) {
+            if (on) {
+                manager.maximizeFrame(this);
+            } else {
+                manager.minimizeFrame(this);
+            }
+        } else if (property == IS_ICON_PROPERTY) {
+            if (on) {
+                manager.iconifyFrame(this);
+            } else {
+                manager.deiconifyFrame(this);
+            }
+        } else if (property == IS_SELECTED_PROPERTY) {
+            if (on && !oldValue.booleanValue()) {
+                manager.activateFrame(this);
+            } else if (!on && oldValue.booleanValue()) {
+                manager.deactivateFrame(this);
+            }
+        }
+    }
+
     /**
      * Returns whether calls to <code>add</code> and
      * <code>setLayout</code> are forwarded to the <code>contentPane</code>.
@@ -322,37 +386,27 @@ public class JInternalFrame extends JComponent implements
         rootPaneCheckingEnabled = enabled;
     }
 
-    /*
-     * 8u forwards through addImpl; the shadow Container has no single add funnel, so
-     * each add form forwards to the content pane while root pane checking is on.
+    /**
+     * Adds the specified child <code>Component</code>.
+     * This method is overridden to conditionally forward calls to the
+     * <code>contentPane</code>.
+     * By default, children are added to the <code>contentPane</code> instead
+     * of the frame.
+     *
+     * @param comp the component to be enhanced
+     * @param constraints the constraints to be respected
+     * @param index the index
+     * @exception IllegalArgumentException if <code>index</code> is invalid
+     * @exception IllegalArgumentException if adding the container's parent
+     *                  to itself
+     * @exception IllegalArgumentException if adding a window to a container
      */
-    public Component add(Component comp) {
-        if (isRootPaneCheckingEnabled()) {
-            return getContentPane().add(comp);
-        }
-        return super.add(comp);
-    }
-
-    public Component add(Component comp, int index) {
-        if (isRootPaneCheckingEnabled()) {
-            return getContentPane().add(comp, index);
-        }
-        return super.add(comp, index);
-    }
-
-    public void add(Component comp, Object constraints) {
-        if (isRootPaneCheckingEnabled()) {
-            getContentPane().add(comp, constraints);
-        } else {
-            super.add(comp, constraints);
-        }
-    }
-
-    public void add(Component comp, Object constraints, int index) {
+    protected void addImpl(Component comp, Object constraints, int index) {
         if (isRootPaneCheckingEnabled()) {
             getContentPane().add(comp, constraints, index);
-        } else {
-            super.add(comp, constraints, index);
+        }
+        else {
+            super.addImpl(comp, constraints, index);
         }
     }
 
@@ -547,6 +601,7 @@ public class JInternalFrame extends JComponent implements
         if (isClosed) {
           setVisible(false);
         }
+        driveDesktopManager(IS_CLOSED_PROPERTY, oldValue, newValue);
         firePropertyChange(IS_CLOSED_PROPERTY, oldValue, newValue);
         if (isClosed) {
           dispose();
@@ -617,6 +672,7 @@ public class JInternalFrame extends JComponent implements
         Boolean newValue = b ? Boolean.TRUE : Boolean.FALSE;
         fireVetoableChange(IS_ICON_PROPERTY, oldValue, newValue);
         isIcon = b;
+        driveDesktopManager(IS_ICON_PROPERTY, oldValue, newValue);
         firePropertyChange(IS_ICON_PROPERTY, oldValue, newValue);
         if (b)
           fireInternalFrameEvent(InternalFrameEvent.INTERNAL_FRAME_ICONIFIED);
@@ -664,6 +720,7 @@ public class JInternalFrame extends JComponent implements
            property listeners that, for some reason, test it will
            get it wrong... See, for example, getNormalBounds() */
         isMaximum = b;
+        driveDesktopManager(IS_MAXIMUM_PROPERTY, oldValue, newValue);
         firePropertyChange(IS_MAXIMUM_PROPERTY, oldValue, newValue);
     }
 
@@ -730,6 +787,7 @@ public class JInternalFrame extends JComponent implements
         }
 
         isSelected = selected;
+        driveDesktopManager(IS_SELECTED_PROPERTY, oldValue, newValue);
         firePropertyChange(IS_SELECTED_PROPERTY, oldValue, newValue);
         if (isSelected)
           fireInternalFrameEvent(InternalFrameEvent.INTERNAL_FRAME_ACTIVATED);
@@ -848,9 +906,24 @@ public class JInternalFrame extends JComponent implements
 
     /** Requests the internal frame to restore focus to the last subcomponent that had focus. */
     public void restoreSubcomponentFocus() {
-        Component c = getMostRecentFocusOwner();
-        if (c != null) {
-            c.requestFocus();
+        if (isIcon()) {
+            // 8u's SwingUtilities2.compositeRequestFocus; the icon is no focus cycle root,
+            // so that is a plain request.
+            getDesktopIcon().requestFocus();
+        } else {
+            Component component = KeyboardFocusManager.getCurrentKeyboardFocusManager().
+                    getPermanentFocusOwner();
+            if ((component == null) || !SwingUtilities.isDescendingFrom(component, this)) {
+                // Focus requests are asynchronous, so lastFocusOwner is set at once,
+                // assuming the request succeeds.
+                lastFocusOwner = getMostRecentFocusOwner();
+                if (lastFocusOwner == null) {
+                    // Make sure focus is restored somewhere, so that no focused component
+                    // stays behind in another frame while this one is selected.
+                    lastFocusOwner = getContentPane();
+                }
+                lastFocusOwner.requestFocus();
+            }
         }
     }
 
@@ -955,6 +1028,7 @@ public class JInternalFrame extends JComponent implements
                                    Boolean.TRUE);
                 isClosed = true;
                 setVisible(false);
+                driveDesktopManager(IS_CLOSED_PROPERTY, Boolean.FALSE, Boolean.TRUE);
                 firePropertyChange(IS_CLOSED_PROPERTY, Boolean.FALSE,
                                    Boolean.TRUE);
                 dispose();
@@ -1022,9 +1096,14 @@ public class JInternalFrame extends JComponent implements
 
         /* icon default visibility is false; set it to true so that it shows
            up when user iconifies frame */
-        moveToFront();
+        getDesktopIcon().setVisible(true);
 
-        super.setVisible(true);
+        toFront();
+        superSetVisible(true);
+
+        if (isIcon) {
+            return;
+        }
 
         if (!isSelected()) {
             try {
@@ -1033,20 +1112,75 @@ public class JInternalFrame extends JComponent implements
         }
     }
 
+    /** Hides this internal frame and, when it is iconified, its desktop icon. */
     @SuppressWarnings("deprecation")
     public void hide() {
-        super.setVisible(false);
+        if (isIcon()) {
+            getDesktopIcon().setVisible(false);
+        }
+        superSetVisible(false);
+    }
+
+    /*
+     * 8u's show() and hide() end in super.show() and super.hide(). The shadow Component
+     * has neither and its setVisible never calls back into show()/hide(), so there the
+     * frame sets its visibility through super.setVisible. On a JDK base class (the host
+     * contracts' patched run) setVisible does call back into show(boolean), so a
+     * super.setVisible there would recurse; the super calls are made through method
+     * handles instead, resolved only where the base class declares them.
+     */
+    private static final MethodHandle SUPER_SHOW = superVisibilityMethod("show");
+    private static final MethodHandle SUPER_HIDE = superVisibilityMethod("hide");
+
+    private static MethodHandle superVisibilityMethod(String name) {
+        try {
+            return MethodHandles.lookup().findSpecial(JComponent.class, name,
+                    MethodType.methodType(void.class), JInternalFrame.class);
+        } catch (NoSuchMethodException e) {
+            return null;
+        } catch (IllegalAccessException e) {
+            return null;
+        }
+    }
+
+    /** The base class's show() or hide(): <code>super.setVisible</code> on the shadow. */
+    private void superSetVisible(boolean b) {
+        MethodHandle superCall = b ? SUPER_SHOW : SUPER_HIDE;
+        if (superCall == null) {
+            super.setVisible(b);
+            return;
+        }
+        try {
+            superCall.invoke(this);
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Error e) {
+            throw e;
+        } catch (Throwable t) {
+            throw new UndeclaredThrowableException(t);
+        }
     }
 
     /**
-     * 8u's Component.setVisible(true) routes through show(); the shadow Component does
-     * not, so the opened event and the selection are driven from here as well.
+     * 8u's Component.setVisible routes through show() and hide(); the shadow Component
+     * does not, so this does it here and those two set the visibility through super.
      */
     public void setVisible(boolean b) {
-        if (b && !isVisible() && rootPane != null) {
+        if (SUPER_SHOW != null) {
+            // A JDK base class routes this through show() and hide() itself.
+            super.setVisible(b);
+            return;
+        }
+        if (b == isVisible()) {
+            return;
+        }
+        if (rootPane == null || desktopIcon == null) {
+            // Still in the constructor: 8u's show/hide would touch the icon it has not made.
+            super.setVisible(b);
+        } else if (b) {
             show();
         } else {
-            super.setVisible(b);
+            hide();
         }
     }
 
@@ -1067,6 +1201,7 @@ public class JInternalFrame extends JComponent implements
             } catch (PropertyVetoException pve) {}
         }
         if (!isClosed) {
+          driveDesktopManager(IS_CLOSED_PROPERTY, Boolean.FALSE, Boolean.TRUE);
           firePropertyChange(IS_CLOSED_PROPERTY, Boolean.FALSE, Boolean.TRUE);
           isClosed = true;
         }
@@ -1081,6 +1216,66 @@ public class JInternalFrame extends JComponent implements
     /** Sends this internal frame to the back. Same as <code>moveToBack</code>. */
     public void toBack() {
         moveToBack();
+    }
+
+    /**
+     * Moves and resizes this component.  Unlike other components,
+     * this implementation also forces re-layout, so that frame
+     * decorations such as the title bar are always redisplayed.
+     */
+    @SuppressWarnings("deprecation")
+    public void reshape(int x, int y, int width, int height) {
+        super.reshape(x, y, width, height);
+        validate();
+        repaint();
+    }
+
+    /**
+     * Returns the last <code>Cursor</code> that was set by the
+     * <code>setCursor</code> method that is not a resizable
+     * <code>Cursor</code>.
+     *
+     * @return the last non-resizable <code>Cursor</code>
+     * @since 1.6
+     */
+    public Cursor getLastCursor() {
+        return lastCursor;
+    }
+
+    /**
+     * {@inheritDoc}
+     * @since 1.6
+     */
+    public void setCursor(Cursor cursor) {
+        if (cursor == null) {
+            lastCursor = null;
+            super.setCursor(cursor);
+            return;
+        }
+        int type = cursor.getType();
+        // The resize cursors are the border's feedback, not the frame's own cursor.
+        if (!(type == Cursor.SW_RESIZE_CURSOR
+                || type == Cursor.SE_RESIZE_CURSOR
+                || type == Cursor.NW_RESIZE_CURSOR
+                || type == Cursor.NE_RESIZE_CURSOR
+                || type == Cursor.N_RESIZE_CURSOR
+                || type == Cursor.S_RESIZE_CURSOR
+                || type == Cursor.W_RESIZE_CURSOR
+                || type == Cursor.E_RESIZE_CURSOR)) {
+            lastCursor = cursor;
+        }
+        super.setCursor(cursor);
+    }
+
+    /**
+     * Overridden to allow optimized painting when the
+     * internal frame is being dragged.
+     */
+    protected void paintComponent(Graphics g) {
+        if (isDragging) {
+            danger = true;
+        }
+        super.paintComponent(g);
     }
 
     /**
@@ -1133,8 +1328,7 @@ public class JInternalFrame extends JComponent implements
         } else defaultCloseOperationString = "";
         String openedString = (opened ? "true" : "false");
 
-        // The shadow Component has no paramString; the bounds stand in for its prefix.
-        return getX() + "," + getY() + "," + getWidth() + "x" + getHeight() +
+        return super.paramString() +
         ",closable=" + closableString +
         ",defaultCloseOperation=" + defaultCloseOperationString +
         ",frameIcon=" + frameIconString +
@@ -1149,6 +1343,109 @@ public class JInternalFrame extends JComponent implements
         ",rootPane=" + rootPaneString +
         ",rootPaneCheckingEnabled=" + rootPaneCheckingEnabledString +
         ",title=" + titleString;
+    }
+
+    /**
+     * Gets the <code>AccessibleContext</code> associated with this
+     * <code>JInternalFrame</code>.
+     *
+     * @return an <code>AccessibleJInternalFrame</code> that serves as the
+     *         <code>AccessibleContext</code> of this
+     *         <code>JInternalFrame</code>
+     */
+    public AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJInternalFrame();
+        }
+        return accessibleContext;
+    }
+
+    /**
+     * This class implements accessibility support for the
+     * <code>JInternalFrame</code> class.
+     */
+    protected class AccessibleJInternalFrame extends AccessibleJComponent
+        implements AccessibleValue {
+
+        /**
+         * Get the accessible name of this object.
+         *
+         * @return the localized name of the object -- can be
+         *         <code>null</code> if this object does not have a name
+         */
+        public String getAccessibleName() {
+            String name = accessibleName;
+
+            if (name == null) {
+                name = (String) getClientProperty(AccessibleContext.ACCESSIBLE_NAME_PROPERTY);
+            }
+            if (name == null) {
+                name = getTitle();
+            }
+            return name;
+        }
+
+        /**
+         * Get the role of this object.
+         *
+         * @return an instance of AccessibleRole describing the role of the
+         * object
+         */
+        public AccessibleRole getAccessibleRole() {
+            return AccessibleRole.INTERNAL_FRAME;
+        }
+
+        /**
+         * Gets the AccessibleValue associated with this object.
+         *
+         * @return this object
+         */
+        public AccessibleValue getAccessibleValue() {
+            return this;
+        }
+
+        /**
+         * Get the value of this object as a Number.
+         *
+         * @return value of the object -- can be <code>null</code> if this object does not
+         * have a value
+         */
+        public Number getCurrentAccessibleValue() {
+            return Integer.valueOf(getLayer());
+        }
+
+        /**
+         * Set the value of this object as a Number.
+         *
+         * @return <code>true</code> if the value was set
+         */
+        public boolean setCurrentAccessibleValue(Number n) {
+            if (n == null) {
+                return false;
+            }
+            setLayer(Integer.valueOf(n.intValue()));
+            return true;
+        }
+
+        /**
+         * Get the minimum value of this object as a Number.
+         *
+         * @return Minimum value of the object; <code>null</code> if this object does not
+         * have a minimum value
+         */
+        public Number getMinimumAccessibleValue() {
+            return Integer.MIN_VALUE;
+        }
+
+        /**
+         * Get the maximum value of this object as a Number.
+         *
+         * @return Maximum value of the object; <code>null</code> if this object does not
+         * have a maximum value
+         */
+        public Number getMaximumAccessibleValue() {
+            return Integer.MAX_VALUE;
+        }
     }
 
     /**
@@ -1264,7 +1561,8 @@ public class JInternalFrame extends JComponent implements
          * This class implements accessibility support for the
          * <code>JInternalFrame.JDesktopIcon</code> class.
          */
-        protected class AccessibleJDesktopIcon extends AccessibleJComponent {
+        protected class AccessibleJDesktopIcon extends AccessibleJComponent
+            implements AccessibleValue {
             /**
              * Gets the role of this object.
              *
@@ -1273,6 +1571,68 @@ public class JInternalFrame extends JComponent implements
              */
             public AccessibleRole getAccessibleRole() {
                 return AccessibleRole.DESKTOP_ICON;
+            }
+
+            /**
+             * Gets the AccessibleValue associated with this object.
+             *
+             * @return this object
+             */
+            public AccessibleValue getAccessibleValue() {
+                return this;
+            }
+
+            /** The icon's value is its frame's: the frame's layer. */
+            private AccessibleValue frameValue() {
+                JInternalFrame frame = JDesktopIcon.this.getInternalFrame();
+                return frame == null ? null
+                        : frame.getAccessibleContext().getAccessibleValue();
+            }
+
+            /**
+             * Gets the value of this object as a <code>Number</code>.
+             *
+             * @return value of the object -- can be <code>null</code> if this object does not
+             * have a value
+             */
+            public Number getCurrentAccessibleValue() {
+                AccessibleValue v = frameValue();
+                return v != null ? v.getCurrentAccessibleValue() : null;
+            }
+
+            /**
+             * Sets the value of this object as a <code>Number</code>.
+             *
+             * @return <code>true</code> if the value was set
+             */
+            public boolean setCurrentAccessibleValue(Number n) {
+                if (n == null) {
+                    return false;
+                }
+                AccessibleValue v = frameValue();
+                return v != null && v.setCurrentAccessibleValue(n);
+            }
+
+            /**
+             * Gets the minimum value of this object as a <code>Number</code>.
+             *
+             * @return minimum value of the object; <code>null</code> if this object does not
+             * have a minimum value
+             */
+            public Number getMinimumAccessibleValue() {
+                AccessibleValue v = frameValue();
+                return v != null ? v.getMinimumAccessibleValue() : null;
+            }
+
+            /**
+             * Gets the maximum value of this object as a <code>Number</code>.
+             *
+             * @return maximum value of the object; <code>null</code> if this object does not
+             * have a maximum value
+             */
+            public Number getMaximumAccessibleValue() {
+                AccessibleValue v = frameValue();
+                return v != null ? v.getMaximumAccessibleValue() : null;
             }
         }
     }
