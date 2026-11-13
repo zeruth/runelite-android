@@ -1,10 +1,58 @@
+/*
+ * Copyright (c) 2026, Tyler Bochard
+ * All rights reserved.
+ *
+ * Part of android-awt, the Android shadow of the desktop JDK surface used by
+ * runelite-android. Original work of this project, not derived from OpenJDK;
+ * licensed under the BSD 2-Clause License (see the LICENSE file at the
+ * repository root). Files ported from OpenJDK carry the OpenJDK header instead;
+ * see android-awt/LICENSE.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ *    list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
 package javax.swing;
 
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.Frame;
 
-public class JFrame extends Frame implements RootPaneContainer {
+public class JFrame extends Frame implements javax.accessibility.Accessible, RootPaneContainer {
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJFrame();
+        }
+        return accessibleContext;
+    }
+
+    /** Accessibility support for Swing frames: a FRAME context named by the title. */
+    protected class AccessibleJFrame extends AccessibleAWTFrame {
+        public String getAccessibleName() {
+            if (accessibleName != null) {
+                return accessibleName;
+            }
+            String title = getTitle();
+            return title == null ? super.getAccessibleName() : title;
+        }
+    }
     private static final long serialVersionUID = 1L;
 
     public static final int EXIT_ON_CLOSE = 3;
@@ -21,6 +69,9 @@ public class JFrame extends Frame implements RootPaneContainer {
     public JFrame(String title, java.awt.GraphicsConfiguration gc) { super(title); initFrame(); }
 
     private void initFrame() {
+        // As JFrame.frameInit: window events must reach processWindowEvent (default close
+        // operation) even with no WindowListener registered.
+        enableEvents(java.awt.AWTEvent.KEY_EVENT_MASK | java.awt.AWTEvent.WINDOW_EVENT_MASK);
         // Real Frame defaults to BorderLayout — ContainableFrame.revalidateMinimumSize()
         // calls frame.getLayout().minimumLayoutSize(this), which NPEs without one and
         // aborts the entire validate cascade (ClientUI.Layout → ContainableFrame.revalidate
@@ -30,6 +81,35 @@ public class JFrame extends Frame implements RootPaneContainer {
         setLayout(new java.awt.BorderLayout());
         super.add(rootPane, -1);
         rootPane.setBounds(0, 0, getWidth(), getHeight());
+        if (isDefaultLookAndFeelDecorated()) {
+            boolean supportsWindowDecorations = UIManager.getLookAndFeel().getSupportsWindowDecorations();
+            if (supportsWindowDecorations) {
+                setUndecorated(true);
+                rootPane.setWindowDecorationStyle(JRootPane.FRAME);
+            }
+        }
+    }
+
+    // The JDK keeps this in the AppContext; the shadow has one application context.
+    private static volatile boolean defaultLookAndFeelDecorated;
+
+    /**
+     * Provides a hint as to whether or not newly created {@code JFrame}s
+     * should have their Window decorations (such as borders, widgets to
+     * close the window, title...) provided by the current look and feel.
+     * If {@code defaultLookAndFeelDecorated} is true, the current
+     * {@code LookAndFeel} supports providing window decorations, and the
+     * current window manager supports undecorated windows, then newly
+     * created {@code JFrame}s will have their Window decorations provided
+     * by the current {@code LookAndFeel}.
+     */
+    public static void setDefaultLookAndFeelDecorated(boolean defaultLookAndFeelDecorated) {
+        JFrame.defaultLookAndFeelDecorated = defaultLookAndFeelDecorated;
+    }
+
+    /** Returns true if newly created {@code JFrame}s should have their decorations provided by the look and feel. */
+    public static boolean isDefaultLookAndFeelDecorated() {
+        return defaultLookAndFeelDecorated;
     }
 
     @Override

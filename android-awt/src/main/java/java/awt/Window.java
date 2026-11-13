@@ -1,9 +1,39 @@
+/*
+ * Copyright (c) 2026, Tyler Bochard
+ * All rights reserved.
+ *
+ * Part of android-awt, the Android shadow of the desktop JDK surface used by
+ * runelite-android. Original work of this project, not derived from OpenJDK;
+ * licensed under the BSD 2-Clause License (see the LICENSE file at the
+ * repository root). Files ported from OpenJDK carry the OpenJDK header instead;
+ * see android-awt/LICENSE.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ *    list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
 package java.awt;
 
 import java.awt.image.BufferedImage;
 import java.util.concurrent.atomic.AtomicReference;
 
-public class Window extends Container {
+public class Window extends Container implements javax.accessibility.Accessible {
     private static final long serialVersionUID = 4497834738069338734L;
 
     public interface VisibilityHandler { void changed(Window window, boolean visible); }
@@ -18,6 +48,12 @@ public class Window extends Container {
     private Color windowBackground = new Color(0x1E1F22);
     private final Window owner;
     private boolean opened, disposed, autoRequestFocus = true, focusableWindowState = true;
+    /** Stands in for the JDK's peer: set by pack() and the first show, cleared by dispose(). */
+    private boolean hostPeer;
+    private volatile float opacity = 1.0f;
+    private volatile java.awt.Shape shape;
+    private boolean alwaysOnTop, locationByPlatform;
+    private Dialog.ModalExclusionType modalExclusionType = Dialog.ModalExclusionType.NO_EXCLUDE;
     private final java.util.List<java.awt.event.WindowListener> windowListeners = new java.util.concurrent.CopyOnWriteArrayList<>();
     private final java.util.List<java.awt.event.WindowFocusListener> windowFocusListeners = new java.util.concurrent.CopyOnWriteArrayList<>();
     private final java.util.List<java.awt.event.WindowStateListener> windowStateListeners = new java.util.concurrent.CopyOnWriteArrayList<>();
@@ -28,6 +64,8 @@ public class Window extends Container {
     public Window(Window owner, GraphicsConfiguration configuration) {
         this.owner = owner;
         visible = false;
+        // As the JDK's Window.init: a window is the root its children's getLocale() reaches.
+        locale = java.util.Locale.getDefault();
         LATEST.set(this);
         ALL_WINDOWS.add(new java.lang.ref.WeakReference<>(this));
     }
@@ -172,9 +210,18 @@ public class Window extends Container {
 
     @Override
     public void setBounds(int x, int y, int w, int h) {
+        // The JDK clears it for SET_BOUNDS and SET_LOCATION, never SET_SIZE: setSize (and so
+        // pack) does not come through here, so a platform-placed window keeps the flag.
+        locationByPlatform = false;
         super.setBounds(x, y, w, h);
         ensureBackbuffer();
         doLayout();
+    }
+
+    @Override
+    public void setLocation(int x, int y) {
+        locationByPlatform = false;
+        super.setLocation(x, y);
     }
 
     /**
@@ -200,6 +247,11 @@ public class Window extends Container {
      */
     public BufferedImage renderToBackbuffer() {
         ensureBackbuffer();
+        // The game canvas changes every frame, so the whole buffer is repainted regardless of
+        // what was marked and the region itself is not needed; taking it is what keeps it
+        // from growing between frames. Repaints raised by the layout and paint below land in
+        // the next frame's region.
+        javax.swing.RepaintManager.currentManager(this).hostTakeDirtyRegion(this);
         try {
             // Skip the sweep when the tree is already dirty — it's about to be relaid anyway.
             if (isValid()) {
@@ -213,6 +265,15 @@ public class Window extends Container {
         } catch (Throwable ignored) {}
         java.awt.Graphics2D g = backbuffer.createGraphics();
         try {
+            // The backbuffer is reused: a shaped or non-opaque window must start from clear
+            // pixels, or last frame's content would show through its transparent parts.
+            java.awt.Shape windowShape = shape;
+            if (windowShape != null || windowBackground.getAlpha() != 255) {
+                g.setComposite(java.awt.AlphaComposite.Clear);
+                g.fillRect(0, 0, backbuffer.getWidth(), backbuffer.getHeight());
+                g.setComposite(java.awt.AlphaComposite.SrcOver);
+            }
+            if (windowShape != null) g.clip(windowShape);
             g.setColor(windowBackground);
             g.fillRect(0, 0, backbuffer.getWidth(), backbuffer.getHeight());
             hostPaint(g, this);
@@ -408,17 +469,78 @@ public class Window extends Container {
 
     @Override
     public Color getBackground() { return windowBackground; }
+    /**
+     * Sets the background color of this window. As on the JDK, a background whose alpha is
+     * below 255 makes the window per-pixel translucent: it needs
+     * {@link GraphicsDevice.WindowTranslucency#PERPIXEL_TRANSLUCENT} and makes the root pane
+     * layers of a Swing window non-opaque. A {@code null} color is ignored here, because the
+     * host always needs a color to clear the backbuffer with.
+     */
     @Override
-    public void setBackground(Color c) { if (c != null) windowBackground = c; }
+    public void setBackground(Color bgColor) {
+        if (bgColor == null) return;
+        Color oldBg = windowBackground;
+        if (oldBg.equals(bgColor)) return;
+        int oldAlpha = oldBg.getAlpha();
+        int alpha = bgColor.getAlpha();
+        if (oldAlpha == 255 && alpha < 255) {
+            GraphicsConfiguration gc = getGraphicsConfiguration();
+            GraphicsDevice gd = gc.getDevice();
+            if (gd != null && gd.getFullScreenWindow() == this) {
+                throw new IllegalComponentStateException("Making full-screen window non opaque is not supported.");
+            }
+            if (!gc.isTranslucencyCapable() && (gd == null || gd.getTranslucencyCapableGC() == null)) {
+                throw new UnsupportedOperationException("PERPIXEL_TRANSLUCENT translucency is not supported");
+            }
+            windowBackground = bgColor;
+            setLayersOpaque(this, false);
+        } else {
+            windowBackground = bgColor;
+            if (oldAlpha < 255 && alpha == 255) setLayersOpaque(this, true);
+        }
+        repaint();
+    }
+
+    private static void setLayersOpaque(Component component, boolean isOpaque) {
+        if (component instanceof javax.swing.RootPaneContainer) {
+            javax.swing.JRootPane root = ((javax.swing.RootPaneContainer) component).getRootPane();
+            if (root == null) return;
+            javax.swing.JLayeredPane lp = root.getLayeredPane();
+            Container c = root.getContentPane();
+            javax.swing.JComponent content = (c instanceof javax.swing.JComponent) ? (javax.swing.JComponent) c : null;
+            if (lp != null) lp.setOpaque(isOpaque);
+            root.setOpaque(isOpaque);
+            if (content != null) {
+                content.setOpaque(isOpaque);
+                // One level down for an embedded RootPaneContainer (a JApplet), as the JDK does.
+                if (content.getComponentCount() > 0) {
+                    Component child = content.getComponent(0);
+                    if (child instanceof javax.swing.RootPaneContainer) setLayersOpaque(child, isOpaque);
+                }
+            }
+        }
+    }
+
+    /**
+     * A window is opaque unless its background color is translucent.
+     *
+     * @since 1.7
+     */
+    public boolean isOpaque() {
+        Color bg = getBackground();
+        return bg != null ? bg.getAlpha() == 255 : true;
+    }
 
     public void pack() {
         // Walk our own tree for a preferred size. If it's positive, snap our bounds to it.
         // Window itself contains rootPane (for JFrame) — whose preferred size cascades down
         // through BorderLayout → contentPane → ClientUI.Layout → clientPanel/sidebar.
+        hostPeer = true;
         Dimension d = getPreferredSize();
         if (d != null && d.width > 0 && d.height > 0) {
             setSize(d.width, d.height);
         }
+        try { validate(); } catch (Throwable ignored) {}
     }
     public void show() { setVisible(true); }
     public void dispose() {
@@ -426,17 +548,26 @@ public class Window extends Container {
         for (Window child : getOwnedWindows()) child.dispose();
         if (!disposed) {
             disposed = true;
-            dispatchEvent(new java.awt.event.WindowEvent(this, java.awt.event.WindowEvent.WINDOW_CLOSED));
+            // The JDK posts WINDOW_CLOSED only for a window that was displayable.
+            boolean wasDisplayable = hostPeer;
+            hostPeer = false;
+            if (wasDisplayable) dispatchEvent(new java.awt.event.WindowEvent(this, java.awt.event.WindowEvent.WINDOW_CLOSED));
         }
     }
+
+    /** Whether the JDK would have a native peer for this window: packed or shown, not disposed. */
+    boolean hasHostPeer() { return hostPeer && !disposed; }
 
     @Override
     public void setVisible(boolean v) {
         boolean wasVisible = isVisible();
-        if (v) disposed = false;
+        if (v) { disposed = false; hostPeer = true; }
         super.setVisible(v);
+        // Every Swing top-level reaches the host, which picks what it presents: SwingDialogs skips
+        // RuneLite's ContainableFrame and SplashScreen (the main activity draws those full-screen)
+        // and gives plugin JFrames, JDialogs and JWindows a host window.
         VisibilityHandler handler = visibilityHandler;
-        if (handler != null && (this instanceof javax.swing.JWindow || this instanceof javax.swing.JDialog)) handler.changed(this, v);
+        if (handler != null && this instanceof javax.swing.RootPaneContainer) handler.changed(this, v);
         if (v && !wasVisible) {
             // Real Swing validates the tree on first showing.
             try { validate(); } catch (Throwable ignored) {}
@@ -444,11 +575,61 @@ public class Window extends Container {
                 opened = true;
                 dispatchEvent(new java.awt.event.WindowEvent(this, java.awt.event.WindowEvent.WINDOW_OPENED));
             }
-            if (autoRequestFocus) requestFocusInWindow();
+            if (autoRequestFocus) activate();
         }
     }
+
+    /**
+     * What native activation does on the desktop: focus the most recent focus owner,
+     * else the policy's initial component, cause ACTIVATION. With nothing focusable
+     * the window itself takes focus, since there is no native activation to make it
+     * the focused Window on its own.
+     */
+    private void activate() {
+        if (!isFocusableWindow()) return;
+        Component toFocus = getMostRecentFocusOwner();
+        if (toFocus != null && toFocus != this && toFocus.requestFocusInWindow(java.awt.event.FocusEvent.Cause.ACTIVATION)) return;
+        requestFocusInWindow(java.awt.event.FocusEvent.Cause.ACTIVATION);
+    }
+
+    /** Returns the focus owner when this Window is focused, else null. */
+    public Component getFocusOwner() {
+        return isFocused() ? KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner() : null;
+    }
+
+    /**
+     * Returns the component that gets focus when this Window is focused: the focus
+     * owner, the last one it had, or the policy's initial component.
+     */
+    public Component getMostRecentFocusOwner() {
+        if (isFocused()) return getFocusOwner();
+        Component mostRecent = KeyboardFocusManager.getMostRecentFocusOwner(this);
+        if (mostRecent != null) return mostRecent;
+        return isFocusableWindow() ? getFocusTraversalPolicy().getInitialComponent(this) : null;
+    }
+
+    /** Windows are always focus cycle roots. */
+    @Override public final boolean isFocusCycleRoot() { return true; }
+    /** Does nothing: Windows are always focus cycle roots. */
+    @Override public final void setFocusCycleRoot(boolean focusCycleRoot) {}
+    /** Always null: a Window has no focus cycle root ancestor. */
+    @Override public final Container getFocusCycleRootAncestor() { return null; }
     @Override public boolean isShowing() { return isVisible() && !disposed; }
-    @Override public boolean isDisplayable() { return !disposed; }
+    /** As on the JDK: displayable from {@code pack()} or the first show until {@code dispose()}. */
+    @Override public boolean isDisplayable() { return hasHostPeer(); }
+
+    /**
+     * Indicates if this container is a validate root. {@code Window} objects are the validate
+     * roots, and, therefore, they override this method to return {@code true}.
+     *
+     * @return {@code true}
+     * @since 1.7
+     */
+    @Override
+    public boolean isValidateRoot() {
+        return true;
+    }
+
     public boolean isActive() { return KeyboardFocusManager.getCurrentKeyboardFocusManager().getActiveWindow() == this; }
     public boolean isFocused() { return KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusedWindow() == this; }
 
@@ -467,7 +648,8 @@ public class Window extends Container {
     public Window[] getOwnedWindows() { return getAllWindows().stream().filter(w -> w.owner == this).toArray(Window[]::new); }
     public static Window[] getWindows() { return getAllWindows().toArray(new Window[0]); }
     public static Window[] getOwnerlessWindows() { return getAllWindows().stream().filter(w -> w.owner == null).toArray(Window[]::new); }
-    public void toFront() { if (isVisible() && autoRequestFocus) requestFocusInWindow(); }
+    public void toFront() { if (isVisible() && autoRequestFocus) activate(); }
+    /** Deliberate no-op: the activity stacks host windows in show order and cannot lower one. */
     public void toBack() {}
 
     public void addWindowListener(java.awt.event.WindowListener l) { if (l != null) windowListeners.add(l); }
@@ -479,6 +661,28 @@ public class Window extends Container {
     public void addWindowStateListener(java.awt.event.WindowStateListener l) { if (l != null) windowStateListeners.add(l); }
     public void removeWindowStateListener(java.awt.event.WindowStateListener l) { windowStateListeners.remove(l); }
     public java.awt.event.WindowStateListener[] getWindowStateListeners() { return windowStateListeners.toArray(new java.awt.event.WindowStateListener[0]); }
+    @Override boolean eventEnabled(AWTEvent event) {
+        switch (event.getID()) {
+            case java.awt.event.WindowEvent.WINDOW_OPENED:
+            case java.awt.event.WindowEvent.WINDOW_CLOSING:
+            case java.awt.event.WindowEvent.WINDOW_CLOSED:
+            case java.awt.event.WindowEvent.WINDOW_ICONIFIED:
+            case java.awt.event.WindowEvent.WINDOW_DEICONIFIED:
+            case java.awt.event.WindowEvent.WINDOW_ACTIVATED:
+            case java.awt.event.WindowEvent.WINDOW_DEACTIVATED:
+                if ((eventMask & AWTEvent.WINDOW_EVENT_MASK) != 0 || !windowListeners.isEmpty()) return true;
+                return false;
+            case java.awt.event.WindowEvent.WINDOW_GAINED_FOCUS:
+            case java.awt.event.WindowEvent.WINDOW_LOST_FOCUS:
+                if ((eventMask & AWTEvent.WINDOW_FOCUS_EVENT_MASK) != 0 || !windowFocusListeners.isEmpty()) return true;
+                return false;
+            case java.awt.event.WindowEvent.WINDOW_STATE_CHANGED:
+                if ((eventMask & AWTEvent.WINDOW_STATE_EVENT_MASK) != 0 || !windowStateListeners.isEmpty()) return true;
+                return false;
+            default:
+                return super.eventEnabled(event);
+        }
+    }
     @Override protected void processEvent(AWTEvent event) {
         if (event instanceof java.awt.event.WindowEvent) {
             java.awt.event.WindowEvent windowEvent = (java.awt.event.WindowEvent) event;
@@ -506,21 +710,190 @@ public class Window extends Container {
     protected void processWindowStateEvent(java.awt.event.WindowEvent event) {
         for (java.awt.event.WindowStateListener l : windowStateListeners) l.windowStateChanged(event);
     }
-    public void setOpacity(float opacity) {}
-    public float getOpacity() { return 1.0f; }
-    public void setShape(java.awt.Shape shape) {}
-    public java.awt.Shape getShape() { return null; }
+    /**
+     * Sets the opacity of the window, with the JDK's checks: the value must lie in
+     * [0, 1], and a value below 1 needs {@link GraphicsDevice.WindowTranslucency#TRANSLUCENT}
+     * and a window that is not full-screen. Windows the host presents through its dialog
+     * bridge are drawn at this opacity; the client frame is drawn by the activity at full
+     * opacity (RuneLite does not apply its window opacity setting on Android).
+     *
+     * @since 1.7
+     */
+    public void setOpacity(float opacity) {
+        synchronized (getTreeLock()) {
+            if (opacity < 0.0f || opacity > 1.0f) {
+                throw new IllegalArgumentException("The value of opacity should be in the range [0.0f .. 1.0f].");
+            }
+            if (opacity < 1.0f) {
+                GraphicsDevice gd = getGraphicsConfiguration().getDevice();
+                if (gd != null && gd.getFullScreenWindow() == this) {
+                    throw new IllegalComponentStateException("Setting opacity for full-screen window is not supported.");
+                }
+                if (gd == null || !gd.isWindowTranslucencySupported(GraphicsDevice.WindowTranslucency.TRANSLUCENT)) {
+                    throw new UnsupportedOperationException("TRANSLUCENT translucency is not supported.");
+                }
+            }
+            this.opacity = opacity;
+        }
+        repaint();
+    }
+
+    /** @since 1.7 */
+    public float getOpacity() { return opacity; }
+
+    /**
+     * Sets the shape of the window; the host backbuffer is cleared outside it. A non-null
+     * shape needs {@link GraphicsDevice.WindowTranslucency#PERPIXEL_TRANSPARENT}.
+     *
+     * @since 1.7
+     */
+    public void setShape(java.awt.Shape shape) {
+        synchronized (getTreeLock()) {
+            if (shape != null) {
+                GraphicsDevice gd = getGraphicsConfiguration().getDevice();
+                if (gd != null && gd.getFullScreenWindow() == this) {
+                    throw new IllegalComponentStateException("Setting shape for full-screen window is not supported.");
+                }
+                if (gd == null || !gd.isWindowTranslucencySupported(GraphicsDevice.WindowTranslucency.PERPIXEL_TRANSPARENT)) {
+                    throw new UnsupportedOperationException("PERPIXEL_TRANSPARENT translucency is not supported.");
+                }
+            }
+            this.shape = (shape == null) ? null : new java.awt.geom.Path2D.Float(shape);
+        }
+        repaint();
+    }
+
+    /** Returns a copy of the window shape, or {@code null}. @since 1.7 */
+    public java.awt.Shape getShape() {
+        java.awt.Shape current = shape;
+        return current == null ? null : new java.awt.geom.Path2D.Float(current);
+    }
+
     public void setAutoRequestFocus(boolean autoRequestFocus) { this.autoRequestFocus = autoRequestFocus; }
     public boolean isAutoRequestFocus() { return autoRequestFocus; }
-    public void setAlwaysOnTop(boolean alwaysOnTop) {}
-    public boolean isAlwaysOnTop() { return false; }
-    public boolean isAlwaysOnTopSupported() { return false; }
-    public boolean isFocusableWindow() { return focusableWindowState && isFocusable(); }
-    public void setFocusableWindowState(boolean state) { focusableWindowState = state; if (!state) KeyboardFocusManager.getCurrentKeyboardFocusManager().clearFocusIn(this); }
+
+    /**
+     * Stores the always-on-top state and propagates it to owned windows, firing the
+     * {@code "alwaysOnTop"} property change as the JDK does. The toolkit reports the mode as
+     * unsupported, so, as the JDK specifies for that case, the host stacking does not change.
+     */
+    public final void setAlwaysOnTop(boolean alwaysOnTop) throws SecurityException {
+        boolean oldAlwaysOnTop;
+        synchronized (this) {
+            oldAlwaysOnTop = this.alwaysOnTop;
+            this.alwaysOnTop = alwaysOnTop;
+        }
+        if (oldAlwaysOnTop != alwaysOnTop) firePropertyChange("alwaysOnTop", oldAlwaysOnTop, alwaysOnTop);
+        for (Window owned : getOwnedWindows()) owned.setAlwaysOnTop(alwaysOnTop);
+    }
+    public final boolean isAlwaysOnTop() { return alwaysOnTop; }
+    public boolean isAlwaysOnTopSupported() { return Toolkit.getDefaultToolkit().isAlwaysOnTopSupported(); }
+
+    public final boolean isFocusableWindow() { return focusableWindowState && isFocusable(); }
+    public void setFocusableWindowState(boolean focusableWindowState) {
+        boolean oldFocusableWindowState = this.focusableWindowState;
+        this.focusableWindowState = focusableWindowState;
+        if (!focusableWindowState) KeyboardFocusManager.getCurrentKeyboardFocusManager().clearFocusIn(this);
+        firePropertyChange("focusableWindowState", oldFocusableWindowState, focusableWindowState);
+    }
     public boolean getFocusableWindowState() { return focusableWindowState; }
+
+    /**
+     * Whether the host should choose the location of this window when it is next shown.
+     * Any later {@code setLocation} or {@code setBounds} clears it, as on the JDK.
+     *
+     * @since 1.5
+     */
+    public void setLocationByPlatform(boolean locationByPlatform) {
+        synchronized (getTreeLock()) {
+            if (locationByPlatform && isShowing()) {
+                throw new IllegalComponentStateException("The window is showing on screen.");
+            }
+            this.locationByPlatform = locationByPlatform;
+        }
+    }
+    /** @since 1.5 */
+    public boolean isLocationByPlatform() {
+        synchronized (getTreeLock()) { return locationByPlatform; }
+    }
+
+    /**
+     * Sets the modal exclusion type; a {@code null} or unsupported type becomes
+     * {@link Dialog.ModalExclusionType#NO_EXCLUDE}.
+     *
+     * @since 1.6
+     */
+    public void setModalExclusionType(Dialog.ModalExclusionType exclusionType) {
+        if (exclusionType == null || !Toolkit.getDefaultToolkit().isModalExclusionTypeSupported(exclusionType)) {
+            exclusionType = Dialog.ModalExclusionType.NO_EXCLUDE;
+        }
+        modalExclusionType = exclusionType;
+    }
+    /** @since 1.6 */
+    public Dialog.ModalExclusionType getModalExclusionType() { return modalExclusionType; }
+
+    @Override public Toolkit getToolkit() { return Toolkit.getDefaultToolkit(); }
+
+    /**
+     * Deliberate no-op after the JDK's argument checks: component orientation is not
+     * modelled by this toolkit (every layout runs left-to-right), so the orientation the
+     * bundle names has nothing to apply to.
+     *
+     * @deprecated As of J2SE 1.4, replaced by {@code Component.applyComponentOrientation}.
+     */
+    @Deprecated
+    public void applyResourceBundle(java.util.ResourceBundle rb) {
+        java.util.Objects.requireNonNull(rb, "rb");
+    }
+
+    /** @deprecated As of J2SE 1.4, replaced by {@code Component.applyComponentOrientation}. */
+    @Deprecated
+    public void applyResourceBundle(String rbName) {
+        applyResourceBundle(java.util.ResourceBundle.getBundle(rbName));
+    }
     public void setLocationRelativeTo(Component c) {}
     public Type getType() { return Type.NORMAL; }
     public void setType(Type type) {}
 
     public enum Type { NORMAL, UTILITY, POPUP }
+
+    /** A window answers the default locale when none was set, instead of asking a parent. */
+    @Override
+    public java.util.Locale getLocale() {
+        java.util.Locale own = locale;
+        return own != null ? own : java.util.Locale.getDefault();
+    }
+
+    /** The focus owner when it lies inside this window: the JDK's "window is active" test. */
+    final boolean ownsFocus() {
+        for (Component c = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
+                c != null; c = c.getParent()) {
+            if (c == this) return true;
+        }
+        return false;
+    }
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleAWTWindow();
+        }
+        return accessibleContext;
+    }
+
+    /** Accessibility support for windows: role WINDOW, ACTIVE while it holds the focus. */
+    protected class AccessibleAWTWindow extends AccessibleAWTContainer {
+        private static final long serialVersionUID = 4215068635060671780L;
+
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.WINDOW;
+        }
+
+        public javax.accessibility.AccessibleStateSet getAccessibleStateSet() {
+            javax.accessibility.AccessibleStateSet states = super.getAccessibleStateSet();
+            if (ownsFocus()) {
+                states.add(javax.accessibility.AccessibleState.ACTIVE);
+            }
+            return states;
+        }
+    }
 }

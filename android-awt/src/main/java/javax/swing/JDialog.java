@@ -1,3 +1,33 @@
+/*
+ * Copyright (c) 2026, Tyler Bochard
+ * All rights reserved.
+ *
+ * Part of android-awt, the Android shadow of the desktop JDK surface used by
+ * runelite-android. Original work of this project, not derived from OpenJDK;
+ * licensed under the BSD 2-Clause License (see the LICENSE file at the
+ * repository root). Files ported from OpenJDK carry the OpenJDK header instead;
+ * see android-awt/LICENSE.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ *    list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
 package javax.swing;
 
 import java.awt.Component;
@@ -6,7 +36,25 @@ import java.awt.Dialog;
 import java.awt.Frame;
 import java.awt.Window;
 
-public class JDialog extends Dialog implements RootPaneContainer {
+public class JDialog extends Dialog implements javax.accessibility.Accessible, RootPaneContainer {
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJDialog();
+        }
+        return accessibleContext;
+    }
+
+    /** Accessibility support for Swing dialogs: a DIALOG context named by the title. */
+    protected class AccessibleJDialog extends AccessibleAWTDialog {
+        public String getAccessibleName() {
+            if (accessibleName != null) {
+                return accessibleName;
+            }
+            String title = getTitle();
+            return title == null ? super.getAccessibleName() : title;
+        }
+    }
     private static final long serialVersionUID = 1L;
 
     public static final int DO_NOTHING_ON_CLOSE = 0;
@@ -38,8 +86,34 @@ public class JDialog extends Dialog implements RootPaneContainer {
     }
 
     private void initDialog() {
+        // As JDialog.dialogInit: processWindowEvent runs the default close operation.
+        enableEvents(java.awt.AWTEvent.KEY_EVENT_MASK | java.awt.AWTEvent.WINDOW_EVENT_MASK);
         super.setLayout(new java.awt.BorderLayout());
         super.add(rootPane, -1);
+        if (isDefaultLookAndFeelDecorated()) {
+            boolean supportsWindowDecorations = UIManager.getLookAndFeel().getSupportsWindowDecorations();
+            if (supportsWindowDecorations) {
+                setUndecorated(true);
+                rootPane.setWindowDecorationStyle(JRootPane.PLAIN_DIALOG);
+            }
+        }
+    }
+
+    // The JDK keeps this in the AppContext; the shadow has one application context.
+    private static volatile boolean defaultLookAndFeelDecorated;
+
+    /**
+     * Provides a hint as to whether or not newly created {@code JDialog}s
+     * should have their Window decorations (such as borders, widgets to
+     * close the window, title...) provided by the current look and feel.
+     */
+    public static void setDefaultLookAndFeelDecorated(boolean defaultLookAndFeelDecorated) {
+        JDialog.defaultLookAndFeelDecorated = defaultLookAndFeelDecorated;
+    }
+
+    /** Returns true if newly created {@code JDialog}s should have their decorations provided by the look and feel. */
+    public static boolean isDefaultLookAndFeelDecorated() {
+        return defaultLookAndFeelDecorated;
     }
     @Override public Component add(Component c) { return c == rootPane ? super.add(c) : getContentPane().add(c); }
     @Override public Component add(Component c, int index) { return c == rootPane ? super.add(c, index) : getContentPane().add(c, index); }
