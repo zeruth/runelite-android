@@ -1,3 +1,33 @@
+/*
+ * Copyright (c) 2026, Tyler Bochard
+ * All rights reserved.
+ *
+ * Part of android-awt, the Android shadow of the desktop JDK surface used by
+ * runelite-android. Original work of this project, not derived from OpenJDK;
+ * licensed under the BSD 2-Clause License (see the LICENSE file at the
+ * repository root). Files ported from OpenJDK carry the OpenJDK header instead;
+ * see android-awt/LICENSE.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ *    list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
 package net.runelite.awt.impl;
 
 import android.media.AudioAttributes;
@@ -21,6 +51,8 @@ class PooledSourceDataLine implements SourceDataLine {
         volatile boolean unusable;
         volatile long written;
         long wrap, lastHead;
+        // Volume last pushed to the track, so a reused track is reset only when a line changed it.
+        float left = 1f, right = 1f;
         int calls;
         long idleGeneration;
         boolean idle, retired, stopped;
@@ -37,6 +69,7 @@ class PooledSourceDataLine implements SourceDataLine {
     private Slot slot;
     private long startFrame, written, closedPosition;
     private boolean running;
+    private volatile TrackControls controls;
     private final List<LineListener> listeners = new CopyOnWriteArrayList<>();
 
     PooledSourceDataLine(AudioFormat format, int bufferSize) { this.format=format; requestedBuffer=bufferSize; }
@@ -134,8 +167,17 @@ class PooledSourceDataLine implements SourceDataLine {
             if(bufferSize<=0 || format==null || format.getFrameSize()<=0 || bufferSize%format.getFrameSize()!=0)throw new IllegalArgumentException("Whole-frame buffer required");
             Slot acquired=acquire(format,bufferSize);this.format=format;requestedBuffer=bufferSize;
             slot=acquired;startFrame=acquired.written;written=0;closedPosition=0;running=false;
+            controls=new TrackControls(format.getChannels(),this::applyVolume);
         }
+        controls.apply();
         fire(LineEvent.Type.OPEN);
+    }
+    private void applyVolume(float left,float right) {
+        Slot current=borrow();if(current==null)return;
+        try {
+            synchronized(current) { if(current.left==left&&current.right==right)return; current.left=left;current.right=right; }
+            TrackControls.applyTo(current.track,left,right);
+        } finally { release(current); }
     }
     @Override public int write(byte[] data,int offset,int length) {
         Objects.requireNonNull(data);
@@ -201,9 +243,10 @@ class PooledSourceDataLine implements SourceDataLine {
         synchronized(this){if(slot==null)return;closedPosition=getLongFramePosition();previous=slot;slot=null;running=false;}
         returnSlot(previous);fire(LineEvent.Type.CLOSE);
     }
-    @Override public Control[] getControls(){return new Control[0];}
-    @Override public boolean isControlSupported(Control.Type type){return false;}
-    @Override public Control getControl(Control.Type type){throw new IllegalArgumentException("Unsupported control: "+type);}
+    // Controls exist once the line is open, as on the JDK's direct lines.
+    @Override public Control[] getControls(){TrackControls c=controls;return c==null?new Control[0]:c.controls();}
+    @Override public boolean isControlSupported(Control.Type type){TrackControls c=controls;return c!=null&&c.supports(type);}
+    @Override public Control getControl(Control.Type type){TrackControls c=controls;if(c==null)throw new IllegalArgumentException("Unsupported control: "+type);return c.get(type);}
     @Override public void addLineListener(LineListener listener){if(listener!=null)listeners.add(listener);}
     @Override public void removeLineListener(LineListener listener){listeners.remove(listener);}
     private void fire(LineEvent.Type type){LineEvent event=new LineEvent(this,type,getLongFramePosition());for(LineListener listener:listeners)listener.update(event);}
