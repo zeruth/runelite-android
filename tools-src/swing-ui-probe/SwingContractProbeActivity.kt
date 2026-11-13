@@ -44,7 +44,7 @@ class SwingContractProbeActivity : ComponentActivity() {
             insets
         }
         val commands = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        listOf("input", "choice", "form", "file", "multi", "directory", "save", "color", "combo", "hide combo", "dialog", "widgets", "graphics", "runtime", "audio", "dex", "client").chunked(5).forEach { row ->
+        listOf("input", "choice", "form", "file", "multi", "directory", "save", "color", "combo", "hide combo", "dialog", "widgets", "graphics", "canvas", "runtime", "audio", "dex", "client").chunked(5).forEach { row ->
             val bar = LinearLayout(this)
             row.forEach { command -> bar.addView(Button(this).apply { text = command; textSize = 11f; setOnClickListener { runProbe(command) } }, LinearLayout.LayoutParams(0, (48 * resources.displayMetrics.density).toInt(), 1f)) }
             commands.addView(bar)
@@ -135,6 +135,17 @@ class SwingContractProbeActivity : ComponentActivity() {
                             Class.forName("TestGraphicsCompatibility").getMethod("main", Array<String>::class.java).invoke(null, arrayOf(gallery.absolutePath))
                             output.writeText("PASS graphics contracts\n")
                             Log.i(TAG, "RESULT graphics passed")
+                        } catch (error: Throwable) { output.writeText(error.stackTraceToString()); throw error }
+                    }
+                    "canvas" -> {
+                        // Canvas.createBufferStrategy and Graphics2D.drawRenderableImage/drawRenderedImage
+                        // on android-awt's own Canvas and raster pipeline, which the host runner cannot patch.
+                        val output = File(filesDir, "canvas-result.txt")
+                        try {
+                            val strategy = Class.forName("TestCanvasBufferStrategyContracts").getMethod("run").invoke(null) as String
+                            Class.forName("TestRenderableContracts").getMethod("main", Array<String>::class.java).invoke(null, emptyArray<String>())
+                            output.writeText(strategy + "PASS renderable contracts\n")
+                            Log.i(TAG, "RESULT canvas passed")
                         } catch (error: Throwable) { output.writeText(error.stackTraceToString()); throw error }
                     }
                     "runtime", "audio" -> {
