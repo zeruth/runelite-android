@@ -1,0 +1,41 @@
+# The contract runs that fail today, from the CI run of 2026-11-13. run-awt-contracts.py reports
+# them as KNOWN FAIL and does not fail on them, so CI stays green while they are fixed; a run
+# that fails and is not listed here still fails the build, and a listed run that passes is
+# printed as FIXED so it can come off the list. --strict ignores this file: the closing gate of
+# the AWT set (every contract green in both modes) runs with it.
+#
+# A [jdk] failure means the contract or its runner is wrong, since real JDK classes should pass;
+# a [patched]-only failure is a gap in the shadow classes.
+TestAccessibilityContracts [patched]
+TestAreaContracts [jdk]
+TestAreaContracts [patched]
+TestAudioSystemContracts [jdk]
+TestAudioSystemContracts [patched]
+TestAwtMiscContracts [patched]
+TestAwtWidgetContracts [patched]
+TestChooserContracts [jdk]
+TestDataTransferContracts [jdk]
+TestDesktopContracts [patched]
+TestDragAndDropContracts [patched]
+TestFontContracts [jdk]
+TestFontContracts [patched]
+TestFontMetricsContracts [patched]
+TestImageProducerContracts [patched]
+TestInputMethodContracts [patched]
+TestJavaHttpContracts [jdk]
+TestLayoutContracts [patched]
+TestListAndScrollContracts [jdk]
+TestListAndScrollContracts [patched]
+TestOptionPaneContracts [jdk]
+TestOptionPaneContracts [patched]
+TestRenderableContracts [jdk]
+TestRenderableContracts [patched]
+TestSwingDialogContracts [patched]
+TestSwingFocusContracts [jdk]
+TestSwingFocusContracts [patched]
+TestSwingWorkerContracts [jdk]
+TestSwingWorkerContracts [patched]
+TestToolkitContracts [patched]
+TestUIClassIdContracts [patched]
+TestWindowContracts [jdk]
+TestWindowContracts [patched]

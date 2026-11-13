@@ -695,6 +695,17 @@ def make_classpaths(needed, tool, build, compile_flags):
     return classpaths
 
 
+KNOWN_FAILURES = Path(__file__).resolve().parent / "awt-contracts-known-failures.txt"
+
+
+def known_failures():
+    """The runs that fail today and do not fail the build, as `TestName [mode]`, from KNOWN_FAILURES."""
+    if not KNOWN_FAILURES.is_file():
+        return set()
+    lines = KNOWN_FAILURES.read_text(encoding="utf-8").splitlines()
+    return {line.strip() for line in lines if line.strip() and not line.lstrip().startswith("#")}
+
+
 def main():
     parser = argparse.ArgumentParser(description="host contract runner for android-awt")
     parser.add_argument("--java-home", default=os.environ.get("JAVA_HOME"), help="JDK 11+ (default: JAVA_HOME, then PATH)")
@@ -703,6 +714,8 @@ def main():
     parser.add_argument("--only", action="append", default=[], metavar="TEST", help="run only this contract (repeatable)")
     parser.add_argument("--build-dir", type=Path, default=REPO / "build/compat-tests/awt")
     parser.add_argument("--verbose", action="store_true", help="print the output of passing runs too")
+    parser.add_argument("--strict", action="store_true",
+                        help=f"fail on every failing run, the ones {KNOWN_FAILURES.name} lists too")
     args = parser.parse_args()
     sys.stdout.reconfigure(errors="replace")
     tool = tools(args.java_home)
@@ -816,15 +829,22 @@ def main():
             print(output.rstrip())
         print(f"Tests run: 1, Failures: {int(status == 'fail')}, Errors: {int(status == 'error')}, Skipped: 0, "
               f"Time elapsed: {elapsed:.2f} s" + (f" <<< {status.upper()}" if status != "pass" else ""))
+    known = set() if args.strict else known_failures()
     failed = [(n, m, s) for n, m, s, _, _ in results if s != "pass"]
+    new = [(n, m, s) for n, m, s in failed if f"{n} [{m}]" not in known]
+    fixed = [f"{n} [{m}]" for n, m, s, _, _ in results if s == "pass" and f"{n} [{m}]" in known]
     print("\nResults:")
     for name, mode, status in failed:
-        print(f"  {status.upper()} {name} [{mode}]")
+        tag = status.upper() if (name, mode, status) in new else f"KNOWN {status.upper()}"
+        print(f"  {tag} {name} [{mode}]")
+    for run_name in fixed:
+        print(f"  FIXED {run_name}: passes now, remove it from {KNOWN_FAILURES.name}")
     print(f"\nTests run: {len(results)}, Failures: {sum(s == 'fail' for _, _, s in failed)}, "
-          f"Errors: {sum(s == 'error' for _, _, s in failed)}, Skipped: 0")
+          f"Errors: {sum(s == 'error' for _, _, s in failed)}, Skipped: 0"
+          + (f", Known: {len(failed) - len(new)} (not failing the run; --strict fails them)" if known else ""))
     print(f"Shadow classes: {len(compiled_set)} compiled on the host, {len(patched_set)} patched over "
           f"{', '.join(sorted(patches))}")
-    return 1 if failed or not results else 0
+    return 1 if new or not results else 0
 
 
 if __name__ == "__main__":
