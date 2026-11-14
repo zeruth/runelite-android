@@ -1,7 +1,3648 @@
 {
  "comment": "Accepted hub-compat-scan signatures; see docs/hub-compat.md. Regenerate with tools-src/hub-compat-issues.py --update-baseline.",
- "hubVersion": null,
- "generatedAt": null,
- "pluginsScanned": null,
- "signatures": {}
+ "hubVersion": "1.13.6",
+ "generatedAt": "2026-11-14T19:22:45Z",
+ "pluginsScanned": 2949,
+ "signatures": {
+  "class com/google/api/client/auth/oauth2/AuthorizationCodeFlow": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class com/google/api/client/auth/oauth2/AuthorizationCodeFlow$Builder": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class com/google/api/client/auth/oauth2/AuthorizationCodeFlow$CredentialCreatedListener": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class com/google/api/client/auth/oauth2/AuthorizationCodeRequestUrl": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class com/google/api/client/auth/oauth2/AuthorizationCodeTokenRequest": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class com/google/api/client/auth/oauth2/AuthorizationRequestUrl": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class com/google/api/client/auth/oauth2/BearerToken": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class com/google/api/client/auth/oauth2/BrowserClientRequestUrl": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class com/google/api/client/auth/oauth2/ClientParametersAuthentication": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class com/google/api/client/auth/oauth2/Credential": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class com/google/api/client/auth/oauth2/Credential$AccessMethod": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class com/google/api/client/auth/oauth2/Credential$Builder": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class com/google/api/client/auth/oauth2/CredentialRefreshListener": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class com/google/api/client/auth/oauth2/CredentialStore": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class com/google/api/client/auth/oauth2/RefreshTokenRequest": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class com/google/api/client/auth/oauth2/TokenRequest": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class com/google/api/client/auth/oauth2/TokenResponse": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class com/google/api/client/auth/openidconnect/IdToken": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class com/google/api/client/auth/openidconnect/IdToken$Payload": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class com/google/api/client/auth/openidconnect/IdTokenVerifier": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class com/google/api/client/auth/openidconnect/IdTokenVerifier$Builder": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class com/sun/jna/Function": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "class com/sun/jna/Library": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "class com/sun/jna/Library$Handler": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "class com/sun/jna/Native": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "class com/sun/jna/NativeLibrary": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "class com/sun/jna/NativeLong": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "class com/sun/jna/Pointer": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "class com/sun/jna/platform/win32/Advapi32Util": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "class com/sun/jna/platform/win32/BaseTSD": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "class com/sun/jna/platform/win32/BaseTSD$SIZE_T": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "class com/sun/jna/platform/win32/Win32Exception": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "class com/sun/jna/platform/win32/WinDef": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "class com/sun/jna/platform/win32/WinDef$DWORD": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "class com/sun/jna/platform/win32/WinNT": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "class com/sun/jna/platform/win32/WinNT$MEMORY_BASIC_INFORMATION": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "class com/sun/jna/platform/win32/WinReg": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "class com/sun/jna/platform/win32/WinReg$HKEY": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "class com/sun/jna/win32/StdCallLibrary": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "class com/sun/jna/win32/W32APIOptions": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "class com/sun/management/HotSpotDiagnosticMXBean": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "class com/sun/management/UnixOperatingSystemMXBean": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "class jakarta/servlet/ServletConfig": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class jakarta/servlet/ServletContext": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class jakarta/servlet/ServletContextEvent": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class jakarta/servlet/ServletContextListener": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class jakarta/servlet/ServletOutputStream": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class jakarta/servlet/http/HttpServlet": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class jakarta/servlet/http/HttpServletRequest": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class jakarta/servlet/http/HttpServletResponse": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class java/awt/font/LineBreakMeasurer": {
+   "bucket": "drawing/geometry/fonts/images",
+   "status": "unresolved"
+  },
+  "class java/awt/image/BaseMultiResolutionImage": {
+   "bucket": "drawing/geometry/fonts/images",
+   "status": "unresolved"
+  },
+  "class java/lang/instrument/Instrumentation": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "class java/sql/JDBCType": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "class java/sql/SQLType": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "class javax/lang/model/element/Modifier": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "class javax/management/MBeanAttributeInfo": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "class javax/management/MBeanInfo": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "class javax/management/MBeanOperationInfo": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "class javax/management/StandardMBean": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "class javax/naming/Context": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "class javax/naming/directory/DirContext": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "class javax/naming/directory/InitialDirContext": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "class javax/script/Compilable": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "class javax/script/CompiledScript": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "class javax/script/ScriptEngine": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "class javax/script/ScriptEngineManager": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "class javax/script/ScriptException": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "class javax/security/auth/callback/NameCallback": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "class javax/security/auth/login/LoginContext": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "class javax/servlet/ServletConfig": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "class javax/servlet/ServletContext": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "class javax/servlet/ServletContextEvent": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "class javax/servlet/ServletContextListener": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "class javax/servlet/ServletException": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "class javax/servlet/ServletOutputStream": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "class javax/servlet/http/HttpServlet": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "class javax/servlet/http/HttpServletRequest": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "class javax/servlet/http/HttpServletResponse": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "class javax/servlet/http/HttpSession": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "class javax/servlet/http/HttpSessionBindingEvent": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "class javax/servlet/http/HttpSessionBindingListener": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "class javax/sql/XADataSource": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "class javax/swing/plaf/basic/BasicHTML": {
+   "bucket": "widgets/menus/tables",
+   "status": "unresolved"
+  },
+  "class javax/swing/plaf/basic/BasicPasswordFieldUI": {
+   "bucket": "widgets/menus/tables",
+   "status": "unresolved"
+  },
+  "class javax/swing/plaf/basic/BasicTextFieldUI": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "class javax/swing/plaf/metal/MetalTabbedPaneUI": {
+   "bucket": "widgets/menus/tables",
+   "status": "unresolved"
+  },
+  "class javax/swing/text/BoxView": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "class javax/swing/text/ComponentView": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "class javax/swing/text/DefaultEditorKit$CopyAction": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "class javax/swing/text/DefaultEditorKit$CutAction": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "class javax/swing/text/DefaultEditorKit$PasteAction": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "class javax/swing/text/IconView": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "class javax/swing/text/LabelView": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "class javax/swing/text/ParagraphView": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "class javax/swing/text/StyledEditorKit": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "class javax/swing/text/StyledEditorKit$StyledTextAction": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "class javax/swing/text/TextAction": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "class javax/swing/text/html/HTMLEditorKit$ParserCallback": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "class javax/swing/text/html/ImageView": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "class javax/swing/text/html/parser/ParserDelegator": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "class javax/swing/text/rtf/RTFEditorKit": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "class javax/tools/DiagnosticListener": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "class javax/tools/FileObject": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "class javax/tools/ForwardingJavaFileManager": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "class javax/tools/JavaCompiler": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "class javax/tools/JavaCompiler$CompilationTask": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "class javax/tools/JavaFileManager": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "class javax/tools/JavaFileManager$Location": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "class javax/tools/JavaFileObject": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "class javax/tools/JavaFileObject$Kind": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "class javax/tools/SimpleJavaFileObject": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "class javax/tools/StandardJavaFileManager": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "class javax/tools/ToolProvider": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "class javax/xml/stream/XMLInputFactory": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "class javax/xml/stream/XMLOutputFactory": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "class javax/xml/stream/XMLStreamReader": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "class javax/xml/stream/XMLStreamWriter": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "class javax/xml/transform/stax/StAXResult": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "class javax/xml/transform/stax/StAXSource": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "class lombok/Lombok": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class net/runelite/cache/definitions/TrackDefinition": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "class net/runelite/cache/definitions/loaders/TrackLoader": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "class net/runelite/cache/fs/Archive": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "class net/runelite/cache/fs/Container": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "class net/runelite/cache/fs/Index": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "class net/runelite/cache/fs/Storage": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "class net/runelite/cache/fs/Store": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "class net/runelite/http/api/RuneLiteAPI": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "class net/runelite/http/api/chat/Duels": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "class net/runelite/http/api/item/ItemEquipmentStats": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "class net/runelite/http/api/item/ItemPrice": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "class net/runelite/http/api/item/ItemStats": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "class net/runelite/http/api/loottracker/LootRecordType": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "class net/runelite/http/api/worlds/World": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "class net/runelite/http/api/worlds/WorldRegion": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "class net/runelite/http/api/worlds/WorldResult": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "class net/runelite/http/api/worlds/WorldType": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "class org/apache/http/ConnectionReuseStrategy": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/http/Header": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/http/HttpEntity": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/http/HttpEntityEnclosingRequest": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/http/HttpException": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/http/HttpHost": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/http/HttpRequest": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/http/HttpResponse": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/http/HttpVersion": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/http/ProtocolVersion": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/http/RequestLine": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/http/StatusLine": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/http/client/AuthenticationHandler": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/http/client/HttpClient": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/http/client/HttpRequestRetryHandler": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/http/client/RedirectHandler": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/http/client/RequestDirector": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/http/client/UserTokenHandler": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/http/client/methods/HttpDelete": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/http/client/methods/HttpEntityEnclosingRequestBase": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/http/client/methods/HttpGet": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/http/client/methods/HttpHead": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/http/client/methods/HttpOptions": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/http/client/methods/HttpPost": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/http/client/methods/HttpPut": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/http/client/methods/HttpRequestBase": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/http/client/methods/HttpTrace": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/http/client/methods/HttpUriRequest": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/http/conn/ClientConnectionManager": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/http/conn/ConnectionKeepAliveStrategy": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/http/conn/params/ConnManagerParams": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/http/conn/params/ConnPerRoute": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/http/conn/params/ConnPerRouteBean": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/http/conn/params/ConnRouteParams": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/http/conn/routing/HttpRoutePlanner": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/http/conn/scheme/PlainSocketFactory": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/http/conn/scheme/Scheme": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/http/conn/scheme/SchemeRegistry": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/http/entity/AbstractHttpEntity": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/http/impl/client/DefaultHttpClient": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/http/impl/client/DefaultHttpRequestRetryHandler": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/http/impl/conn/ProxySelectorRoutePlanner": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/http/impl/conn/tsccm/ThreadSafeClientConnManager": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/http/message/BasicHttpResponse": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/http/params/BasicHttpParams": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/http/params/HttpProtocolParams": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/http/protocol/HttpContext": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/http/protocol/HttpProcessor": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/http/protocol/HttpRequestExecutor": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/lucene/analysis/Analyzer": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/lucene/analysis/standard/StandardAnalyzer": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/lucene/document/DateTools": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/lucene/document/DateTools$Resolution": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/lucene/document/Document": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/lucene/document/Field": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/lucene/document/FieldType": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/lucene/document/TextField": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/lucene/index/DirectoryReader": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/lucene/index/IndexFormatTooOldException": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/lucene/index/IndexReader": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/lucene/index/IndexWriter": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/lucene/index/IndexWriterConfig": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/lucene/index/IndexWriterConfig$OpenMode": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/lucene/index/IndexableField": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/lucene/index/IndexableFieldType": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/lucene/index/Term": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/lucene/queryparser/flexible/standard/StandardQueryParser": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/lucene/search/IndexSearcher": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/lucene/search/Query": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/lucene/search/ScoreDoc": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/lucene/search/TopDocs": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/lucene/search/TotalHits": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/lucene/store/ByteBuffersDirectory": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/lucene/store/Directory": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/apache/lucene/store/FSDirectory": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/locationtech/jts/geom/CoordinateSequence": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/locationtech/jts/geom/CoordinateSequenceFactory": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/locationtech/jts/geom/Geometry": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/locationtech/jts/geom/GeometryCollection": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/locationtech/jts/geom/GeometryFactory": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/locationtech/jts/geom/LineString": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/locationtech/jts/geom/LinearRing": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/locationtech/jts/geom/MultiLineString": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/locationtech/jts/geom/MultiPoint": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/locationtech/jts/geom/MultiPolygon": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/locationtech/jts/geom/Point": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/locationtech/jts/geom/Polygon": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/locationtech/jts/geom/PrecisionModel": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/locationtech/jts/geom/impl/CoordinateArraySequenceFactory": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/locationtech/jts/geom/impl/PackedCoordinateSequenceFactory": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/lwjgl/opencl/APPLEGLSharing": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "class org/lwjgl/opencl/CL": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "class org/lwjgl/opencl/CL10": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "class org/lwjgl/opencl/CL10GL": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "class org/lwjgl/opencl/CL11": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "class org/lwjgl/opencl/CL12": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "class org/lwjgl/opencl/CLCapabilities": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "class org/lwjgl/opencl/CLContextCallback": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "class org/lwjgl/opencl/CLContextCallbackI": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "class org/lwjgl/opencl/CLImageFormat": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "class org/lwjgl/opencl/CLProgramCallbackI": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "class org/lwjgl/opencl/KHRGLSharing": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "class org/lwjgl/opengl/EXTTextureFilterAnisotropic": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "class org/lwjgl/opengl/GL11": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "class org/lwjgl/opengl/GL15": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "class org/lwjgl/opengl/GL20": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "class org/lwjgl/opengl/GL21": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "class org/lwjgl/opengl/GL42C": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "class org/lwjgl/opengl/GL45C": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "class org/osgi/framework/BundleActivator": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/osgi/framework/BundleContext": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/osgi/framework/ServiceRegistration": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class org/osgi/service/jdbc/DataSourceFactory": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "class sun/misc/Unsafe": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "field com/sun/jna/Native.POINTER_SIZEI": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "field com/sun/jna/platform/win32/WinNT$MEMORY_BASIC_INFORMATION.allocationBaseLcom/sun/jna/Pointer;": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "field com/sun/jna/platform/win32/WinNT$MEMORY_BASIC_INFORMATION.allocationProtectLcom/sun/jna/platform/win32/WinDef$DWORD;": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "field com/sun/jna/platform/win32/WinNT$MEMORY_BASIC_INFORMATION.baseAddressLcom/sun/jna/Pointer;": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "field com/sun/jna/platform/win32/WinNT$MEMORY_BASIC_INFORMATION.protectLcom/sun/jna/platform/win32/WinDef$DWORD;": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "field com/sun/jna/platform/win32/WinNT$MEMORY_BASIC_INFORMATION.regionSizeLcom/sun/jna/platform/win32/BaseTSD$SIZE_T;": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "field com/sun/jna/platform/win32/WinNT$MEMORY_BASIC_INFORMATION.stateLcom/sun/jna/platform/win32/WinDef$DWORD;": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "field com/sun/jna/platform/win32/WinNT$MEMORY_BASIC_INFORMATION.typeLcom/sun/jna/platform/win32/WinDef$DWORD;": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "field com/sun/jna/platform/win32/WinReg.HKEY_CURRENT_USERLcom/sun/jna/platform/win32/WinReg$HKEY;": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "field com/sun/jna/win32/W32APIOptions.DEFAULT_OPTIONSLjava/util/Map;": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "field java/awt/GridBagLayout.columnWeights[D": {
+   "bucket": "layout/input/painting",
+   "status": "unresolved"
+  },
+  "field java/awt/GridBagLayout.columnWidths[I": {
+   "bucket": "layout/input/painting",
+   "status": "unresolved"
+  },
+  "field javax/swing/plaf/metal/MetalTabbedPaneUI.tabPaneLjavax/swing/JTabbedPane;": {
+   "bucket": "widgets/menus/tables",
+   "status": "unresolved"
+  },
+  "field javax/swing/text/ParagraphView.layoutSpanI": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "field javax/swing/text/html/HTML$Attribute.ALTLjavax/swing/text/html/HTML$Attribute;": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "field javax/swing/text/html/HTML$Attribute.TITLELjavax/swing/text/html/HTML$Attribute;": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "field javax/swing/text/html/HTML$Tag.H2Ljavax/swing/text/html/HTML$Tag;": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "field javax/swing/text/html/HTML$Tag.IMGLjavax/swing/text/html/HTML$Tag;": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "field javax/swing/text/html/HTML$Tag.TRLjavax/swing/text/html/HTML$Tag;": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "field javax/tools/JavaFileObject$Kind.SOURCELjavax/tools/JavaFileObject$Kind;": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "field javax/tools/JavaFileObject$Kind.extensionLjava/lang/String;": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "field net/runelite/cache/fs/Container.data[B": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "field net/runelite/http/api/RuneLiteAPI.CLIENTLokhttp3/OkHttpClient;": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "field net/runelite/http/api/RuneLiteAPI.GSONLcom/google/gson/Gson;": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "field net/runelite/http/api/RuneLiteAPI.JSONLokhttp3/MediaType;": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "field net/runelite/http/api/loottracker/LootRecordType.EVENTLnet/runelite/http/api/loottracker/LootRecordType;": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "field net/runelite/http/api/loottracker/LootRecordType.NPCLnet/runelite/http/api/loottracker/LootRecordType;": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "field net/runelite/http/api/loottracker/LootRecordType.PICKPOCKETLnet/runelite/http/api/loottracker/LootRecordType;": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "field net/runelite/http/api/loottracker/LootRecordType.PLAYERLnet/runelite/http/api/loottracker/LootRecordType;": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "field net/runelite/http/api/loottracker/LootRecordType.UNKNOWNLnet/runelite/http/api/loottracker/LootRecordType;": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "field net/runelite/http/api/worlds/WorldRegion.AUSTRALIALnet/runelite/http/api/worlds/WorldRegion;": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "field net/runelite/http/api/worlds/WorldRegion.BRAZILLnet/runelite/http/api/worlds/WorldRegion;": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "field net/runelite/http/api/worlds/WorldRegion.GERMANYLnet/runelite/http/api/worlds/WorldRegion;": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "field net/runelite/http/api/worlds/WorldRegion.JAPANLnet/runelite/http/api/worlds/WorldRegion;": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "field net/runelite/http/api/worlds/WorldRegion.SINGAPORELnet/runelite/http/api/worlds/WorldRegion;": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "field net/runelite/http/api/worlds/WorldRegion.SOUTH_AFRICALnet/runelite/http/api/worlds/WorldRegion;": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "field net/runelite/http/api/worlds/WorldRegion.UNITED_KINGDOMLnet/runelite/http/api/worlds/WorldRegion;": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "field net/runelite/http/api/worlds/WorldRegion.UNITED_STATES_OF_AMERICALnet/runelite/http/api/worlds/WorldRegion;": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "field net/runelite/http/api/worlds/WorldType.BETA_WORLDLnet/runelite/http/api/worlds/WorldType;": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "field net/runelite/http/api/worlds/WorldType.BOUNTYLnet/runelite/http/api/worlds/WorldType;": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "field net/runelite/http/api/worlds/WorldType.DEADMANLnet/runelite/http/api/worlds/WorldType;": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "field net/runelite/http/api/worlds/WorldType.EOC_ONLYLnet/runelite/http/api/worlds/WorldType;": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "field net/runelite/http/api/worlds/WorldType.FRESH_START_WORLDLnet/runelite/http/api/worlds/WorldType;": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "field net/runelite/http/api/worlds/WorldType.HIGH_RISKLnet/runelite/http/api/worlds/WorldType;": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "field net/runelite/http/api/worlds/WorldType.LAST_MAN_STANDINGLnet/runelite/http/api/worlds/WorldType;": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "field net/runelite/http/api/worlds/WorldType.LEGACY_ONLYLnet/runelite/http/api/worlds/WorldType;": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "field net/runelite/http/api/worlds/WorldType.MEMBERSLnet/runelite/http/api/worlds/WorldType;": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "field net/runelite/http/api/worlds/WorldType.NOSAVE_MODELnet/runelite/http/api/worlds/WorldType;": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "field net/runelite/http/api/worlds/WorldType.PVPLnet/runelite/http/api/worlds/WorldType;": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "field net/runelite/http/api/worlds/WorldType.PVP_ARENALnet/runelite/http/api/worlds/WorldType;": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "field net/runelite/http/api/worlds/WorldType.QUEST_SPEEDRUNNINGLnet/runelite/http/api/worlds/WorldType;": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "field net/runelite/http/api/worlds/WorldType.SEASONALLnet/runelite/http/api/worlds/WorldType;": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "field net/runelite/http/api/worlds/WorldType.SKILL_TOTALLnet/runelite/http/api/worlds/WorldType;": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "field net/runelite/http/api/worlds/WorldType.TOURNAMENTLnet/runelite/http/api/worlds/WorldType;": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "field org/apache/http/HttpVersion.HTTP_1_1Lorg/apache/http/HttpVersion;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "field org/apache/lucene/document/DateTools$Resolution.SECONDLorg/apache/lucene/document/DateTools$Resolution;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "field org/apache/lucene/document/TextField.TYPE_NOT_STOREDLorg/apache/lucene/document/FieldType;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "field org/apache/lucene/document/TextField.TYPE_STOREDLorg/apache/lucene/document/FieldType;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "field org/apache/lucene/index/IndexWriterConfig$OpenMode.CREATE_OR_APPENDLorg/apache/lucene/index/IndexWriterConfig$OpenMode;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "field org/apache/lucene/search/ScoreDoc.docI": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "field org/apache/lucene/search/ScoreDoc.scoreF": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "field org/apache/lucene/search/TopDocs.scoreDocs[Lorg/apache/lucene/search/ScoreDoc;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "field org/apache/lucene/search/TopDocs.totalHitsLorg/apache/lucene/search/TotalHits;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "field org/apache/lucene/search/TotalHits.valueJ": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "field org/locationtech/jts/geom/impl/PackedCoordinateSequenceFactory.DOUBLE_FACTORYLorg/locationtech/jts/geom/impl/PackedCoordinateSequenceFactory;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "field org/lwjgl/opencl/CLCapabilities.OpenCL12Z": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "field org/lwjgl/opencl/CLCapabilities.cl_APPLE_gl_sharingZ": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "field org/lwjgl/opencl/CLCapabilities.cl_khr_gl_sharingZ": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "field org/lwjgl/system/Configuration.OPENCL_EXPLICIT_INITLorg/lwjgl/system/Configuration;": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method com/dpscalc/scenario/CalculatorWorkspace$3.getRolloverTab()I": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/golemsdontdie/GolemListPanel$PlaceholderField.getHorizontalVisibility()Ljavax/swing/BoundedRangeModel;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/AuthorizationCodeFlow$Builder.<init>(Lcom/google/api/client/auth/oauth2/Credential$AccessMethod;Lcom/google/api/client/http/HttpTransport;Lcom/google/api/client/json/JsonFactory;Lcom/google/api/client/http/GenericUrl;Lcom/google/api/client/http/HttpExecuteInterceptor;Ljava/lang/String;Ljava/lang/String;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/AuthorizationCodeFlow$Builder.addRefreshListener(Lcom/google/api/client/auth/oauth2/CredentialRefreshListener;)Lcom/google/api/client/auth/oauth2/AuthorizationCodeFlow$Builder;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/AuthorizationCodeFlow$Builder.setAuthorizationServerEncodedUrl(Ljava/lang/String;)Lcom/google/api/client/auth/oauth2/AuthorizationCodeFlow$Builder;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/AuthorizationCodeFlow$Builder.setClientAuthentication(Lcom/google/api/client/http/HttpExecuteInterceptor;)Lcom/google/api/client/auth/oauth2/AuthorizationCodeFlow$Builder;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/AuthorizationCodeFlow$Builder.setClientId(Ljava/lang/String;)Lcom/google/api/client/auth/oauth2/AuthorizationCodeFlow$Builder;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/AuthorizationCodeFlow$Builder.setClock(Lcom/google/api/client/util/Clock;)Lcom/google/api/client/auth/oauth2/AuthorizationCodeFlow$Builder;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/AuthorizationCodeFlow$Builder.setCredentialCreatedListener(Lcom/google/api/client/auth/oauth2/AuthorizationCodeFlow$CredentialCreatedListener;)Lcom/google/api/client/auth/oauth2/AuthorizationCodeFlow$Builder;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/AuthorizationCodeFlow$Builder.setCredentialDataStore(Lcom/google/api/client/util/store/DataStore;)Lcom/google/api/client/auth/oauth2/AuthorizationCodeFlow$Builder;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/AuthorizationCodeFlow$Builder.setCredentialStore(Lcom/google/api/client/auth/oauth2/CredentialStore;)Lcom/google/api/client/auth/oauth2/AuthorizationCodeFlow$Builder;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/AuthorizationCodeFlow$Builder.setDataStoreFactory(Lcom/google/api/client/util/store/DataStoreFactory;)Lcom/google/api/client/auth/oauth2/AuthorizationCodeFlow$Builder;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/AuthorizationCodeFlow$Builder.setJsonFactory(Lcom/google/api/client/json/JsonFactory;)Lcom/google/api/client/auth/oauth2/AuthorizationCodeFlow$Builder;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/AuthorizationCodeFlow$Builder.setMethod(Lcom/google/api/client/auth/oauth2/Credential$AccessMethod;)Lcom/google/api/client/auth/oauth2/AuthorizationCodeFlow$Builder;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/AuthorizationCodeFlow$Builder.setRefreshListeners(Ljava/util/Collection;)Lcom/google/api/client/auth/oauth2/AuthorizationCodeFlow$Builder;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/AuthorizationCodeFlow$Builder.setRequestInitializer(Lcom/google/api/client/http/HttpRequestInitializer;)Lcom/google/api/client/auth/oauth2/AuthorizationCodeFlow$Builder;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/AuthorizationCodeFlow$Builder.setScopes(Ljava/util/Collection;)Lcom/google/api/client/auth/oauth2/AuthorizationCodeFlow$Builder;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/AuthorizationCodeFlow$Builder.setTokenServerUrl(Lcom/google/api/client/http/GenericUrl;)Lcom/google/api/client/auth/oauth2/AuthorizationCodeFlow$Builder;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/AuthorizationCodeFlow$Builder.setTransport(Lcom/google/api/client/http/HttpTransport;)Lcom/google/api/client/auth/oauth2/AuthorizationCodeFlow$Builder;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/AuthorizationCodeFlow.<init>(Lcom/google/api/client/auth/oauth2/AuthorizationCodeFlow$Builder;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/AuthorizationCodeFlow.getAuthorizationServerEncodedUrl()Ljava/lang/String;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/AuthorizationCodeFlow.getClientAuthentication()Lcom/google/api/client/http/HttpExecuteInterceptor;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/AuthorizationCodeFlow.getClientId()Ljava/lang/String;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/AuthorizationCodeFlow.getJsonFactory()Lcom/google/api/client/json/JsonFactory;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/AuthorizationCodeFlow.getRequestInitializer()Lcom/google/api/client/http/HttpRequestInitializer;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/AuthorizationCodeFlow.getScopes()Ljava/util/Collection;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/AuthorizationCodeFlow.getTokenServerEncodedUrl()Ljava/lang/String;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/AuthorizationCodeFlow.getTransport()Lcom/google/api/client/http/HttpTransport;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/AuthorizationCodeRequestUrl.<init>(Ljava/lang/String;Ljava/lang/String;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/AuthorizationCodeRequestUrl.clone()Lcom/google/api/client/auth/oauth2/AuthorizationCodeRequestUrl;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/AuthorizationCodeRequestUrl.set(Ljava/lang/String;Ljava/lang/Object;)Lcom/google/api/client/auth/oauth2/AuthorizationCodeRequestUrl;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/AuthorizationCodeRequestUrl.setClientId(Ljava/lang/String;)Lcom/google/api/client/auth/oauth2/AuthorizationCodeRequestUrl;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/AuthorizationCodeRequestUrl.setRedirectUri(Ljava/lang/String;)Lcom/google/api/client/auth/oauth2/AuthorizationCodeRequestUrl;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/AuthorizationCodeRequestUrl.setResponseTypes(Ljava/util/Collection;)Lcom/google/api/client/auth/oauth2/AuthorizationCodeRequestUrl;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/AuthorizationCodeRequestUrl.setScopes(Ljava/util/Collection;)Lcom/google/api/client/auth/oauth2/AuthorizationCodeRequestUrl;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/AuthorizationCodeRequestUrl.setState(Ljava/lang/String;)Lcom/google/api/client/auth/oauth2/AuthorizationCodeRequestUrl;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/AuthorizationCodeTokenRequest.<init>(Lcom/google/api/client/http/HttpTransport;Lcom/google/api/client/json/JsonFactory;Lcom/google/api/client/http/GenericUrl;Ljava/lang/String;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/AuthorizationCodeTokenRequest.executeUnparsed()Lcom/google/api/client/http/HttpResponse;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/AuthorizationCodeTokenRequest.set(Ljava/lang/String;Ljava/lang/Object;)Lcom/google/api/client/auth/oauth2/AuthorizationCodeTokenRequest;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/AuthorizationCodeTokenRequest.setClientAuthentication(Lcom/google/api/client/http/HttpExecuteInterceptor;)Lcom/google/api/client/auth/oauth2/AuthorizationCodeTokenRequest;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/AuthorizationCodeTokenRequest.setCode(Ljava/lang/String;)Lcom/google/api/client/auth/oauth2/AuthorizationCodeTokenRequest;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/AuthorizationCodeTokenRequest.setGrantType(Ljava/lang/String;)Lcom/google/api/client/auth/oauth2/AuthorizationCodeTokenRequest;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/AuthorizationCodeTokenRequest.setRedirectUri(Ljava/lang/String;)Lcom/google/api/client/auth/oauth2/AuthorizationCodeTokenRequest;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/AuthorizationCodeTokenRequest.setRequestInitializer(Lcom/google/api/client/http/HttpRequestInitializer;)Lcom/google/api/client/auth/oauth2/AuthorizationCodeTokenRequest;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/AuthorizationCodeTokenRequest.setScopes(Ljava/util/Collection;)Lcom/google/api/client/auth/oauth2/AuthorizationCodeTokenRequest;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/AuthorizationCodeTokenRequest.setTokenServerUrl(Lcom/google/api/client/http/GenericUrl;)Lcom/google/api/client/auth/oauth2/AuthorizationCodeTokenRequest;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/BearerToken.authorizationHeaderAccessMethod()Lcom/google/api/client/auth/oauth2/Credential$AccessMethod;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/BrowserClientRequestUrl.<init>(Ljava/lang/String;Ljava/lang/String;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/BrowserClientRequestUrl.clone()Lcom/google/api/client/auth/oauth2/BrowserClientRequestUrl;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/BrowserClientRequestUrl.set(Ljava/lang/String;Ljava/lang/Object;)Lcom/google/api/client/auth/oauth2/BrowserClientRequestUrl;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/BrowserClientRequestUrl.setClientId(Ljava/lang/String;)Lcom/google/api/client/auth/oauth2/BrowserClientRequestUrl;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/BrowserClientRequestUrl.setRedirectUri(Ljava/lang/String;)Lcom/google/api/client/auth/oauth2/BrowserClientRequestUrl;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/BrowserClientRequestUrl.setResponseTypes(Ljava/util/Collection;)Lcom/google/api/client/auth/oauth2/BrowserClientRequestUrl;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/BrowserClientRequestUrl.setScopes(Ljava/util/Collection;)Lcom/google/api/client/auth/oauth2/BrowserClientRequestUrl;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/BrowserClientRequestUrl.setState(Ljava/lang/String;)Lcom/google/api/client/auth/oauth2/BrowserClientRequestUrl;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/ClientParametersAuthentication.<init>(Ljava/lang/String;Ljava/lang/String;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/Credential$Builder.<init>(Lcom/google/api/client/auth/oauth2/Credential$AccessMethod;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/Credential$Builder.addRefreshListener(Lcom/google/api/client/auth/oauth2/CredentialRefreshListener;)Lcom/google/api/client/auth/oauth2/Credential$Builder;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/Credential$Builder.getClientAuthentication()Lcom/google/api/client/http/HttpExecuteInterceptor;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/Credential$Builder.getJsonFactory()Lcom/google/api/client/json/JsonFactory;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/Credential$Builder.getTransport()Lcom/google/api/client/http/HttpTransport;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/Credential$Builder.setClientAuthentication(Lcom/google/api/client/http/HttpExecuteInterceptor;)Lcom/google/api/client/auth/oauth2/Credential$Builder;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/Credential$Builder.setClock(Lcom/google/api/client/util/Clock;)Lcom/google/api/client/auth/oauth2/Credential$Builder;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/Credential$Builder.setJsonFactory(Lcom/google/api/client/json/JsonFactory;)Lcom/google/api/client/auth/oauth2/Credential$Builder;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/Credential$Builder.setRefreshListeners(Ljava/util/Collection;)Lcom/google/api/client/auth/oauth2/Credential$Builder;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/Credential$Builder.setRequestInitializer(Lcom/google/api/client/http/HttpRequestInitializer;)Lcom/google/api/client/auth/oauth2/Credential$Builder;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/Credential$Builder.setTokenServerEncodedUrl(Ljava/lang/String;)Lcom/google/api/client/auth/oauth2/Credential$Builder;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/Credential$Builder.setTokenServerUrl(Lcom/google/api/client/http/GenericUrl;)Lcom/google/api/client/auth/oauth2/Credential$Builder;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/Credential$Builder.setTransport(Lcom/google/api/client/http/HttpTransport;)Lcom/google/api/client/auth/oauth2/Credential$Builder;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/Credential.<init>(Lcom/google/api/client/auth/oauth2/Credential$Builder;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/Credential.executeRefreshToken()Lcom/google/api/client/auth/oauth2/TokenResponse;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/Credential.getClientAuthentication()Lcom/google/api/client/http/HttpExecuteInterceptor;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/Credential.getClock()Lcom/google/api/client/util/Clock;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/Credential.getJsonFactory()Lcom/google/api/client/json/JsonFactory;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/Credential.getTokenServerEncodedUrl()Ljava/lang/String;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/Credential.getTransport()Lcom/google/api/client/http/HttpTransport;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/Credential.refreshToken()Z": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/Credential.setAccessToken(Ljava/lang/String;)Lcom/google/api/client/auth/oauth2/Credential;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/Credential.setExpirationTimeMilliseconds(Ljava/lang/Long;)Lcom/google/api/client/auth/oauth2/Credential;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/Credential.setExpiresInSeconds(Ljava/lang/Long;)Lcom/google/api/client/auth/oauth2/Credential;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/Credential.setFromTokenResponse(Lcom/google/api/client/auth/oauth2/TokenResponse;)Lcom/google/api/client/auth/oauth2/Credential;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/Credential.setRefreshToken(Ljava/lang/String;)Lcom/google/api/client/auth/oauth2/Credential;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/RefreshTokenRequest.<init>(Lcom/google/api/client/http/HttpTransport;Lcom/google/api/client/json/JsonFactory;Lcom/google/api/client/http/GenericUrl;Ljava/lang/String;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/RefreshTokenRequest.executeUnparsed()Lcom/google/api/client/http/HttpResponse;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/RefreshTokenRequest.set(Ljava/lang/String;Ljava/lang/Object;)Lcom/google/api/client/auth/oauth2/RefreshTokenRequest;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/RefreshTokenRequest.setClientAuthentication(Lcom/google/api/client/http/HttpExecuteInterceptor;)Lcom/google/api/client/auth/oauth2/RefreshTokenRequest;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/RefreshTokenRequest.setGrantType(Ljava/lang/String;)Lcom/google/api/client/auth/oauth2/RefreshTokenRequest;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/RefreshTokenRequest.setRefreshToken(Ljava/lang/String;)Lcom/google/api/client/auth/oauth2/RefreshTokenRequest;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/RefreshTokenRequest.setRequestInitializer(Lcom/google/api/client/http/HttpRequestInitializer;)Lcom/google/api/client/auth/oauth2/RefreshTokenRequest;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/RefreshTokenRequest.setScopes(Ljava/util/Collection;)Lcom/google/api/client/auth/oauth2/RefreshTokenRequest;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/RefreshTokenRequest.setTokenServerUrl(Lcom/google/api/client/http/GenericUrl;)Lcom/google/api/client/auth/oauth2/RefreshTokenRequest;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/TokenRequest.<init>(Lcom/google/api/client/http/HttpTransport;Lcom/google/api/client/json/JsonFactory;Lcom/google/api/client/http/GenericUrl;Ljava/lang/String;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/TokenRequest.execute()Lcom/google/api/client/auth/oauth2/TokenResponse;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/TokenRequest.put(Ljava/lang/String;Ljava/lang/Object;)Ljava/lang/Object;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/TokenResponse.<init>()V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/TokenResponse.clone()Lcom/google/api/client/auth/oauth2/TokenResponse;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/TokenResponse.getFactory()Lcom/google/api/client/json/JsonFactory;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/TokenResponse.set(Ljava/lang/String;Ljava/lang/Object;)Lcom/google/api/client/auth/oauth2/TokenResponse;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/TokenResponse.setAccessToken(Ljava/lang/String;)Lcom/google/api/client/auth/oauth2/TokenResponse;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/TokenResponse.setExpiresInSeconds(Ljava/lang/Long;)Lcom/google/api/client/auth/oauth2/TokenResponse;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/TokenResponse.setRefreshToken(Ljava/lang/String;)Lcom/google/api/client/auth/oauth2/TokenResponse;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/TokenResponse.setScope(Ljava/lang/String;)Lcom/google/api/client/auth/oauth2/TokenResponse;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/oauth2/TokenResponse.setTokenType(Ljava/lang/String;)Lcom/google/api/client/auth/oauth2/TokenResponse;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/openidconnect/IdToken$Payload.<init>()V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/openidconnect/IdToken$Payload.clone()Lcom/google/api/client/auth/openidconnect/IdToken$Payload;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/openidconnect/IdToken$Payload.getAuthorizedParty()Ljava/lang/String;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/openidconnect/IdToken$Payload.getSubject()Ljava/lang/String;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/openidconnect/IdToken$Payload.set(Ljava/lang/String;Ljava/lang/Object;)Lcom/google/api/client/auth/openidconnect/IdToken$Payload;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/openidconnect/IdToken$Payload.setAccessTokenHash(Ljava/lang/String;)Lcom/google/api/client/auth/openidconnect/IdToken$Payload;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/openidconnect/IdToken$Payload.setAudience(Ljava/lang/Object;)Lcom/google/api/client/auth/openidconnect/IdToken$Payload;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/openidconnect/IdToken$Payload.setAuthorizationTimeSeconds(Ljava/lang/Long;)Lcom/google/api/client/auth/openidconnect/IdToken$Payload;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/openidconnect/IdToken$Payload.setAuthorizedParty(Ljava/lang/String;)Lcom/google/api/client/auth/openidconnect/IdToken$Payload;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/openidconnect/IdToken$Payload.setClassReference(Ljava/lang/String;)Lcom/google/api/client/auth/openidconnect/IdToken$Payload;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/openidconnect/IdToken$Payload.setExpirationTimeSeconds(Ljava/lang/Long;)Lcom/google/api/client/auth/openidconnect/IdToken$Payload;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/openidconnect/IdToken$Payload.setIssuedAtTimeSeconds(Ljava/lang/Long;)Lcom/google/api/client/auth/openidconnect/IdToken$Payload;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/openidconnect/IdToken$Payload.setIssuer(Ljava/lang/String;)Lcom/google/api/client/auth/openidconnect/IdToken$Payload;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/openidconnect/IdToken$Payload.setJwtId(Ljava/lang/String;)Lcom/google/api/client/auth/openidconnect/IdToken$Payload;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/openidconnect/IdToken$Payload.setMethodsReferences(Ljava/util/List;)Lcom/google/api/client/auth/openidconnect/IdToken$Payload;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/openidconnect/IdToken$Payload.setNonce(Ljava/lang/String;)Lcom/google/api/client/auth/openidconnect/IdToken$Payload;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/openidconnect/IdToken$Payload.setNotBeforeTimeSeconds(Ljava/lang/Long;)Lcom/google/api/client/auth/openidconnect/IdToken$Payload;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/openidconnect/IdToken$Payload.setSubject(Ljava/lang/String;)Lcom/google/api/client/auth/openidconnect/IdToken$Payload;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/openidconnect/IdToken$Payload.setType(Ljava/lang/String;)Lcom/google/api/client/auth/openidconnect/IdToken$Payload;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/openidconnect/IdToken.<init>(Lcom/google/api/client/json/webtoken/JsonWebSignature$Header;Lcom/google/api/client/auth/openidconnect/IdToken$Payload;[B[B)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/openidconnect/IdToken.getPayload()Lcom/google/api/client/auth/openidconnect/IdToken$Payload;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/openidconnect/IdToken.verifySignature(Ljava/security/PublicKey;)Z": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/openidconnect/IdTokenVerifier$Builder.<init>()V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/openidconnect/IdTokenVerifier$Builder.setAcceptableTimeSkewSeconds(J)Lcom/google/api/client/auth/openidconnect/IdTokenVerifier$Builder;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/openidconnect/IdTokenVerifier$Builder.setAudience(Ljava/util/Collection;)Lcom/google/api/client/auth/openidconnect/IdTokenVerifier$Builder;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/openidconnect/IdTokenVerifier$Builder.setClock(Lcom/google/api/client/util/Clock;)Lcom/google/api/client/auth/openidconnect/IdTokenVerifier$Builder;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/openidconnect/IdTokenVerifier$Builder.setIssuer(Ljava/lang/String;)Lcom/google/api/client/auth/openidconnect/IdTokenVerifier$Builder;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/openidconnect/IdTokenVerifier$Builder.setIssuers(Ljava/util/Collection;)Lcom/google/api/client/auth/openidconnect/IdTokenVerifier$Builder;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/openidconnect/IdTokenVerifier.<init>(Lcom/google/api/client/auth/openidconnect/IdTokenVerifier$Builder;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/google/api/client/auth/openidconnect/IdTokenVerifier.verify(Lcom/google/api/client/auth/openidconnect/IdToken;)Z": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/nexloottracker/ui/NexLootTrackerPanel.getRootPane()Ljavax/swing/JRootPane;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/raidtracker/ui/RaidTrackerPanel.getRootPane()Ljavax/swing/JRootPane;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/slayerassistant/presentation/components/tabs/TextTab.getParagraphAttributes()Ljavax/swing/text/AttributeSet;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/slayerassistant/presentation/components/tabs/TextTab.setParagraphAttributes(Ljavax/swing/text/AttributeSet;Z)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/slayerbanktab/SlayerBankTabPanel.getRootPane()Ljavax/swing/JRootPane;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/slayersimplified/presentation/components/tabs/TextTab.getParagraphAttributes()Ljavax/swing/text/AttributeSet;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/slayersimplified/presentation/components/tabs/TextTab.setParagraphAttributes(Ljavax/swing/text/AttributeSet;Z)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/squire/ChatView$PlaceholderTextArea.getRowHeight()I": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/sun/jna/Function.invokeLong([Ljava/lang/Object;)J": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method com/sun/jna/Library$Handler.getNativeLibrary()Lcom/sun/jna/NativeLibrary;": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method com/sun/jna/Native.getLastError()I": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method com/sun/jna/Native.load(Ljava/lang/String;Ljava/lang/Class;Ljava/util/Map;)Lcom/sun/jna/Library;": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method com/sun/jna/Native.loadLibrary(Ljava/lang/String;Ljava/lang/Class;)Ljava/lang/Object;": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method com/sun/jna/NativeLibrary.getFunction(Ljava/lang/String;)Lcom/sun/jna/Function;": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method com/sun/jna/NativeLong.<init>()V": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method com/sun/jna/NativeLong.<init>(J)V": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method com/sun/jna/NativeLong.intValue()I": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method com/sun/jna/Pointer.createConstant(I)Lcom/sun/jna/Pointer;": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method com/sun/jna/Pointer.nativeValue(Lcom/sun/jna/Pointer;)J": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method com/sun/jna/Pointer.nativeValue(Lcom/sun/jna/Pointer;J)V": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method com/sun/jna/platform/win32/Advapi32Util.registryGetStringValue(Lcom/sun/jna/platform/win32/WinReg$HKEY;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method com/sun/jna/platform/win32/BaseTSD$SIZE_T.<init>(J)V": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method com/sun/jna/platform/win32/BaseTSD$SIZE_T.longValue()J": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method com/sun/jna/platform/win32/WinDef$DWORD.intValue()I": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method com/sun/jna/platform/win32/WinNT$MEMORY_BASIC_INFORMATION.<init>()V": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method com/sun/jna/platform/win32/WinNT$MEMORY_BASIC_INFORMATION.size()I": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method com/sun/management/HotSpotDiagnosticMXBean.setVMOption(Ljava/lang/String;Ljava/lang/String;)V": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method com/tsghub/TsgHubMemberPicker.getRootPane()Ljavax/swing/JRootPane;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method com/waypointer/ui/CaptureForm.getRootPane()Ljavax/swing/JRootPane;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method jakarta/servlet/ServletConfig.getInitParameter(Ljava/lang/String;)Ljava/lang/String;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method jakarta/servlet/ServletConfig.getInitParameterNames()Ljava/util/Enumeration;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method jakarta/servlet/ServletContext.getInitParameter(Ljava/lang/String;)Ljava/lang/String;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method jakarta/servlet/ServletContext.setAttribute(Ljava/lang/String;Ljava/lang/Object;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method jakarta/servlet/ServletContextEvent.getServletContext()Ljakarta/servlet/ServletContext;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method jakarta/servlet/ServletOutputStream.write([B)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method jakarta/servlet/http/HttpServlet.<init>()V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method jakarta/servlet/http/HttpServlet.getServletConfig()Ljakarta/servlet/ServletConfig;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method jakarta/servlet/http/HttpServletRequest.getAttribute(Ljava/lang/String;)Ljava/lang/Object;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method jakarta/servlet/http/HttpServletRequest.getAttributeNames()Ljava/util/Enumeration;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method jakarta/servlet/http/HttpServletRequest.getContextPath()Ljava/lang/String;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method jakarta/servlet/http/HttpServletRequest.getHeader(Ljava/lang/String;)Ljava/lang/String;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method jakarta/servlet/http/HttpServletRequest.getParameter(Ljava/lang/String;)Ljava/lang/String;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method jakarta/servlet/http/HttpServletRequest.getParameterNames()Ljava/util/Enumeration;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method jakarta/servlet/http/HttpServletRequest.getPathInfo()Ljava/lang/String;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method jakarta/servlet/http/HttpServletRequest.getRemoteAddr()Ljava/lang/String;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method jakarta/servlet/http/HttpServletRequest.getRemotePort()I": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method jakarta/servlet/http/HttpServletRequest.getRequestURI()Ljava/lang/String;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method jakarta/servlet/http/HttpServletRequest.getScheme()Ljava/lang/String;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method jakarta/servlet/http/HttpServletRequest.getServerName()Ljava/lang/String;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method jakarta/servlet/http/HttpServletRequest.getServerPort()I": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method jakarta/servlet/http/HttpServletRequest.setCharacterEncoding(Ljava/lang/String;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method jakarta/servlet/http/HttpServletResponse.getOutputStream()Ljakarta/servlet/ServletOutputStream;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method jakarta/servlet/http/HttpServletResponse.sendError(I)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method jakarta/servlet/http/HttpServletResponse.sendRedirect(Ljava/lang/String;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method jakarta/servlet/http/HttpServletResponse.setContentType(Ljava/lang/String;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method jakarta/servlet/http/HttpServletResponse.setHeader(Ljava/lang/String;Ljava/lang/String;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method jakarta/servlet/http/HttpServletResponse.setStatus(I)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method java/awt/font/LineBreakMeasurer.<init>(Ljava/text/AttributedCharacterIterator;Ljava/awt/font/FontRenderContext;)V": {
+   "bucket": "drawing/geometry/fonts/images",
+   "status": "unresolved"
+  },
+  "method java/awt/font/LineBreakMeasurer.getPosition()I": {
+   "bucket": "drawing/geometry/fonts/images",
+   "status": "unresolved"
+  },
+  "method java/awt/font/LineBreakMeasurer.nextLayout(F)Ljava/awt/font/TextLayout;": {
+   "bucket": "drawing/geometry/fonts/images",
+   "status": "unresolved"
+  },
+  "method java/awt/font/LineBreakMeasurer.setPosition(I)V": {
+   "bucket": "drawing/geometry/fonts/images",
+   "status": "unresolved"
+  },
+  "method java/awt/font/TextLayout.<init>(Ljava/text/AttributedCharacterIterator;Ljava/awt/font/FontRenderContext;)V": {
+   "bucket": "drawing/geometry/fonts/images",
+   "status": "unresolved"
+  },
+  "method java/awt/font/TextLayout.getPixelBounds(Ljava/awt/font/FontRenderContext;FF)Ljava/awt/Rectangle;": {
+   "bucket": "drawing/geometry/fonts/images",
+   "status": "unresolved"
+  },
+  "method java/awt/image/BaseMultiResolutionImage.<init>([Ljava/awt/Image;)V": {
+   "bucket": "drawing/geometry/fonts/images",
+   "status": "unresolved"
+  },
+  "method java/lang/Process.onExit()Ljava/util/concurrent/CompletableFuture;": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method java/sql/BatchUpdateException.<init>(Ljava/lang/String;Ljava/lang/String;I[JLjava/lang/Throwable;)V": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method java/sql/DatabaseMetaData.getPseudoColumns(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/sql/ResultSet;": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method java/sql/Date.toLocalDate()Ljava/time/LocalDate;": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method java/sql/JDBCType.getName()Ljava/lang/String;": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method java/sql/JDBCType.valueOf(I)Ljava/sql/JDBCType;": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method java/sql/ResultSet.getObject(ILjava/lang/Class;)Ljava/lang/Object;": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method java/sql/SQLType.getName()Ljava/lang/String;": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method java/sql/SQLType.getVendor()Ljava/lang/String;": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method java/sql/SQLType.getVendorTypeNumber()Ljava/lang/Integer;": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method java/sql/Statement.getLargeUpdateCount()J": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method java/sql/Time.toLocalTime()Ljava/time/LocalTime;": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method java/sql/Timestamp.toLocalDateTime()Ljava/time/LocalDateTime;": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method java/util/concurrent/ConcurrentHashMap.keySet()Ljava/util/concurrent/ConcurrentHashMap$KeySetView;": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/management/MBeanAttributeInfo.getName()Ljava/lang/String;": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/management/MBeanAttributeInfo.isIs()Z": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/management/MBeanOperationInfo.getName()Ljava/lang/String;": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/management/StandardMBean.<init>(Ljava/lang/Object;Ljava/lang/Class;)V": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/management/StandardMBean.getDescription(Ljavax/management/MBeanAttributeInfo;)Ljava/lang/String;": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/management/StandardMBean.getDescription(Ljavax/management/MBeanInfo;)Ljava/lang/String;": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/management/StandardMBean.getDescription(Ljavax/management/MBeanOperationInfo;)Ljava/lang/String;": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/naming/Context.lookup(Ljava/lang/String;)Ljava/lang/Object;": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/naming/directory/DirContext.close()V": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/naming/directory/InitialDirContext.<init>(Ljava/util/Hashtable;)V": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/script/Compilable.compile(Ljava/lang/String;)Ljavax/script/CompiledScript;": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/script/CompiledScript.eval()Ljava/lang/Object;": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/script/ScriptEngineManager.<init>()V": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/script/ScriptEngineManager.getEngineByName(Ljava/lang/String;)Ljavax/script/ScriptEngine;": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/security/auth/callback/NameCallback.setName(Ljava/lang/String;)V": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/security/auth/login/LoginContext.<init>(Ljava/lang/String;Ljavax/security/auth/callback/CallbackHandler;)V": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/security/auth/login/LoginContext.getSubject()Ljavax/security/auth/Subject;": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/security/auth/login/LoginContext.login()V": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/servlet/ServletConfig.getInitParameter(Ljava/lang/String;)Ljava/lang/String;": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/servlet/ServletConfig.getInitParameterNames()Ljava/util/Enumeration;": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/servlet/ServletContext.getInitParameter(Ljava/lang/String;)Ljava/lang/String;": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/servlet/ServletContext.setAttribute(Ljava/lang/String;Ljava/lang/Object;)V": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/servlet/ServletContextEvent.getServletContext()Ljavax/servlet/ServletContext;": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/servlet/ServletException.<init>(Ljava/lang/String;)V": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/servlet/ServletOutputStream.write([B)V": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/servlet/http/HttpServlet.<init>()V": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/servlet/http/HttpServlet.getServletConfig()Ljavax/servlet/ServletConfig;": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/servlet/http/HttpServletRequest.getAttribute(Ljava/lang/String;)Ljava/lang/Object;": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/servlet/http/HttpServletRequest.getAttributeNames()Ljava/util/Enumeration;": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/servlet/http/HttpServletRequest.getContextPath()Ljava/lang/String;": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/servlet/http/HttpServletRequest.getHeader(Ljava/lang/String;)Ljava/lang/String;": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/servlet/http/HttpServletRequest.getParameter(Ljava/lang/String;)Ljava/lang/String;": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/servlet/http/HttpServletRequest.getParameterNames()Ljava/util/Enumeration;": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/servlet/http/HttpServletRequest.getPathInfo()Ljava/lang/String;": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/servlet/http/HttpServletRequest.getRemoteAddr()Ljava/lang/String;": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/servlet/http/HttpServletRequest.getRemotePort()I": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/servlet/http/HttpServletRequest.getRequestURI()Ljava/lang/String;": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/servlet/http/HttpServletRequest.getScheme()Ljava/lang/String;": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/servlet/http/HttpServletRequest.getServerName()Ljava/lang/String;": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/servlet/http/HttpServletRequest.getServerPort()I": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/servlet/http/HttpServletRequest.getSession()Ljavax/servlet/http/HttpSession;": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/servlet/http/HttpServletRequest.setCharacterEncoding(Ljava/lang/String;)V": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/servlet/http/HttpServletResponse.getOutputStream()Ljavax/servlet/ServletOutputStream;": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/servlet/http/HttpServletResponse.sendError(I)V": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/servlet/http/HttpServletResponse.sendRedirect(Ljava/lang/String;)V": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/servlet/http/HttpServletResponse.setContentType(Ljava/lang/String;)V": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/servlet/http/HttpServletResponse.setHeader(Ljava/lang/String;Ljava/lang/String;)V": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/servlet/http/HttpServletResponse.setStatus(I)V": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/servlet/http/HttpSession.getAttribute(Ljava/lang/String;)Ljava/lang/Object;": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/servlet/http/HttpSession.setAttribute(Ljava/lang/String;Ljava/lang/Object;)V": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/swing/plaf/basic/BasicHTML.createHTMLView(Ljavax/swing/JComponent;Ljava/lang/String;)Ljavax/swing/text/View;": {
+   "bucket": "widgets/menus/tables",
+   "status": "unresolved"
+  },
+  "method javax/swing/plaf/basic/BasicHTML.isHTMLString(Ljava/lang/String;)Z": {
+   "bucket": "widgets/menus/tables",
+   "status": "unresolved"
+  },
+  "method javax/swing/plaf/basic/BasicHTML.updateRenderer(Ljavax/swing/JComponent;Ljava/lang/String;)V": {
+   "bucket": "widgets/menus/tables",
+   "status": "unresolved"
+  },
+  "method javax/swing/plaf/basic/BasicPasswordFieldUI.<init>()V": {
+   "bucket": "widgets/menus/tables",
+   "status": "unresolved"
+  },
+  "method javax/swing/plaf/basic/BasicTextFieldUI.<init>()V": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "method javax/swing/plaf/metal/MetalTabbedPaneUI.<init>()V": {
+   "bucket": "widgets/menus/tables",
+   "status": "unresolved"
+  },
+  "method javax/swing/plaf/metal/MetalTabbedPaneUI.calculateTabWidth(IILjava/awt/FontMetrics;)I": {
+   "bucket": "widgets/menus/tables",
+   "status": "unresolved"
+  },
+  "method javax/swing/plaf/metal/MetalTabbedPaneUI.getTabAreaInsets(I)Ljava/awt/Insets;": {
+   "bucket": "widgets/menus/tables",
+   "status": "unresolved"
+  },
+  "method javax/swing/text/BoxView.<init>(Ljavax/swing/text/Element;I)V": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "method javax/swing/text/ComponentView.<init>(Ljavax/swing/text/Element;)V": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "method javax/swing/text/DefaultEditorKit$CopyAction.<init>()V": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "method javax/swing/text/DefaultEditorKit$CutAction.<init>()V": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "method javax/swing/text/DefaultEditorKit$PasteAction.<init>()V": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "method javax/swing/text/IconView.<init>(Ljavax/swing/text/Element;)V": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "method javax/swing/text/LabelView.<init>(Ljavax/swing/text/Element;)V": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "method javax/swing/text/LabelView.getMinimumSpan(I)F": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "method javax/swing/text/ParagraphView.<init>(Ljavax/swing/text/Element;)V": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "method javax/swing/text/ParagraphView.getAttributes()Ljavax/swing/text/AttributeSet;": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "method javax/swing/text/ParagraphView.paint(Ljava/awt/Graphics;Ljava/awt/Shape;)V": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "method javax/swing/text/ParagraphView.paintChild(Ljava/awt/Graphics;Ljava/awt/Rectangle;I)V": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "method javax/swing/text/StyledEditorKit$StyledTextAction.<init>(Ljava/lang/String;)V": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "method javax/swing/text/StyledEditorKit$StyledTextAction.getEditor(Ljava/awt/event/ActionEvent;)Ljavax/swing/JEditorPane;": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "method javax/swing/text/StyledEditorKit$StyledTextAction.getStyledEditorKit(Ljavax/swing/JEditorPane;)Ljavax/swing/text/StyledEditorKit;": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "method javax/swing/text/StyledEditorKit$StyledTextAction.getValue(Ljava/lang/String;)Ljava/lang/Object;": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "method javax/swing/text/StyledEditorKit$StyledTextAction.putValue(Ljava/lang/String;Ljava/lang/Object;)V": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "method javax/swing/text/StyledEditorKit$StyledTextAction.setCharacterAttributes(Ljavax/swing/JEditorPane;Ljavax/swing/text/AttributeSet;Z)V": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "method javax/swing/text/StyledEditorKit.<init>()V": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "method javax/swing/text/StyledEditorKit.getInputAttributes()Ljavax/swing/text/MutableAttributeSet;": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "method javax/swing/text/StyledEditorKit.getViewFactory()Ljavax/swing/text/ViewFactory;": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "method javax/swing/text/TextAction.<init>(Ljava/lang/String;)V": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "method javax/swing/text/TextAction.getTextComponent(Ljava/awt/event/ActionEvent;)Ljavax/swing/text/JTextComponent;": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "method javax/swing/text/html/HTMLEditorKit$ParserCallback.<init>()V": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "method javax/swing/text/html/ImageView.<init>(Ljavax/swing/text/Element;)V": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "method javax/swing/text/html/ImageView.getAltText()Ljava/lang/String;": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "method javax/swing/text/html/ImageView.getContainer()Ljava/awt/Container;": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "method javax/swing/text/html/ImageView.getElement()Ljavax/swing/text/Element;": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "method javax/swing/text/html/ImageView.getImage()Ljava/awt/Image;": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "method javax/swing/text/html/ImageView.getPreferredSpan(I)F": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "method javax/swing/text/html/ImageView.paint(Ljava/awt/Graphics;Ljava/awt/Shape;)V": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "method javax/swing/text/html/ImageView.preferenceChanged(Ljavax/swing/text/View;ZZ)V": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "method javax/swing/text/html/parser/ParserDelegator.<init>()V": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "method javax/swing/text/html/parser/ParserDelegator.parse(Ljava/io/Reader;Ljavax/swing/text/html/HTMLEditorKit$ParserCallback;Z)V": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "method javax/swing/text/rtf/RTFEditorKit.<init>()V": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "method javax/swing/text/rtf/RTFEditorKit.createInputAttributes(Ljavax/swing/text/Element;Ljavax/swing/text/MutableAttributeSet;)V": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "method javax/swing/text/rtf/RTFEditorKit.getActions()[Ljavax/swing/Action;": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "method javax/swing/text/rtf/RTFEditorKit.read(Ljava/io/InputStream;Ljavax/swing/text/Document;I)V": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "method javax/tools/ForwardingJavaFileManager.<init>(Ljavax/tools/JavaFileManager;)V": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/tools/JavaCompiler$CompilationTask.call()Ljava/lang/Boolean;": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/tools/JavaCompiler.getStandardFileManager(Ljavax/tools/DiagnosticListener;Ljava/util/Locale;Ljava/nio/charset/Charset;)Ljavax/tools/StandardJavaFileManager;": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/tools/JavaCompiler.getTask(Ljava/io/Writer;Ljavax/tools/JavaFileManager;Ljavax/tools/DiagnosticListener;Ljava/lang/Iterable;Ljava/lang/Iterable;Ljava/lang/Iterable;)Ljavax/tools/JavaCompiler$CompilationTask;": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/tools/JavaFileManager.close()V": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/tools/JavaFileManager.getClassLoader(Ljavax/tools/JavaFileManager$Location;)Ljava/lang/ClassLoader;": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/tools/SimpleJavaFileObject.<init>(Ljava/net/URI;Ljavax/tools/JavaFileObject$Kind;)V": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/tools/ToolProvider.getSystemJavaCompiler()Ljavax/tools/JavaCompiler;": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/xml/stream/XMLInputFactory.createXMLStreamReader(Ljava/io/InputStream;)Ljavax/xml/stream/XMLStreamReader;": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/xml/stream/XMLInputFactory.newInstance()Ljavax/xml/stream/XMLInputFactory;": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/xml/stream/XMLInputFactory.setProperty(Ljava/lang/String;Ljava/lang/Object;)V": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/xml/stream/XMLOutputFactory.createXMLStreamWriter(Ljava/io/Writer;)Ljavax/xml/stream/XMLStreamWriter;": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/xml/stream/XMLOutputFactory.newInstance()Ljavax/xml/stream/XMLOutputFactory;": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/xml/transform/stax/StAXResult.<init>(Ljavax/xml/stream/XMLStreamWriter;)V": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method javax/xml/transform/stax/StAXSource.<init>(Ljavax/xml/stream/XMLStreamReader;)V": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method lombok/Lombok.sneakyThrow(Ljava/lang/Throwable;)Ljava/lang/RuntimeException;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method matsyir/pvpperformancetracker/views/FightPerformancePanel.getRootPane()Ljavax/swing/JRootPane;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method net/runelite/cache/definitions/TrackDefinition.getMidi()[B": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/cache/definitions/loaders/TrackLoader.<init>()V": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/cache/definitions/loaders/TrackLoader.load([B)Lnet/runelite/cache/definitions/TrackDefinition;": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/cache/fs/Container.decompress([B[I)Lnet/runelite/cache/fs/Container;": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/cache/fs/Index.getArchive(I)Lnet/runelite/cache/fs/Archive;": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/cache/fs/Index.getArchives()Ljava/util/List;": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/cache/fs/Storage.loadArchive(Lnet/runelite/cache/fs/Archive;)[B": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/cache/fs/Store.<init>(Ljava/io/File;)V": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/cache/fs/Store.close()V": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/cache/fs/Store.findIndex(I)Lnet/runelite/cache/fs/Index;": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/cache/fs/Store.getStorage()Lnet/runelite/cache/fs/Storage;": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/cache/fs/Store.load()V": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/http/api/chat/Duels.getLosses()I": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/http/api/chat/Duels.getWinningStreak()I": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/http/api/chat/Duels.getWins()I": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/http/api/item/ItemEquipmentStats.getAcrush()I": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/http/api/item/ItemEquipmentStats.getAmagic()I": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/http/api/item/ItemEquipmentStats.getArange()I": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/http/api/item/ItemEquipmentStats.getAslash()I": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/http/api/item/ItemEquipmentStats.getAspeed()I": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/http/api/item/ItemEquipmentStats.getAstab()I": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/http/api/item/ItemEquipmentStats.getDcrush()I": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/http/api/item/ItemEquipmentStats.getDmagic()I": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/http/api/item/ItemEquipmentStats.getDrange()I": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/http/api/item/ItemEquipmentStats.getDslash()I": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/http/api/item/ItemEquipmentStats.getDstab()I": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/http/api/item/ItemEquipmentStats.getMdmg()I": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/http/api/item/ItemEquipmentStats.getPrayer()I": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/http/api/item/ItemEquipmentStats.getRstr()I": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/http/api/item/ItemEquipmentStats.getSlot()I": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/http/api/item/ItemEquipmentStats.getStr()I": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/http/api/item/ItemEquipmentStats.isTwoHanded()Z": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/http/api/item/ItemPrice.getId()I": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/http/api/item/ItemPrice.getName()Ljava/lang/String;": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/http/api/item/ItemPrice.getPrice()J": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/http/api/item/ItemPrice.getWikiPrice()J": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/http/api/item/ItemStats.getEquipment()Lnet/runelite/http/api/item/ItemEquipmentStats;": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/http/api/item/ItemStats.isEquipable()Z": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/http/api/loottracker/LootRecordType.equals(Ljava/lang/Object;)Z": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/http/api/loottracker/LootRecordType.name()Ljava/lang/String;": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/http/api/loottracker/LootRecordType.ordinal()I": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/http/api/loottracker/LootRecordType.toString()Ljava/lang/String;": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/http/api/loottracker/LootRecordType.values()[Lnet/runelite/http/api/loottracker/LootRecordType;": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/http/api/worlds/World.getActivity()Ljava/lang/String;": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/http/api/worlds/World.getAddress()Ljava/lang/String;": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/http/api/worlds/World.getId()I": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/http/api/worlds/World.getPlayers()I": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/http/api/worlds/World.getRegion()Lnet/runelite/http/api/worlds/WorldRegion;": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/http/api/worlds/World.getTypes()Ljava/util/EnumSet;": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/http/api/worlds/WorldRegion.getAlpha2()Ljava/lang/String;": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/http/api/worlds/WorldRegion.getId()I": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/http/api/worlds/WorldRegion.ordinal()I": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/http/api/worlds/WorldRegion.values()[Lnet/runelite/http/api/worlds/WorldRegion;": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/http/api/worlds/WorldResult.findWorld(I)Lnet/runelite/http/api/worlds/World;": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method net/runelite/http/api/worlds/WorldResult.getWorlds()Ljava/util/List;": {
+   "bucket": "runelite",
+   "status": "unresolved"
+  },
+  "method org/apache/http/Header.getName()Ljava/lang/String;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/http/Header.getValue()Ljava/lang/String;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/http/HttpEntity.getContent()Ljava/io/InputStream;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/http/HttpEntity.getContentEncoding()Lorg/apache/http/Header;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/http/HttpEntity.getContentLength()J": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/http/HttpEntity.getContentType()Lorg/apache/http/Header;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/http/HttpEntityEnclosingRequest.setEntity(Lorg/apache/http/HttpEntity;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/http/HttpResponse.getAllHeaders()[Lorg/apache/http/Header;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/http/HttpResponse.getEntity()Lorg/apache/http/HttpEntity;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/http/HttpResponse.getLastHeader(Ljava/lang/String;)Lorg/apache/http/Header;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/http/HttpResponse.getStatusLine()Lorg/apache/http/StatusLine;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/http/RequestLine.getMethod()Ljava/lang/String;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/http/StatusLine.getReasonPhrase()Ljava/lang/String;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/http/StatusLine.getStatusCode()I": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/http/client/HttpClient.execute(Lorg/apache/http/client/methods/HttpUriRequest;)Lorg/apache/http/HttpResponse;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/http/client/HttpClient.getConnectionManager()Lorg/apache/http/conn/ClientConnectionManager;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/http/client/HttpClient.getParams()Lorg/apache/http/params/HttpParams;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/http/client/methods/HttpDelete.<init>(Ljava/lang/String;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/http/client/methods/HttpEntityEnclosingRequestBase.<init>()V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/http/client/methods/HttpEntityEnclosingRequestBase.setURI(Ljava/net/URI;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/http/client/methods/HttpGet.<init>(Ljava/lang/String;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/http/client/methods/HttpHead.<init>(Ljava/lang/String;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/http/client/methods/HttpOptions.<init>(Ljava/lang/String;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/http/client/methods/HttpPost.<init>(Ljava/lang/String;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/http/client/methods/HttpPut.<init>(Ljava/lang/String;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/http/client/methods/HttpRequestBase.abort()V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/http/client/methods/HttpRequestBase.addHeader(Ljava/lang/String;Ljava/lang/String;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/http/client/methods/HttpRequestBase.getParams()Lorg/apache/http/params/HttpParams;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/http/client/methods/HttpRequestBase.getRequestLine()Lorg/apache/http/RequestLine;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/http/client/methods/HttpTrace.<init>(Ljava/lang/String;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/http/conn/ClientConnectionManager.shutdown()V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/http/conn/params/ConnManagerParams.setMaxConnectionsPerRoute(Lorg/apache/http/params/HttpParams;Lorg/apache/http/conn/params/ConnPerRoute;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/http/conn/params/ConnManagerParams.setMaxTotalConnections(Lorg/apache/http/params/HttpParams;I)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/http/conn/params/ConnManagerParams.setTimeout(Lorg/apache/http/params/HttpParams;J)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/http/conn/params/ConnPerRouteBean.<init>(I)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/http/conn/params/ConnRouteParams.setDefaultProxy(Lorg/apache/http/params/HttpParams;Lorg/apache/http/HttpHost;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/http/conn/scheme/PlainSocketFactory.getSocketFactory()Lorg/apache/http/conn/scheme/PlainSocketFactory;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/http/conn/scheme/Scheme.<init>(Ljava/lang/String;Lorg/apache/http/conn/scheme/SocketFactory;I)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/http/conn/scheme/SchemeRegistry.<init>()V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/http/conn/scheme/SchemeRegistry.register(Lorg/apache/http/conn/scheme/Scheme;)Lorg/apache/http/conn/scheme/Scheme;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/http/entity/AbstractHttpEntity.<init>()V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/http/entity/AbstractHttpEntity.setContentEncoding(Ljava/lang/String;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/http/entity/AbstractHttpEntity.setContentType(Ljava/lang/String;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/http/impl/client/DefaultHttpClient.<init>()V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/http/impl/client/DefaultHttpClient.<init>(Lorg/apache/http/conn/ClientConnectionManager;Lorg/apache/http/params/HttpParams;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/http/impl/client/DefaultHttpClient.getParams()Lorg/apache/http/params/HttpParams;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/http/impl/client/DefaultHttpClient.setHttpRequestRetryHandler(Lorg/apache/http/client/HttpRequestRetryHandler;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/http/impl/client/DefaultHttpClient.setRoutePlanner(Lorg/apache/http/conn/routing/HttpRoutePlanner;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/http/impl/client/DefaultHttpRequestRetryHandler.<init>(IZ)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/http/impl/conn/ProxySelectorRoutePlanner.<init>(Lorg/apache/http/conn/scheme/SchemeRegistry;Ljava/net/ProxySelector;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/http/impl/conn/tsccm/ThreadSafeClientConnManager.<init>(Lorg/apache/http/params/HttpParams;Lorg/apache/http/conn/scheme/SchemeRegistry;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/http/message/BasicHttpResponse.<init>(Lorg/apache/http/ProtocolVersion;ILjava/lang/String;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/http/params/BasicHttpParams.<init>()V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/http/params/HttpProtocolParams.setVersion(Lorg/apache/http/params/HttpParams;Lorg/apache/http/ProtocolVersion;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/lucene/analysis/standard/StandardAnalyzer.<init>()V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/lucene/document/DateTools.timeToString(JLorg/apache/lucene/document/DateTools$Resolution;)Ljava/lang/String;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/lucene/document/Document.<init>()V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/lucene/document/Document.add(Lorg/apache/lucene/index/IndexableField;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/lucene/document/Document.get(Ljava/lang/String;)Ljava/lang/String;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/lucene/document/Field.<init>(Ljava/lang/String;Ljava/lang/CharSequence;Lorg/apache/lucene/index/IndexableFieldType;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/lucene/document/FieldType.<init>(Lorg/apache/lucene/index/IndexableFieldType;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/lucene/document/FieldType.freeze()V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/lucene/document/FieldType.setTokenized(Z)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/lucene/index/DirectoryReader.open(Lorg/apache/lucene/index/IndexWriter;)Lorg/apache/lucene/index/DirectoryReader;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/lucene/index/IndexReader.decRef()V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/lucene/index/IndexReader.tryIncRef()Z": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/lucene/index/IndexWriter.<init>(Lorg/apache/lucene/store/Directory;Lorg/apache/lucene/index/IndexWriterConfig;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/lucene/index/IndexWriter.addDocument(Ljava/lang/Iterable;)J": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/lucene/index/IndexWriter.close()V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/lucene/index/IndexWriter.commit()J": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/lucene/index/IndexWriter.deleteDocuments([Lorg/apache/lucene/index/Term;)J": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/lucene/index/IndexWriter.getAnalyzer()Lorg/apache/lucene/analysis/Analyzer;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/lucene/index/IndexWriterConfig.<init>(Lorg/apache/lucene/analysis/Analyzer;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/lucene/index/IndexWriterConfig.setOpenMode(Lorg/apache/lucene/index/IndexWriterConfig$OpenMode;)Lorg/apache/lucene/index/IndexWriterConfig;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/lucene/index/Term.<init>(Ljava/lang/String;Ljava/lang/String;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/lucene/queryparser/flexible/standard/StandardQueryParser.<init>(Lorg/apache/lucene/analysis/Analyzer;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/lucene/queryparser/flexible/standard/StandardQueryParser.parse(Ljava/lang/String;Ljava/lang/String;)Lorg/apache/lucene/search/Query;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/lucene/search/IndexSearcher.<init>(Lorg/apache/lucene/index/IndexReader;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/lucene/search/IndexSearcher.doc(I)Lorg/apache/lucene/document/Document;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/lucene/search/IndexSearcher.getIndexReader()Lorg/apache/lucene/index/IndexReader;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/lucene/search/IndexSearcher.search(Lorg/apache/lucene/search/Query;I)Lorg/apache/lucene/search/TopDocs;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/lucene/store/ByteBuffersDirectory.<init>()V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/apache/lucene/store/FSDirectory.open(Ljava/nio/file/Path;)Lorg/apache/lucene/store/FSDirectory;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/locationtech/jts/geom/CoordinateSequence.getM(I)D": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/locationtech/jts/geom/CoordinateSequence.getX(I)D": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/locationtech/jts/geom/CoordinateSequence.getY(I)D": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/locationtech/jts/geom/CoordinateSequence.getZ(I)D": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/locationtech/jts/geom/CoordinateSequence.hasM()Z": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/locationtech/jts/geom/CoordinateSequence.hasZ()Z": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/locationtech/jts/geom/CoordinateSequence.setOrdinate(IID)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/locationtech/jts/geom/CoordinateSequence.size()I": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/locationtech/jts/geom/CoordinateSequenceFactory.create(III)Lorg/locationtech/jts/geom/CoordinateSequence;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/locationtech/jts/geom/Geometry.copy()Lorg/locationtech/jts/geom/Geometry;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/locationtech/jts/geom/Geometry.getSRID()I": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/locationtech/jts/geom/GeometryCollection.<init>([Lorg/locationtech/jts/geom/Geometry;Lorg/locationtech/jts/geom/GeometryFactory;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/locationtech/jts/geom/GeometryCollection.getGeometryN(I)Lorg/locationtech/jts/geom/Geometry;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/locationtech/jts/geom/GeometryCollection.getNumGeometries()I": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/locationtech/jts/geom/GeometryFactory.<init>(Lorg/locationtech/jts/geom/PrecisionModel;ILorg/locationtech/jts/geom/CoordinateSequenceFactory;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/locationtech/jts/geom/GeometryFactory.getCoordinateSequenceFactory()Lorg/locationtech/jts/geom/CoordinateSequenceFactory;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/locationtech/jts/geom/LineString.<init>(Lorg/locationtech/jts/geom/CoordinateSequence;Lorg/locationtech/jts/geom/GeometryFactory;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/locationtech/jts/geom/LineString.getCoordinateSequence()Lorg/locationtech/jts/geom/CoordinateSequence;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/locationtech/jts/geom/LinearRing.<init>(Lorg/locationtech/jts/geom/CoordinateSequence;Lorg/locationtech/jts/geom/GeometryFactory;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/locationtech/jts/geom/LinearRing.getCoordinateSequence()Lorg/locationtech/jts/geom/CoordinateSequence;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/locationtech/jts/geom/MultiLineString.<init>([Lorg/locationtech/jts/geom/LineString;Lorg/locationtech/jts/geom/GeometryFactory;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/locationtech/jts/geom/MultiPoint.<init>([Lorg/locationtech/jts/geom/Point;Lorg/locationtech/jts/geom/GeometryFactory;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/locationtech/jts/geom/MultiPolygon.<init>([Lorg/locationtech/jts/geom/Polygon;Lorg/locationtech/jts/geom/GeometryFactory;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/locationtech/jts/geom/Point.<init>(Lorg/locationtech/jts/geom/CoordinateSequence;Lorg/locationtech/jts/geom/GeometryFactory;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/locationtech/jts/geom/Point.getCoordinateSequence()Lorg/locationtech/jts/geom/CoordinateSequence;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/locationtech/jts/geom/Point.isEmpty()Z": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/locationtech/jts/geom/Polygon.<init>(Lorg/locationtech/jts/geom/LinearRing;[Lorg/locationtech/jts/geom/LinearRing;Lorg/locationtech/jts/geom/GeometryFactory;)V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/locationtech/jts/geom/Polygon.getExteriorRing()Lorg/locationtech/jts/geom/LinearRing;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/locationtech/jts/geom/Polygon.getInteriorRingN(I)Lorg/locationtech/jts/geom/LinearRing;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/locationtech/jts/geom/Polygon.getNumInteriorRing()I": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/locationtech/jts/geom/PrecisionModel.<init>()V": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/locationtech/jts/geom/impl/CoordinateArraySequenceFactory.instance()Lorg/locationtech/jts/geom/impl/CoordinateArraySequenceFactory;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/BufferUtils.createShortBuffer(I)Ljava/nio/ShortBuffer;": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/APPLEGLSharing.clGetGLContextInfoAPPLE(JJILorg/lwjgl/PointerBuffer;Lorg/lwjgl/PointerBuffer;)I": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL.create()V": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL.createDeviceCapabilities(JLorg/lwjgl/opencl/CLCapabilities;)Lorg/lwjgl/opencl/CLCapabilities;": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL.createPlatformCapabilities(J)Lorg/lwjgl/opencl/CLCapabilities;": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL.destroy()V": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL10.clBuildProgram(JJLjava/lang/CharSequence;Lorg/lwjgl/opencl/CLProgramCallbackI;J)I": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL10.clCreateCommandQueue(JJJ[I)J": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL10.clCreateContext(Lorg/lwjgl/PointerBuffer;JLorg/lwjgl/opencl/CLContextCallbackI;JLjava/nio/IntBuffer;)J": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL10.clCreateImage3D(JJLorg/lwjgl/opencl/CLImageFormat;JJJJJLjava/nio/ShortBuffer;Ljava/nio/IntBuffer;)J": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL10.clCreateKernel(JLjava/lang/CharSequence;Ljava/nio/IntBuffer;)J": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL10.clCreateProgramWithSource(JLjava/lang/CharSequence;Ljava/nio/IntBuffer;)J": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL10.clEnqueueNDRangeKernel(JJILorg/lwjgl/PointerBuffer;Lorg/lwjgl/PointerBuffer;Lorg/lwjgl/PointerBuffer;Lorg/lwjgl/PointerBuffer;Lorg/lwjgl/PointerBuffer;)I": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL10.clFinish(J)I": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL10.clGetDeviceIDs(JJLorg/lwjgl/PointerBuffer;Ljava/nio/IntBuffer;)I": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL10.clGetDeviceInfo(JILjava/nio/ByteBuffer;Lorg/lwjgl/PointerBuffer;)I": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL10.clGetDeviceInfo(JILjava/nio/IntBuffer;Lorg/lwjgl/PointerBuffer;)I": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL10.clGetDeviceInfo(JILjava/nio/LongBuffer;Lorg/lwjgl/PointerBuffer;)I": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL10.clGetDeviceInfo(JILorg/lwjgl/PointerBuffer;Lorg/lwjgl/PointerBuffer;)I": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL10.clGetDeviceInfo(JI[JLorg/lwjgl/PointerBuffer;)I": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL10.clGetPlatformIDs(Lorg/lwjgl/PointerBuffer;Ljava/nio/IntBuffer;)I": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL10.clGetPlatformInfo(JILjava/nio/ByteBuffer;Lorg/lwjgl/PointerBuffer;)I": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL10.clGetProgramBuildInfo(JJILjava/nio/ByteBuffer;Lorg/lwjgl/PointerBuffer;)I": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL10.clGetProgramBuildInfo(JJILjava/nio/IntBuffer;Lorg/lwjgl/PointerBuffer;)I": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL10.clReleaseCommandQueue(J)I": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL10.clReleaseContext(J)I": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL10.clReleaseEvent(J)I": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL10.clReleaseKernel(J)I": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL10.clReleaseMemObject(J)I": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL10.clReleaseProgram(J)I": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL10.clSetKernelArg(JIJ)I": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL10.clSetKernelArg1p(JIJ)I": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL10GL.clCreateFromGLBuffer(JJILjava/nio/IntBuffer;)J": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL10GL.clCreateFromGLBuffer(JJI[I)J": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL10GL.clEnqueueAcquireGLObjects(JLorg/lwjgl/PointerBuffer;Lorg/lwjgl/PointerBuffer;Lorg/lwjgl/PointerBuffer;)I": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL10GL.clEnqueueReleaseGLObjects(JLorg/lwjgl/PointerBuffer;Lorg/lwjgl/PointerBuffer;Lorg/lwjgl/PointerBuffer;)I": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL11.clCreateContext(Lorg/lwjgl/PointerBuffer;JLorg/lwjgl/opencl/CLContextCallbackI;JLjava/nio/IntBuffer;)J": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL11.clCreateContext(Lorg/lwjgl/PointerBuffer;Lorg/lwjgl/PointerBuffer;Lorg/lwjgl/opencl/CLContextCallbackI;JLjava/nio/IntBuffer;)J": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL11.clGetDeviceIDs(JJLorg/lwjgl/PointerBuffer;Ljava/nio/IntBuffer;)I": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL11.clGetDeviceInfo(JILjava/nio/ByteBuffer;Lorg/lwjgl/PointerBuffer;)I": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL11.clGetDeviceInfo(JILjava/nio/IntBuffer;Lorg/lwjgl/PointerBuffer;)I": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL11.clGetDeviceInfo(JILjava/nio/LongBuffer;Lorg/lwjgl/PointerBuffer;)I": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL11.clGetDeviceInfo(JILorg/lwjgl/PointerBuffer;Lorg/lwjgl/PointerBuffer;)I": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL11.clGetPlatformIDs(Lorg/lwjgl/PointerBuffer;Ljava/nio/IntBuffer;)I": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL12.clBuildProgram(JJLjava/lang/CharSequence;Lorg/lwjgl/opencl/CLProgramCallbackI;J)I": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL12.clCreateCommandQueue(JJJ[I)J": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL12.clCreateImage3D(JJLorg/lwjgl/opencl/CLImageFormat;JJJJJLjava/nio/ShortBuffer;Ljava/nio/IntBuffer;)J": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL12.clCreateKernel(JLjava/lang/CharSequence;Ljava/nio/IntBuffer;)J": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL12.clCreateProgramWithSource(JLjava/lang/CharSequence;Ljava/nio/IntBuffer;)J": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL12.clEnqueueNDRangeKernel(JJILorg/lwjgl/PointerBuffer;Lorg/lwjgl/PointerBuffer;Lorg/lwjgl/PointerBuffer;Lorg/lwjgl/PointerBuffer;Lorg/lwjgl/PointerBuffer;)I": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL12.clFinish(J)I": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL12.clGetDeviceInfo(JI[JLorg/lwjgl/PointerBuffer;)I": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL12.clReleaseCommandQueue(J)I": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL12.clReleaseContext(J)I": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL12.clReleaseDevice(J)I": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL12.clReleaseKernel(J)I": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL12.clReleaseMemObject(J)I": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL12.clReleaseProgram(J)I": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL12.clSetKernelArg(JIJ)I": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL12.clSetKernelArg1l(JIJ)I": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CL12.clSetKernelArg1p(JIJ)I": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CLContextCallback.create(Lorg/lwjgl/opencl/CLContextCallbackI;)Lorg/lwjgl/opencl/CLContextCallback;": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CLImageFormat.calloc(Lorg/lwjgl/system/MemoryStack;)Lorg/lwjgl/opencl/CLImageFormat;": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CLImageFormat.image_channel_data_type(I)Lorg/lwjgl/opencl/CLImageFormat;": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opencl/CLImageFormat.image_channel_order(I)Lorg/lwjgl/opencl/CLImageFormat;": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opengl/GL11.glGetIntegerv(ILjava/nio/IntBuffer;)V": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opengl/GL11.glReadBuffer(I)V": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opengl/GL11.glReadPixels(IIIIIIJ)V": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opengl/GL15.glBindBuffer(II)V": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opengl/GL15.glBufferData(IJI)V": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opengl/GL15.glDeleteBuffers([I)V": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opengl/GL15.glGenBuffers([I)V": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opengl/GL15.glMapBuffer(II)Ljava/nio/ByteBuffer;": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opengl/GL15.glUnmapBuffer(I)Z": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opengl/GL42C.glTexStorage3D(IIIIII)V": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/lwjgl/opengl/GL45C.glClipControl(II)V": {
+   "bucket": "lwjgl/native",
+   "status": "unresolved"
+  },
+  "method org/osgi/framework/BundleContext.registerService(Ljava/lang/String;Ljava/lang/Object;Ljava/util/Dictionary;)Lorg/osgi/framework/ServiceRegistration;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  },
+  "method sun/misc/Unsafe.arrayBaseOffset(Ljava/lang/Class;)I": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method sun/misc/Unsafe.arrayIndexScale(Ljava/lang/Class;)I": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method sun/misc/Unsafe.copyMemory(Ljava/lang/Object;JLjava/lang/Object;JJ)V": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method sun/misc/Unsafe.freeMemory(J)V": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method sun/misc/Unsafe.getBoolean(Ljava/lang/Object;J)Z": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method sun/misc/Unsafe.getByte(Ljava/lang/Object;J)B": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method sun/misc/Unsafe.getDouble(Ljava/lang/Object;J)D": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method sun/misc/Unsafe.getFloat(Ljava/lang/Object;J)F": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method sun/misc/Unsafe.getInt(Ljava/lang/Object;J)I": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method sun/misc/Unsafe.getLong(Ljava/lang/Object;J)J": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method sun/misc/Unsafe.getShort(Ljava/lang/Object;J)S": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method sun/misc/Unsafe.putBoolean(Ljava/lang/Object;JZ)V": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method sun/misc/Unsafe.putByte(Ljava/lang/Object;JB)V": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method sun/misc/Unsafe.putDouble(Ljava/lang/Object;JD)V": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method sun/misc/Unsafe.putInt(Ljava/lang/Object;JI)V": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method sun/misc/Unsafe.putLong(Ljava/lang/Object;JJ)V": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method sun/misc/Unsafe.putShort(Ljava/lang/Object;JS)V": {
+   "bucket": "other jdk",
+   "status": "unresolved"
+  },
+  "method thestonedturtle/lootlogger/ui/LootLoggerPanel.getRootPane()Ljavax/swing/JRootPane;": {
+   "bucket": "other libraries",
+   "status": "unresolved"
+  }
+ }
 }
