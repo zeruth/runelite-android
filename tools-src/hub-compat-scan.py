@@ -77,6 +77,9 @@ DEFAULT_LIBS = [
     ('net.sf.jopt-simple', 'jopt-simple'),
     ('com.google.protobuf', 'protobuf-javalite'),
     ('net.runelite', 'discord'),
+    # net.runelite.http.api: not built from this checkout, runelite-client takes the
+    # released artifact from repo.runelite.net and plugins link it as part of the client.
+    ('net.runelite.arn', 'http-api'),
     ('ch.qos.logback', 'logback-classic'),
     ('ch.qos.logback', 'logback-core'),
 ]
