@@ -308,9 +308,6 @@ public class JTree extends JComponent implements Scrollable, Accessible
     /** If true, mouse presses on selections initiate a drag operation. */
     private boolean dragEnabled;
 
-    /** The long-press drag gesture armed by {@code setDragEnabled}. */
-    private transient java.awt.dnd.DragGestureRecognizer dragRecognizer;
-
     /**
      * The drop mode for this component.
      */
@@ -717,7 +714,13 @@ public class JTree extends JComponent implements Scrollable, Accessible
      * @see JComponent#updateUI
      */
     public void updateUI() {
-        setUI((TreeUI)UIManager.getUI(this));
+        try {
+            javax.swing.plaf.ComponentUI delegate = UIManager.getUI(this);
+            setUI(delegate instanceof TreeUI ? (TreeUI) delegate : new javax.swing.plaf.basic.BasicTreeUI());
+        } catch (LinkageError incompatible) {
+            ui = null;
+            setUI(new javax.swing.plaf.basic.BasicTreeUI());
+        }
 
         SwingUtilities.updateRendererOrEditorUI(getCellRenderer());
         SwingUtilities.updateRendererOrEditorUI(getCellEditor());
@@ -1192,11 +1195,9 @@ public class JTree extends JComponent implements Scrollable, Accessible
      *        bound: false
      */
     public void setDragEnabled(boolean b) {
-        // No HeadlessException: the shadow's GraphicsEnvironment always reports
-        // headless, yet trees are touch-driven. The JDK's BasicDragGestureRecognizer
-        // lives in the UI; the shadow arms the TransferHandler drag here, as JList does.
+        // BasicTreeUI owns recognition, including selection before export.
+        // Android uses the same in-process drag loop even when headless.
         dragEnabled = b;
-        dragRecognizer = net.runelite.awt.impl.SwingDragSupport.setDragEnabled(this, dragRecognizer, b);
     }
 
     /**

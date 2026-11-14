@@ -66,6 +66,7 @@ internal class SwingDesktop(activity: ComponentActivity) : AutoCloseable {
     }
 
     private val tray = TrayIcon.MessageBridge { caption, text, type ->
+        if (!notifications.areNotificationsEnabled()) return@MessageBridge
         val returnToApp = PendingIntent.getActivity(context, 0,
             Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
@@ -81,7 +82,11 @@ internal class SwingDesktop(activity: ComponentActivity) : AutoCloseable {
             .setAutoCancel(true)
         if (caption != null) builder.setContentTitle(caption)
         if (text != null) builder.setContentText(text).setStyle(Notification.BigTextStyle().bigText(text))
-        notifications.notify(nextId.getAndIncrement(), builder.build())
+        try {
+            notifications.notify(nextId.getAndIncrement(), builder.build())
+        } catch (denied: SecurityException) {
+            android.util.Log.d("SwingDesktop", "Notification permission is unavailable")
+        }
     }
 
     init {

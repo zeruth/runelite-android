@@ -32,7 +32,8 @@ internal class SwingDialogs(private val activity: ComponentActivity) {
     private var colorPick: (() -> Unit)? = null // Android main thread; cancels the open color picker
     private val watchers = mutableSetOf<FileObserver>()
     private val windows = mutableMapOf<java.awt.Window, AlertDialog>()
-    private var closed = false
+    @Volatile private var closed = false
+    private val requestedWindows = java.util.concurrent.ConcurrentHashMap.newKeySet<java.awt.Window>()
     private class Completion {
         private val latch = CountDownLatch(1)
         private val loop = if (java.awt.EventQueue.isDispatchThread())
@@ -57,47 +58,59 @@ internal class SwingDialogs(private val activity: ComponentActivity) {
     private val save = activity.registerForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { finishPick(listOfNotNull(it)) }
     private val tree = activity.registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { finishTree(it) }
 
-    init {
-        java.awt.Window.setVisibilityHandler handler@{ window, visible ->
-            // The client frame and the splash are drawn full-screen by the main activity (AppAndroid);
-            // presenting them here would put the whole client in a dialog whose Close runs RuneLite's exit.
-            if (window is net.runelite.client.ui.ContainableFrame || window is net.runelite.client.ui.SplashScreen) return@handler
-            main.post {
-                // Window events are not fired here: Window.setVisible fires OPENED and activates
-                // (ACTIVATED, GAINED_FOCUS) on show, and hiding clears focus (LOST_FOCUS, DEACTIVATED)
-                // synchronously, before dispose posts CLOSED, in the desktop order.
-                if (!visible || closed) windows.remove(window)?.dismiss()
-                else if (!windows.containsKey(window)) {
-                    val root = (window as? javax.swing.RootPaneContainer)?.rootPane
-                    if (root != null) {
-                        val view = net.runelite.mp.ui.panels.SwingPanelView(activity, "Swing window", root)
-                        val title = (window as? java.awt.Dialog)?.title ?: (window as? java.awt.Frame)?.title
-                        val dialog = AlertDialog.Builder(activity).setTitle(title).setView(view).setNegativeButton("Close", null).create()
-                        // The close button is the desktop title-bar close: WINDOW_CLOSING lets JFrame/JDialog apply
-                        // their default close operation and plugin listeners veto or react, as on the JDK.
-                        fun requestClose() {
-                            javax.swing.SwingUtilities.invokeLater {
-                                if (window is java.awt.Frame || window is java.awt.Dialog)
-                                    window.dispatchEvent(java.awt.event.WindowEvent(window, java.awt.event.WindowEvent.WINDOW_CLOSING))
-                                else window.isVisible = false
-                            }
+    private val windowHandler = java.awt.Window.VisibilityHandler handler@{ window, visible ->
+        // The client frame and the splash are drawn full-screen by the main activity (AppAndroid);
+        // presenting them here would put the whole client in a dialog whose Close runs RuneLite's exit.
+        if (window is net.runelite.client.ui.ContainableFrame || window is net.runelite.client.ui.SplashScreen) return@handler
+        if (visible) requestedWindows.add(window) else requestedWindows.remove(window)
+        main.post {
+            if (closed || activity.isFinishing || activity.isDestroyed) {
+                requestedWindows.remove(window)
+                windows.remove(window)?.dismiss()
+                javax.swing.SwingUtilities.invokeLater { window.dispose() }
+                return@post
+            }
+            if (window.isVisible != visible) return@post
+            // Window events are not fired here: Window.setVisible fires OPENED and activates
+            // (ACTIVATED, GAINED_FOCUS) on show, and hiding clears focus (LOST_FOCUS, DEACTIVATED)
+            // synchronously, before dispose posts CLOSED, in the desktop order.
+            if (!visible) windows.remove(window)?.dismiss()
+            else if (!windows.containsKey(window)) {
+                val root = (window as? javax.swing.RootPaneContainer)?.rootPane
+                if (root != null) {
+                    val view = net.runelite.mp.ui.panels.SwingPanelView(activity, "Swing window", root)
+                    val title = (window as? java.awt.Dialog)?.title ?: (window as? java.awt.Frame)?.title
+                    val dialog = AlertDialog.Builder(activity).setTitle(title).setView(view).setNegativeButton("Close", null).create()
+                    // The close button is the desktop title-bar close: WINDOW_CLOSING lets JFrame/JDialog apply
+                    // their default close operation and plugin listeners veto or react, as on the JDK.
+                    fun requestClose() {
+                        javax.swing.SwingUtilities.invokeLater {
+                            if (window is java.awt.Frame || window is java.awt.Dialog)
+                                window.dispatchEvent(java.awt.event.WindowEvent(window, java.awt.event.WindowEvent.WINDOW_CLOSING))
+                            else window.isVisible = false
                         }
-                        windows[window] = dialog
-                        dialog.setOnShowListener { dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setOnClickListener { requestClose() } }
-                        dialog.setOnDismissListener {
-                            if (windows[window] === dialog && !closed) {
-                                requestClose()
-                                javax.swing.SwingUtilities.invokeLater {
-                                    main.post { if (window.isVisible && !closed) dialog.show() }
+                    }
+                    windows[window] = dialog
+                    dialog.setOnShowListener { dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setOnClickListener { requestClose() } }
+                    dialog.setOnDismissListener {
+                        if (windows[window] === dialog && !closed) {
+                            requestClose()
+                            javax.swing.SwingUtilities.invokeLater {
+                                main.post {
+                                    if (window.isVisible && !closed && windows[window] === dialog) dialog.show()
                                 }
                             }
                         }
-                        dialog.show()
-                        dialog.window?.setLayout((activity.resources.displayMetrics.widthPixels * .9).toInt(), (activity.resources.displayMetrics.heightPixels * .85).toInt())
                     }
+                    dialog.show()
+                    dialog.window?.setLayout((activity.resources.displayMetrics.widthPixels * .9).toInt(), (activity.resources.displayMetrics.heightPixels * .85).toInt())
                 }
             }
         }
+    }
+
+    init {
+        java.awt.Window.setVisibilityHandler(windowHandler)
         // Imported files must outlive showOpenDialog: Swing consumers may read asynchronously.
         directory.listFiles()?.filter { it.lastModified() < System.currentTimeMillis() - 86_400_000 }
             ?.forEach { it.deleteRecursively() }
@@ -483,7 +496,12 @@ internal class SwingDialogs(private val activity: ComponentActivity) {
 
     fun close() {
         closed = true
-        val openWindows = windows.keys.toList()
+        java.awt.Window.replaceVisibilityHandler(windowHandler, java.awt.Window.VisibilityHandler handler@{ window, visible ->
+            if (window is net.runelite.client.ui.ContainableFrame || window is net.runelite.client.ui.SplashScreen) return@handler
+            if (visible) javax.swing.SwingUtilities.invokeLater { window.dispose() }
+        })
+        val openWindows = (windows.keys + requestedWindows).distinct()
+        requestedWindows.clear()
         javax.swing.SwingUtilities.invokeLater { openWindows.forEach { it.dispose() } }
         windows.values.toList().forEach { it.dismiss() }; windows.clear()
         pending?.done?.finish(); pending = null

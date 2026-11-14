@@ -50,14 +50,20 @@ public class HyperlinkEvent extends EventObject {
     private final URL url;
     private final String desc;
     private final Element sourceElement;
+    private final java.awt.event.InputEvent inputEvent;
 
     public HyperlinkEvent(Object source, EventType type, URL url) { this(source, type, url, null, null); }
     public HyperlinkEvent(Object source, EventType type, URL url, String desc) { this(source, type, url, desc, null); }
     public HyperlinkEvent(Object source, EventType type, URL url, String desc, Element sourceElement) {
+        this(source, type, url, desc, sourceElement, null);
+    }
+    public HyperlinkEvent(Object source, EventType type, URL url, String desc, Element sourceElement, java.awt.event.InputEvent inputEvent) {
         super(source);
         this.type = type; this.url = url; this.desc = desc; this.sourceElement = sourceElement;
+        this.inputEvent = inputEvent;
     }
 
+    public java.awt.event.InputEvent getInputEvent() { return inputEvent; }
     public EventType getEventType() { return type; }
     public URL getURL() { return url; }
     public String getDescription() { return desc; }

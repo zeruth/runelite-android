@@ -95,6 +95,8 @@ public class BasicTabbedPaneUI extends TabbedPaneUI implements SwingConstants {
     private MouseAdapter scrollInput;
     /** Pixels the single run of SCROLL_TAB_LAYOUT is shifted towards its start. */
     private int scrollOffset;
+    private int lastSelectedTab = -1;
+    private int lastScrollExtent = -1;
     private boolean scrollOverflow;
 
     public BasicTabbedPaneUI() {}
@@ -103,6 +105,8 @@ public class BasicTabbedPaneUI extends TabbedPaneUI implements SwingConstants {
 
     @Override public void installUI(JComponent c) {
         tabPane = (JTabbedPane) c;
+        lastSelectedTab = -1;
+        lastScrollExtent = -1;
         installDefaults();
         tabPane.setLayout(createLayoutManager());
         installListeners();
@@ -588,6 +592,17 @@ public class BasicTabbedPaneUI extends TabbedPaneUI implements SwingConstants {
         int runLength = vertical ? last.y + last.height - first.y : last.x + last.width - first.x;
         scrollOverflow = runLength > available;
         int visible = scrollOverflow ? Math.max(0, available - 2 * SCROLL_CELL) : available;
+        int selected = tabPane.getSelectedIndex();
+        if (selected >= 0 && selected < tabCount
+                && (selected != lastSelectedTab || available != lastScrollExtent)) {
+            Rectangle tab = rects[selected];
+            int start = vertical ? tab.y - first.y : tab.x - first.x;
+            int end = start + (vertical ? tab.height : tab.width);
+            if (start < scrollOffset) scrollOffset = start;
+            else if (end > scrollOffset + visible) scrollOffset = end - visible;
+        }
+        lastSelectedTab = selected;
+        lastScrollExtent = available;
         scrollOffset = Math.max(0, Math.min(scrollOffset, Math.max(0, runLength - visible)));
         if (!scrollOverflow) scrollOffset = 0;
         for (int i = 0; i < tabCount; i++) {

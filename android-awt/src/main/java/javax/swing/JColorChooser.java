@@ -278,7 +278,8 @@ public class JColorChooser extends JComponent implements Accessible {
     public void updateUI() {
         ColorChooserUI delegate = null;
         try {
-            delegate = (ColorChooserUI) UIManager.getUI(this);
+            javax.swing.plaf.ComponentUI candidate = UIManager.getUI(this);
+            if (candidate instanceof ColorChooserUI) delegate = (ColorChooserUI) candidate;
         } catch (LinkageError e) {
             // A look and feel whose delegate extends a class the shadow lacks
             // must not make the chooser unconstructible; Basic stands in.

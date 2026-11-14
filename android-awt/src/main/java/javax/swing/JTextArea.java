@@ -78,6 +78,33 @@ public class JTextArea extends JTextComponent {
     public void insert(String str,int pos) { try { getDocument().insertString(pos,str,null); } catch(javax.swing.text.BadLocationException e) { throw new IllegalArgumentException(e); } }
     public void replaceRange(String str,int start,int end) { if(end<start)throw new IllegalArgumentException("range");try { ((javax.swing.text.AbstractDocument)getDocument()).replace(start,end-start,str,null); }catch(javax.swing.text.BadLocationException e){throw new IllegalArgumentException(e);} }
 
+    public int getLineCount() { return getDocument().getDefaultRootElement().getElementCount(); }
+    public int getLineOfOffset(int offset) throws javax.swing.text.BadLocationException {
+        if (offset < 0 || offset > getDocument().getLength())
+            throw new javax.swing.text.BadLocationException("offset", offset);
+        return getDocument().getDefaultRootElement().getElementIndex(offset);
+    }
+    public int getLineStartOffset(int line) throws javax.swing.text.BadLocationException {
+        return lineElement(line).getStartOffset();
+    }
+    public int getLineEndOffset(int line) throws javax.swing.text.BadLocationException {
+        return Math.min(getDocument().getLength(), lineElement(line).getEndOffset());
+    }
+    private javax.swing.text.Element lineElement(int line) throws javax.swing.text.BadLocationException {
+        if (line < 0 || line >= getLineCount())
+            throw new javax.swing.text.BadLocationException("line", line);
+        return getDocument().getDefaultRootElement().getElement(line);
+    }
+    @Override public boolean getScrollableTracksViewportWidth() { return lineWrap || super.getScrollableTracksViewportWidth(); }
+    public java.awt.Dimension getPreferredScrollableViewportSize() {
+        java.awt.Dimension size = getPreferredSize();
+        java.awt.FontMetrics fm = getFontMetrics(getFont());
+        java.awt.Insets in = getInsets();
+        if (columns > 0) size.width = columns * fm.charWidth('m') + in.left + in.right;
+        if (rows > 0) size.height = rows * fm.getHeight() + in.top + in.bottom;
+        return size;
+    }
+
     @Override public java.awt.Dimension getPreferredSize() {
         if (isPreferredSizeSet()) return super.getPreferredSize();
         java.awt.Dimension size = plainPreferredSize(lineWrap, wrapStyleWord, tabSize);

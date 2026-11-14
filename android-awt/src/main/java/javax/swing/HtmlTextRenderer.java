@@ -64,8 +64,10 @@ final class HtmlTextRenderer
 		final Color color;       // null = use foreground
 		final String href;
 		final boolean bold;
+        final int[] sourceOffsets;
 		Run(String text, Color color, boolean bold) { this(text,color,bold,null); }
-		Run(String text, Color color, boolean bold,String href) { this.text=text;this.color=color;this.bold=bold;this.href=href; }
+		Run(String text, Color color, boolean bold,String href) { this(text, color, bold, href, null); }
+        Run(String text, Color color, boolean bold, String href, int[] offsets) { this.text=text;this.color=color;this.bold=bold;this.href=href;this.sourceOffsets=offsets; }
 	}
 
 	static final class Line
@@ -108,19 +110,29 @@ final class HtmlTextRenderer
 	/** Wrap HTML runs at the available label width, retaining their colors. */
 	static Layout measure(String html, FontMetrics fm, int maxWidth)
 	{
-		if (maxWidth <= 0) return measure(html, fm);
-		List<Line> lines = new ArrayList<>();
+        return measure(html, fm, maxWidth, false);
+    }
+
+    static Layout measureWithSourceOffsets(String html, FontMetrics fm, int maxWidth) {
+        return measure(html, fm, maxWidth, true);
+    }
+
+    private static Layout measure(String html, FontMetrics fm, int maxWidth, boolean sourceOffsets) {
+        if (!sourceOffsets && maxWidth <= 0) return measure(html, fm);
+        List<Line> lines = new ArrayList<>();
 		int width = 0;
-		for (Line source : parse(html)) {
+		for (Line source : parse(html, sourceOffsets)) {
 			Line line = new Line(); lines.add(line); int used = 0;
 			for (Run run : source.runs) {
+                int from = 0;
 				for (String word : run.text.split("(?<=\\s)|(?=\\s)")) {
 					int w = fm.stringWidth(word);
-					if (used > 0 && used + w > maxWidth && !word.trim().isEmpty()) {
+					if (maxWidth > 0 && used > 0 && used + w > maxWidth && !word.trim().isEmpty()) {
 						width = Math.max(width, used); line = new Line(); lines.add(line); used = 0;
 					}
-					if (used == 0 && word.trim().isEmpty()) continue;
-					line.runs.add(new Run(word, run.color, run.bold,run.href)); used += w;
+					if (maxWidth > 0 && used == 0 && word.trim().isEmpty()) { from += word.length(); continue; }
+					int[] offsets = run.sourceOffsets == null ? null : java.util.Arrays.copyOfRange(run.sourceOffsets, from, from + word.length());
+                    line.runs.add(new Run(word, run.color, run.bold, run.href, offsets)); used += w; from += word.length();
 				}
 			}
 			width = Math.max(width, used);
@@ -151,7 +163,9 @@ final class HtmlTextRenderer
 
 	// -------------------------------------------------------------------------
 
-	private static List<Line> parse(String html)
+	private static List<Line> parse(String html) { return parse(html, false); }
+
+    private static List<Line> parse(String html, boolean sourceOffsets)
 	{
 		List<Line> lines = new ArrayList<>();
 		Line current = new Line();
@@ -166,6 +180,7 @@ final class HtmlTextRenderer
 		String href=null;
 
 		StringBuilder buf = new StringBuilder();
+        List<Integer> offsets = sourceOffsets ? new ArrayList<>() : null;
 		int i = 0;
 		int n = html.length();
 		while (i < n)
@@ -176,8 +191,9 @@ final class HtmlTextRenderer
 				// Flush accumulated text
 				if (buf.length() > 0)
 				{
-					current.runs.add(new Run(buf.toString(), color, bold,href));
+					current.runs.add(new Run(buf.toString(), color, bold, href, offsets == null ? null : offsets.stream().mapToInt(Integer::intValue).toArray()));
 					buf.setLength(0);
+                    if (offsets != null) offsets.clear();
 				}
 				// Find matching '>'
 				int end = html.indexOf('>', i + 1);
@@ -231,6 +247,7 @@ final class HtmlTextRenderer
 				}
 				continue;
 			}
+            if (offsets != null) offsets.add(i);
 			if (c == '&')
 			{
 				int semi = html.indexOf(';', i + 1);
@@ -272,7 +289,7 @@ final class HtmlTextRenderer
 		}
 		if (buf.length() > 0)
 		{
-			current.runs.add(new Run(buf.toString(), color, bold,href));
+			current.runs.add(new Run(buf.toString(), color, bold, href, offsets == null ? null : offsets.stream().mapToInt(Integer::intValue).toArray()));
 		}
 		// Drop trailing empty trailing line caused by closing </html>
 		if (lines.size() > 1 && lines.get(lines.size() - 1).runs.isEmpty())

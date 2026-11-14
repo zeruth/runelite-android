@@ -1430,9 +1430,7 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
      *        bound: false
      */
     public void setDragEnabled(boolean b) {
-        if (b && GraphicsEnvironment.isHeadless()) {
-            throw new HeadlessException();
-        }
+        // BasicTableUI uses the Android in-process drag loop without a native peer.
         dragEnabled = b;
     }
 
@@ -3643,7 +3641,13 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
         // Update UI applied to parent ScrollPane
         configureEnclosingScrollPaneUI();
 
-        setUI((TableUI)UIManager.getUI(this));
+        try {
+            javax.swing.plaf.ComponentUI delegate = UIManager.getUI(this);
+            setUI(delegate instanceof TableUI ? (TableUI) delegate : new javax.swing.plaf.basic.BasicTableUI());
+        } catch (LinkageError incompatible) {
+            ui = null;
+            setUI(new javax.swing.plaf.basic.BasicTableUI());
+        }
     }
 
     /**

@@ -234,6 +234,7 @@ public final class TestRenderableContracts {
         @Override public void shear(double shx, double shy) { transform.shear(shx, shy); }
         @Override public void dispose() { }
 
+        @Override public void drawGlyphVector(java.awt.font.GlyphVector glyphs, float x, float y) { throw unused("drawGlyphVector"); }
         @Override public void draw(Shape s) { throw unused("draw"); }
         @Override public void fill(Shape s) { throw unused("fill"); }
         @Override public void drawImage(BufferedImage img, int x, int y) { throw unused("drawImage"); }

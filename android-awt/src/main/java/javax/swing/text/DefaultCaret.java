@@ -57,6 +57,15 @@ public class DefaultCaret implements Caret, DocumentListener, java.io.Serializab
     public void setUpdatePolicy(int value){if(value<0||value>2)throw new IllegalArgumentException("policy");updatePolicy=value;}public int getUpdatePolicy(){return updatePolicy;}
     public int getDot(){return dot;}public int getMark(){return mark;}
     private int bound(int p){return Math.max(0,Math.min(component==null?0:component.getDocument().getLength(),p));}
+    protected final JTextComponent getComponent() { return component; }
+    protected void adjustVisibility(Rectangle location) {
+        final JTextComponent owner = component;
+        if (owner == null) return;
+        final Rectangle bounds = new Rectangle(location);
+        java.awt.EventQueue.invokeLater(() -> {
+            if (component == owner) owner.scrollRectToVisible(bounds);
+        });
+    }
     public void setDot(int p){p=bound(p);if(dot!=p||mark!=p){dot=mark=p;fireStateChanged();}}
     public void moveDot(int p){p=bound(p);if(dot!=p){dot=p;fireStateChanged();}}
     public void insertUpdate(DocumentEvent e){if(updatePolicy==NEVER_UPDATE)return;int at=e.getOffset(),n=e.getLength();if(dot>=at)dot+=n;if(mark>=at)mark+=n;dot=bound(dot);mark=bound(mark);fireStateChanged();}

@@ -7,6 +7,17 @@ import java.lang.reflect.*;
 public final class TestKeyboardSession {
     private static void check(boolean value, String message) { if (!value) throw new AssertionError(message); }
     public static void run(Context context) throws Exception {
+        check(android.os.Looper.myLooper() == android.os.Looper.getMainLooper(), "IME calls run on Android's UI thread");
+        java.awt.KeyboardFocusManager manager = java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager();
+        java.awt.Component previous = manager.getFocusOwner();
+        java.awt.EventQueue.invokeAndWait(manager::clearGlobalFocusOwner);
+        try { runGameSession(context); }
+        finally {
+            java.awt.EventQueue.invokeAndWait(() -> { if (previous != null) previous.requestFocusInWindow(); });
+        }
+    }
+    private static void drain() throws Exception { java.awt.EventQueue.invokeAndWait(() -> {}); }
+    private static void runGameSession(Context context) throws Exception {
         Class<?> type = Class.forName("net.runelite.mp.ui.bridge.KeyboardInputView");
         Object view = type.getConstructor(Context.class).newInstance(context);
         Method create = type.getMethod("onCreateInputConnection", EditorInfo.class);
@@ -38,6 +49,7 @@ public final class TestKeyboardSession {
         newest.closeConnection();
         check(!newest.commitText("stale", 1), "Explicit close rejects input");
         type.getMethod("endSession").invoke(view);
+        drain();
         // Observe the actual AWT text events, not only the IME's composing buffer.
         Class<?> managerType = Class.forName("java.awt.KeyboardFocusManager");
         Class<?> dispatcherType = Class.forName("java.awt.KeyEventDispatcher");
@@ -65,12 +77,16 @@ public final class TestKeyboardSession {
             input.setComposingText("hello", 1);
             input.commitText("hello ", 1);
             input.endBatchEdit();
+            drain();
             check("hello ".contentEquals(typed), "Autocorrect replaces composition without duplication");
             input.commitText("voice text", 1);
+            drain();
             check("hello voice text".contentEquals(typed), "Whole text commit reaches AWT once");
             input.deleteSurroundingText(4, 0);
+            drain();
             check("hello voice ".contentEquals(typed), "IME deletion reaches AWT");
             input.performEditorAction(EditorInfo.IME_ACTION_DONE);
+            drain();
             check("hello voice \n".contentEquals(typed), "Done emits one Enter");
             typed.setLength(0);
             open.setBoolean(view, true);
@@ -78,8 +94,10 @@ public final class TestKeyboardSession {
             input.commitText("old text", 1);
             reopened.setComposingText("n", 1);
             reopened.commitText("new", 1);
+            drain();
             check("new".contentEquals(typed), "New session cannot replay previous message");
             type.getMethod("endSession").invoke(view);
+            drain();
         } finally {
             managerType.getMethod("removeKeyEventDispatcher", dispatcherType).invoke(manager, dispatcher);
         }

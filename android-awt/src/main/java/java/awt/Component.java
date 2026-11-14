@@ -348,9 +348,22 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
     /** Set while this tree is mounted, so subclasses get the same addNotify/removeNotify calls as on the JDK. */
     boolean notified;
     /** Android components have no native AWT peer to create; discard layout validity. */
-    public void addNotify() { notified = true; invalidate(); }
+    public void addNotify() {
+        notified = true;
+        if (dropTarget != null) dropTarget.addNotify();
+        invalidate();
+    }
     /** Android components have no native AWT peer to dispose; discard layout validity. */
-    public void removeNotify() { notified = false; invalidate(); }
+    public void removeNotify() {
+        net.runelite.awt.impl.DragDropHost.Session drag = net.runelite.awt.impl.DragDropHost.current();
+        try {
+            if (drag != null && drag.getSourceComponent() == this) drag.cancel();
+        } finally {
+            if (dropTarget != null) dropTarget.removeNotify();
+            notified = false;
+            invalidate();
+        }
+    }
 
     public Graphics getGraphics() {
         // Host-provided rendering target; none in the headless shadow.
@@ -474,7 +487,11 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
 
     public void validate() { valid = true; }
 
-    public void doLayout() {}
+    public void doLayout() { layout(); }
+
+    /** @deprecated As of JDK 1.1, replaced by {@link #doLayout()}. */
+    @Deprecated
+    public void layout() {}
 
     public Image createImage(int w, int h) {
         // JDK Component.createImage returns an opaque image (TYPE_INT_RGB on most
@@ -691,6 +708,8 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
             l = focusListeners;
         } else if (listenerType == HierarchyListener.class) {
             l = hierarchyListeners;
+        } else if (listenerType == java.awt.event.HierarchyBoundsListener.class) {
+            l = hierarchyBoundsListeners;
         } else if (listenerType == KeyListener.class) {
             l = keyListeners;
         } else if (listenerType == MouseListener.class) {
@@ -1104,6 +1123,11 @@ public abstract class Component implements ImageObserver, Serializable, MenuCont
     }
 
     void dispatchEventImpl(AWTEvent event) {
+        // Pointer position exists independently of whether a listener requests delivery.
+        if (event instanceof MouseEvent) {
+            MouseEvent mouse = (MouseEvent)event;
+            MouseInfo.pointerAt(getRoot(), mouse.getXOnScreen(), mouse.getYOnScreen());
+        }
         if (event instanceof KeyEvent) {
             // As Component.dispatchEventImpl: a KeyEvent first goes to the focus manager (dispatcher
             // chain, then redispatchEvent back here); on the way back traversal keys are handled

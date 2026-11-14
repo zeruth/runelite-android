@@ -554,33 +554,38 @@ public class Container extends Component {
 
     @Override
     public Dimension getPreferredSize() {
-        // Explicit setPreferredSize wins, mirroring real Swing — e.g. PluginListItem sets
-        // its row to (PANEL_WIDTH, 20) and expects that even though its BorderLayout would
-        // compute a smaller intrinsic size.
-        if (isPreferredSizeSet()) return super.getPreferredSize();
-        if (layout != null) {
-            // The layout's answer stands even at 0×0 (an emptied or all-hidden panel), as in
-            // the JDK. Falling back to the current size here made emptied panels keep their old
-            // height forever: preferred = current = whatever the parent last gave it.
-            Dimension d = layout.preferredLayoutSize(this);
-            if (d != null) return d;
+        // Layout managers have their own monitors; always acquire the tree lock first.
+        synchronized (getTreeLock()) {
+            // Explicit setPreferredSize wins, mirroring real Swing — e.g. PluginListItem sets
+            // its row to (PANEL_WIDTH, 20) and expects that even though its BorderLayout would
+            // compute a smaller intrinsic size.
+            if (isPreferredSizeSet()) return super.getPreferredSize();
+            if (layout != null) {
+                // The layout's answer stands even at 0×0 (an emptied or all-hidden panel), as in
+                // the JDK. Falling back to the current size here made emptied panels keep their old
+                // height forever: preferred = current = whatever the parent last gave it.
+                Dimension d = layout.preferredLayoutSize(this);
+                if (d != null) return d;
+            }
+            return super.getPreferredSize();
         }
-        return super.getPreferredSize();
     }
 
     @Override
     public Dimension getMinimumSize() {
-        // Explicit setMinimumSize wins — ClientPanel sets GAME_FIXED_SIZE (765×503) as its
-        // floor so the OSRS canvas can never shrink below the legacy game viewport. Without
-        // this check, BorderLayout would sum the child Canvas's current bounds (often
-        // smaller) and ClientUI.Layout.layout() would let the game area shrink to absorb
-        // the sidebar instead of growing the frame.
-        if (isMinimumSizeSet()) return super.getMinimumSize();
-        if (layout != null) {
-            Dimension d = layout.minimumLayoutSize(this);
-            if (d != null && (d.width > 0 || d.height > 0)) return d;
+        synchronized (getTreeLock()) {
+            // Explicit setMinimumSize wins — ClientPanel sets GAME_FIXED_SIZE (765×503) as its
+            // floor so the OSRS canvas can never shrink below the legacy game viewport. Without
+            // this check, BorderLayout would sum the child Canvas's current bounds (often
+            // smaller) and ClientUI.Layout.layout() would let the game area shrink to absorb
+            // the sidebar instead of growing the frame.
+            if (isMinimumSizeSet()) return super.getMinimumSize();
+            if (layout != null) {
+                Dimension d = layout.minimumLayoutSize(this);
+                if (d != null && (d.width > 0 || d.height > 0)) return d;
+            }
+            return super.getMinimumSize();
         }
-        return super.getMinimumSize();
     }
 
     // ---- ContainerEvents -------------------------------------------------------------------
@@ -591,6 +596,15 @@ public class Container extends Component {
     public void removeContainerListener(java.awt.event.ContainerListener l) { containerListeners.remove(l); }
     public java.awt.event.ContainerListener[] getContainerListeners() {
         return containerListeners.toArray(new java.awt.event.ContainerListener[0]);
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public <T extends java.util.EventListener> T[] getListeners(Class<T> listenerType) {
+        if (listenerType == java.awt.event.ContainerListener.class) {
+            return (T[])getContainerListeners();
+        }
+        return super.getListeners(listenerType);
     }
 
     /** As the JDK's addImpl/remove: built only when a listener, mask or AWTEventListener wants it. */
@@ -719,7 +733,12 @@ public class Container extends Component {
     }
 
     @Override
-    public void doLayout() {
+    public void doLayout() { layout(); }
+
+    /** @deprecated As of JDK 1.1, replaced by {@link #doLayout()}. */
+    @Deprecated
+    @Override
+    public void layout() {
         if (layout != null) layout.layoutContainer(this);
     }
 
@@ -752,19 +771,21 @@ public class Container extends Component {
      */
     @Override
     public void validate() {
-        if (isValid()) return;
-        // Catch per-container so one bad container's layout NPE doesn't abort the cascade.
-        try { doLayout(); } catch (Throwable ignored) {}
-        int count = children.size();
-        for (int i = 0; i < count; i++) {
-            if (i < children.size()) {
-                Component c = children.get(i);
-                if (c != null) {
-                    try { c.validate(); } catch (Throwable ignored) {}
+        synchronized (getTreeLock()) {
+            if (isValid()) return;
+            // Catch per-container so one bad container's layout NPE doesn't abort the cascade.
+            try { doLayout(); } catch (Throwable ignored) {}
+            int count = children.size();
+            for (int i = 0; i < count; i++) {
+                if (i < children.size()) {
+                    Component c = children.get(i);
+                    if (c != null) {
+                        try { c.validate(); } catch (Throwable ignored) {}
+                    }
                 }
             }
+            setValid(true);
         }
-        setValid(true);
     }
 
     @Override
@@ -778,6 +799,11 @@ public class Container extends Component {
     }
 
     protected void paintChildren(Graphics g) {
+        paintChildren(g, false);
+    }
+
+    /** Shares child order, clipping and visibility handling between paint and print. */
+    protected void paintChildren(Graphics g, boolean printing) {
         int count = children.size();
         if (count == 0) return;
         for (int i = count - 1; i >= 0; i--) {
@@ -786,9 +812,15 @@ public class Container extends Component {
             if (c == null || !c.isVisible() || c.getWidth() <= 0 || c.getHeight() <= 0) continue;
             Graphics cg = g.create(c.x, c.y, c.width, c.height);
             try {
-                c.paint(cg);
-            } catch (Throwable t) {
-                // Swing swallows paint errors per-component; mirror that to keep the tree drawing.
+                if (printing) {
+                    c.printAll(cg);
+                } else {
+                    try {
+                        c.paint(cg);
+                    } catch (Throwable t) {
+                        // Preserve the host's per-component paint-error isolation.
+                    }
+                }
             } finally {
                 cg.dispose();
             }

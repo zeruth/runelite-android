@@ -68,6 +68,11 @@ public final class TestBasicLookAndFeelContracts {
     }
 
     private static Set<String> hostJdkKeys() throws Exception {
+        String reference = System.getProperty("compat.basicLafKeys");
+        if (reference != null) {
+            return new TreeSet<String>(java.nio.file.Files.readAllLines(
+                java.nio.file.Paths.get(reference), java.nio.charset.StandardCharsets.UTF_8));
+        }
         String java = System.getProperty("java.home") + File.separator + "bin" + File.separator + "java";
         ProcessBuilder builder = new ProcessBuilder(java, "-Djava.awt.headless=true",
                 "-cp", System.getProperty("java.class.path"),

@@ -988,7 +988,13 @@ public class JOptionPane extends JComponent implements javax.accessibility.Acces
      * <code>UIManager</code>.
      */
     public void updateUI() {
-        setUI((OptionPaneUI)UIManager.getUI(this));
+        try {
+            javax.swing.plaf.ComponentUI delegate = UIManager.getUI(this);
+            setUI(delegate instanceof OptionPaneUI ? (OptionPaneUI) delegate : new javax.swing.plaf.basic.BasicOptionPaneUI());
+        } catch (LinkageError incompatible) {
+            ui = null;
+            setUI(new javax.swing.plaf.basic.BasicOptionPaneUI());
+        }
     }
 
     /**

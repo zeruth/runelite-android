@@ -124,12 +124,7 @@ public abstract class GlyphVector implements Cloneable {
      * @since 1.4
      */
     public Rectangle getPixelBounds(FontRenderContext renderFRC, float x, float y) {
-        Rectangle2D rect = getVisualBounds();
-        int l = (int)Math.floor(rect.getX() + x);
-        int t = (int)Math.floor(rect.getY() + y);
-        int r = (int)Math.floor(rect.getMaxX() + x);
-        int b = (int)Math.floor(rect.getMaxY() + y);
-        return new Rectangle(l, t, r - l, b - t);
+        return pixelBounds(getOutline(), renderFRC, x, y);
     }
 
     /** Returns a <code>Shape</code> whose interior corresponds to the visual representation of this <code>GlyphVector</code>. */
@@ -220,12 +215,21 @@ public abstract class GlyphVector implements Cloneable {
      * @since 1.4
      */
     public Rectangle getGlyphPixelBounds(int index, FontRenderContext renderFRC, float x, float y) {
-        Rectangle2D rect = getGlyphVisualBounds(index).getBounds2D();
-        int l = (int)Math.floor(rect.getX() + x);
-        int t = (int)Math.floor(rect.getY() + y);
-        int r = (int)Math.floor(rect.getMaxX() + x);
-        int b = (int)Math.floor(rect.getMaxY() + y);
-        return new Rectangle(l, t, r - l, b - t);
+        return pixelBounds(getGlyphOutline(index), renderFRC, x, y);
+    }
+
+    // Conservative outline bounds, rather than desktop rasterizer-specific ink bounds.
+    private Rectangle pixelBounds(Shape outline, FontRenderContext context, float x, float y) {
+        if (context == null) context = getFontRenderContext();
+        AffineTransform transform = context.getTransform();
+        transform.translate(x, y);
+        Rectangle2D bounds = transform.createTransformedShape(outline).getBounds2D();
+        int left = (int)Math.floor(bounds.getMinX());
+        int top = (int)Math.floor(bounds.getMinY());
+        if (bounds.isEmpty()) return new Rectangle(left, top, 0, 0);
+        int right = (int)Math.ceil(bounds.getMaxX());
+        int bottom = (int)Math.ceil(bounds.getMaxY());
+        return new Rectangle(left, top, right - left, bottom - top);
     }
 
     /** Returns the metrics of the glyph at the specified index. */
