@@ -1,3 +1,33 @@
+/*
+ * Copyright (c) 2026, Tyler Bochard
+ * All rights reserved.
+ *
+ * Part of android-awt, the Android shadow of the desktop JDK surface used by
+ * runelite-android. Original work of this project, not derived from OpenJDK;
+ * licensed under the BSD 2-Clause License (see the LICENSE file at the
+ * repository root). Files ported from OpenJDK carry the OpenJDK header instead;
+ * see android-awt/LICENSE.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ *    list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
 package java.awt;
 
 import java.util.EventObject;
@@ -39,14 +69,32 @@ public abstract class AWTEvent extends EventObject {
         return id;
     }
 
+    /** Retargets the event, as the JDK's focus and lightweight dispatchers do. */
+    public void setSource(Object newSource) {
+        if (source == newSource) {
+            return;
+        }
+        source = newSource;
+    }
+
     public String paramString() {
         return "";
     }
 
+    /** JDK format: the source is named by its component name when it has one. */
     @Override
     public String toString() {
-        String name = (source != null) ? source.getClass().getName() : "null";
-        return getClass().getName() + "[" + paramString() + "] on " + name;
+        String srcName = null;
+        if (source instanceof Component) {
+            srcName = ((Component) source).getName();
+        } else if (source instanceof MenuComponent) {
+            srcName = ((MenuComponent) source).getName();
+        }
+        // The shadow's unnamed components answer "" where the JDK answers null.
+        if (srcName != null && srcName.isEmpty()) {
+            srcName = null;
+        }
+        return getClass().getName() + "[" + paramString() + "] on " + (srcName != null ? srcName : source);
     }
 
     protected void consume() {

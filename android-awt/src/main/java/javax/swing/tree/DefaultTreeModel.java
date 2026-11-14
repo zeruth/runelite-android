@@ -27,6 +27,7 @@ package javax.swing.tree;
 
 import java.util.*;
 import java.io.*;
+import java.beans.ConstructorProperties;
 import javax.swing.event.*;
 
 /**
@@ -79,7 +80,7 @@ public class DefaultTreeModel implements Serializable, TreeModel {
       * @param root a TreeNode object that is the root of the tree
       * @see #DefaultTreeModel(TreeNode, boolean)
       */
-
+     @ConstructorProperties({"root"})
      public DefaultTreeModel(TreeNode root) {
         this(root, false);
     }

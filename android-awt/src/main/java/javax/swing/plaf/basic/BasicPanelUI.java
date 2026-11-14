@@ -1,11 +1,116 @@
+/*
+ * Copyright (c) 1997, 2006, Oracle and/or its affiliates. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
+ *
+ * This code is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 only, as
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
+ *
+ * This code is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ * version 2 for more details (a copy is included in the LICENSE file that
+ * accompanied this code).
+ *
+ * You should have received a copy of the GNU General Public License version
+ * 2 along with this work; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
+ *
+ * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
+ * or visit www.oracle.com if you need additional information or have any
+ * questions.
+ */
 package javax.swing.plaf.basic;
-import javax.swing.*;
-import javax.swing.plaf.*;
+
+import java.awt.Component;
+import javax.swing.JComponent;
+import javax.swing.JPanel;
+import javax.swing.LookAndFeel;
+import javax.swing.border.AbstractBorder;
+import javax.swing.border.Border;
+import javax.swing.plaf.ComponentUI;
+import javax.swing.plaf.PanelUI;
+
+/**
+ * BasicPanel implementation
+ * <p>
+ * Ported from OpenJDK 8u. The opaque background fill is {@code ComponentUI.update}'s.
+ *
+ * @author Steve Wilson
+ */
 public class BasicPanelUI extends PanelUI {
-    public static ComponentUI createUI(JComponent component){return new BasicPanelUI();}
-    public void installUI(JComponent component){installDefaults((JPanel)component);}
-    public void uninstallUI(JComponent component){uninstallDefaults((JPanel)component);}
-    protected void installDefaults(JPanel panel){LookAndFeel.installColorsAndFont(panel,"Panel.background","Panel.foreground","Panel.font");LookAndFeel.installBorder(panel,"Panel.border");LookAndFeel.installProperty(panel,"opaque",Boolean.TRUE);}
-    protected void uninstallDefaults(JPanel panel){LookAndFeel.uninstallBorder(panel);}
-    public void update(java.awt.Graphics graphics,JComponent component){if(component.isOpaque()&&component.getBackground()!=null){graphics.setColor(component.getBackground());graphics.fillRect(0,0,component.getWidth(),component.getHeight());}paint(graphics,component);}
+
+    // Shared UI object
+    private static PanelUI panelUI;
+
+    public static ComponentUI createUI(JComponent c) {
+        if(panelUI == null) {
+            panelUI = new BasicPanelUI();
+        }
+        return panelUI;
+    }
+
+    public void installUI(JComponent c) {
+        JPanel p = (JPanel)c;
+        super.installUI(p);
+        installDefaults(p);
+    }
+
+    public void uninstallUI(JComponent c) {
+        JPanel p = (JPanel)c;
+        uninstallDefaults(p);
+        super.uninstallUI(c);
+    }
+
+    protected void installDefaults(JPanel p) {
+        LookAndFeel.installColorsAndFont(p,
+                                         "Panel.background",
+                                         "Panel.foreground",
+                                         "Panel.font");
+        LookAndFeel.installBorder(p,"Panel.border");
+        LookAndFeel.installProperty(p, "opaque", Boolean.TRUE);
+    }
+
+    protected void uninstallDefaults(JPanel p) {
+        LookAndFeel.uninstallBorder(p);
+    }
+
+
+    /**
+     * Returns the baseline.
+     *
+     * @throws NullPointerException {@inheritDoc}
+     * @throws IllegalArgumentException {@inheritDoc}
+     * @see javax.swing.JComponent#getBaseline(int, int)
+     * @since 1.6
+     */
+    public int getBaseline(JComponent c, int width, int height) {
+        super.getBaseline(c, width, height);
+        Border border = c.getBorder();
+        if (border instanceof AbstractBorder) {
+            return ((AbstractBorder)border).getBaseline(
+                    c, width, height);
+        }
+        return -1;
+    }
+
+    /**
+     * Returns an enum indicating how the baseline of the component
+     * changes as the size changes.
+     *
+     * @throws NullPointerException {@inheritDoc}
+     * @see javax.swing.JComponent#getBaseline(int, int)
+     * @since 1.6
+     */
+    public Component.BaselineResizeBehavior getBaselineResizeBehavior(
+            JComponent c) {
+        super.getBaselineResizeBehavior(c);
+        Border border = c.getBorder();
+        if (border instanceof AbstractBorder) {
+            return ((AbstractBorder)border).getBaselineResizeBehavior(c);
+        }
+        return Component.BaselineResizeBehavior.OTHER;
+    }
 }

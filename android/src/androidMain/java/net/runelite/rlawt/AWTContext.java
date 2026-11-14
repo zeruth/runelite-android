@@ -51,5 +51,14 @@ public class AWTContext
 		return applied;
 	}
 
+    // These desktop OpenCL-sharing handles are not EGL handles and cannot be substituted.
+    public long getCGLShareGroup() { throw desktopHandle("CGL share group"); }
+    public long getGLContext() { throw desktopHandle("desktop GL context"); }
+    public long getGLXDisplay() { throw desktopHandle("GLX display"); }
+    public long getWGLHDC() { throw desktopHandle("WGL device context"); }
+    private static UnsupportedOperationException desktopHandle(String handle) {
+        return new UnsupportedOperationException(handle + " is unavailable on Android EGL; desktop OpenCL sharing is unsupported");
+    }
+
 	public void destroy() { /* GlesHost lives for the process; nothing to tear down here */ }
 }

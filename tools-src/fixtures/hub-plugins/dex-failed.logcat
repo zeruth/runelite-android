@@ -1,0 +1,13 @@
+--------- beginning of main
+11-12 06:10:00.000  4321  4420 I RlHubStatus: HUB download internal=lwjgl-plugin size=5000
+11-12 06:10:00.300  4321  4420 I RlHubStatus: HUB converting internal=lwjgl-plugin
+11-12 06:10:00.900  4321  4420 W ExternalPluginManager: Unable to start or load external plugin "lwjgl-plugin"
+11-12 06:10:00.900  4321  4420 W ExternalPluginManager: net.runelite.client.externalplugins.PluginHubHooks$DexException: uses org.lwjgl.opengl.GL11, which is not available on Android
+11-12 06:10:00.950  4321  4420 I RlHubStatus: HUB failed internal=lwjgl-plugin stage=DEX message=Couldn't convert for Android: uses org.lwjgl.opengl.GL11, which is not available on Android
+11-12 06:10:05.000  4321  4421 E RlHubStatus: HUB failed internal=- stage=MANIFEST message=Couldn't reach the Plugin Hub (timeout)
+--------- beginning of crash
+11-12 06:10:09.000  4321  4321 E AndroidRuntime: FATAL EXCEPTION: main
+11-12 06:10:09.000  4321  4321 E AndroidRuntime: Process: net.runelite.mp, PID: 4321
+11-12 06:10:09.000  4321  4321 E AndroidRuntime: java.lang.UnsatisfiedLinkError: dlopen failed: library "liblwjgl.so" not found
+11-12 06:10:09.000  4321  4321 E AndroidRuntime: 	at java.lang.Runtime.loadLibrary0(Runtime.java:1082)
+11-12 06:10:09.000  4321  4321 E AndroidRuntime: 	at org.lwjgl.system.Library.loadSystem(Library.java:160)

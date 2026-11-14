@@ -139,16 +139,23 @@ publishing {
 
 val assemble = tasks.withType<net.runelite.gradle.assemble.AssembleTask> {
     scriptDirectory = file("src/main/scripts")
-    outputDirectory = sourceSets.main.map { File(it.output.resourcesDir, "runelite") }
+    outputDirectory = layout.buildDirectory.dir("rs2asm/overlay")
     longSupport = true
 }
 
-tasks.withType<net.runelite.gradle.index.IndexTask> {
+val index = tasks.withType<net.runelite.gradle.index.IndexTask> {
     archiveOverlayDirectory = assemble.single().outputDirectory
-    indexFile = archiveOverlayDirectory.file("index")
+    indexFile = layout.buildDirectory.file("rs2asm/index")
 }
 
 tasks.processResources {
+    // The scripts and their index are built in directories of their own and copied in here.
+    // Both tasks used to write into this task's destination, and with the build cache on
+    // (ci/build.sh) a later processResources run dropped runelite/ from the jar: the client
+    // then died in OverlayIndex.<clinit> on the missing /runelite/index.
+    from(assemble.single().outputDirectory) { into("runelite") }
+    from(index.single().indexFile) { into("runelite") }
+
     inputs.property("projectVersion", project.version)
 
     // Gradle 9 removed Project.exec from build scripts; the ValueSource-backed provider is the

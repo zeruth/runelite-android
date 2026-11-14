@@ -1,0 +1,6 @@
+{
+    "_comment": "Desktop-only classes/members referenced by the injected client, runelite-api and runelite-client that android-awt does not shadow yet. Regenerate with -PupdateBaseline=true; the gate fails on anything missing that is not listed here.",
+    "missing": [
+        
+    ]
+}

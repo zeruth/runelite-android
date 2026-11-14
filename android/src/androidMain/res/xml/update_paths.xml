@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
     <cache-path name="updates" path="updates/" />
+    <!-- Images and files the Swing clipboard exports (SwingClipboard). -->
+    <cache-path name="clipboard" path="clipboard/" />
 </paths>

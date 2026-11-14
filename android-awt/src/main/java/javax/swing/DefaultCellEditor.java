@@ -1,21 +1,266 @@
+/*
+ * Copyright (c) 1998, 2013, Oracle and/or its affiliates. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
+ *
+ * This code is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 only, as
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
+ *
+ * This code is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ * version 2 for more details (a copy is included in the LICENSE file that
+ * accompanied this code).
+ *
+ * You should have received a copy of the GNU General Public License version
+ * 2 along with this work; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
+ *
+ * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
+ * or visit www.oracle.com if you need additional information or have any
+ * questions.
+ */
+
 package javax.swing;
+
 import java.awt.Component;
+import java.awt.event.*;
 import java.util.EventObject;
 import javax.swing.table.TableCellEditor;
 import javax.swing.tree.TreeCellEditor;
-public class DefaultCellEditor extends AbstractCellEditor implements TableCellEditor, TreeCellEditor {
-    private static final long serialVersionUID=1L;
+
+/**
+ * The default editor for table and tree cells.
+ *
+ * @author Alan Chung
+ * @author Philip Milne
+ * @see javax.swing.tree.TreeCellEditor
+ */
+public class DefaultCellEditor extends AbstractCellEditor
+    implements TableCellEditor, TreeCellEditor {
+    private static final long serialVersionUID = 1L;
+
+    /** The Swing component being edited. */
     protected JComponent editorComponent;
-    protected int clickCountToStart=1;
-    public DefaultCellEditor(JTextField field){editorComponent=field;clickCountToStart=2;field.addActionListener(e->stopCellEditing());}
-    public DefaultCellEditor(JCheckBox box){editorComponent=box;box.addActionListener(e->stopCellEditing());}
-    public DefaultCellEditor(JComboBox<?> combo){editorComponent=combo;combo.addActionListener(e->stopCellEditing());}
-    public Component getComponent(){return editorComponent;}
-    public void setClickCountToStart(int count){clickCountToStart=count;}
-    public int getClickCountToStart(){return clickCountToStart;}
-    public boolean isCellEditable(EventObject event){return !(event instanceof java.awt.event.MouseEvent)||((java.awt.event.MouseEvent)event).getClickCount()>=clickCountToStart;}
-    public Object getCellEditorValue(){if(editorComponent instanceof JTextField)return ((JTextField)editorComponent).getText();if(editorComponent instanceof JCheckBox)return ((JCheckBox)editorComponent).isSelected();return ((JComboBox<?>)editorComponent).getSelectedItem();}
-    protected void setValue(Object value){if(editorComponent instanceof JTextField)((JTextField)editorComponent).setText(value==null?"":value.toString());else if(editorComponent instanceof JCheckBox)((JCheckBox)editorComponent).setSelected(Boolean.TRUE.equals(value));else ((JComboBox<?>)editorComponent).setSelectedItem(value);}
-    public Component getTableCellEditorComponent(JTable table,Object value,boolean selected,int row,int column){setValue(value);return editorComponent;}
-    public Component getTreeCellEditorComponent(JTree tree,Object value,boolean selected,boolean expanded,boolean leaf,int row){setValue(value);return editorComponent;}
+    /**
+     * The delegate class which handles all methods sent from the
+     * <code>CellEditor</code>.
+     */
+    protected EditorDelegate delegate;
+    /**
+     * An integer specifying the number of clicks needed to start editing.
+     * Even if <code>clickCountToStart</code> is defined as zero, it
+     * will not initiate until a click occurs.
+     */
+    protected int clickCountToStart = 1;
+
+    /** Constructs a <code>DefaultCellEditor</code> that uses a text field. */
+    public DefaultCellEditor(final JTextField textField) {
+        editorComponent = textField;
+        this.clickCountToStart = 2;
+        delegate = new EditorDelegate() {
+            private static final long serialVersionUID = 1L;
+            public void setValue(Object value) {
+                textField.setText((value != null) ? value.toString() : "");
+            }
+
+            public Object getCellEditorValue() {
+                return textField.getText();
+            }
+        };
+        textField.addActionListener(delegate);
+    }
+
+    /** Constructs a <code>DefaultCellEditor</code> object that uses a check box. */
+    public DefaultCellEditor(final JCheckBox checkBox) {
+        editorComponent = checkBox;
+        delegate = new EditorDelegate() {
+            private static final long serialVersionUID = 1L;
+            public void setValue(Object value) {
+                boolean selected = false;
+                if (value instanceof Boolean) {
+                    selected = ((Boolean) value).booleanValue();
+                } else if (value instanceof String) {
+                    selected = value.equals("true");
+                }
+                checkBox.setSelected(selected);
+            }
+
+            public Object getCellEditorValue() {
+                return Boolean.valueOf(checkBox.isSelected());
+            }
+        };
+        checkBox.addActionListener(delegate);
+        checkBox.setRequestFocusEnabled(false);
+    }
+
+    /** Constructs a <code>DefaultCellEditor</code> object that uses a combo box. */
+    public DefaultCellEditor(final JComboBox comboBox) {
+        editorComponent = comboBox;
+        comboBox.putClientProperty("JComboBox.isTableCellEditor", Boolean.TRUE);
+        delegate = new EditorDelegate() {
+            private static final long serialVersionUID = 1L;
+            public void setValue(Object value) {
+                comboBox.setSelectedItem(value);
+            }
+
+            public Object getCellEditorValue() {
+                return comboBox.getSelectedItem();
+            }
+
+            public boolean shouldSelectCell(EventObject anEvent) {
+                if (anEvent instanceof MouseEvent) {
+                    MouseEvent e = (MouseEvent) anEvent;
+                    return e.getID() != MouseEvent.MOUSE_DRAGGED;
+                }
+                return true;
+            }
+
+            public boolean stopCellEditing() {
+                // The JDK commits typed text through JComboBox.actionPerformed, which the
+                // shadow combo does not implement; selecting the editor's item is the same commit.
+                if (comboBox.isEditable() && comboBox.getEditor() != null) {
+                    comboBox.setSelectedItem(comboBox.getEditor().getItem());
+                }
+                return super.stopCellEditing();
+            }
+        };
+        comboBox.addActionListener(delegate);
+    }
+
+    /** Returns a reference to the editor component. */
+    public Component getComponent() {
+        return editorComponent;
+    }
+
+    /** Specifies the number of clicks needed to start editing. */
+    public void setClickCountToStart(int count) {
+        clickCountToStart = count;
+    }
+
+    /** Returns the number of clicks needed to start editing. */
+    public int getClickCountToStart() {
+        return clickCountToStart;
+    }
+
+    /** Forwards the message from the <code>CellEditor</code> to the <code>delegate</code>. */
+    public Object getCellEditorValue() {
+        return delegate.getCellEditorValue();
+    }
+
+    /** Forwards the message from the <code>CellEditor</code> to the <code>delegate</code>. */
+    public boolean isCellEditable(EventObject anEvent) {
+        return delegate.isCellEditable(anEvent);
+    }
+
+    /** Forwards the message from the <code>CellEditor</code> to the <code>delegate</code>. */
+    public boolean shouldSelectCell(EventObject anEvent) {
+        return delegate.shouldSelectCell(anEvent);
+    }
+
+    /** Forwards the message from the <code>CellEditor</code> to the <code>delegate</code>. */
+    public boolean stopCellEditing() {
+        return delegate.stopCellEditing();
+    }
+
+    /** Forwards the message from the <code>CellEditor</code> to the <code>delegate</code>. */
+    public void cancelCellEditing() {
+        delegate.cancelCellEditing();
+    }
+
+    /** Implements the <code>TreeCellEditor</code> interface. */
+    public Component getTreeCellEditorComponent(JTree tree, Object value,
+                                                boolean isSelected,
+                                                boolean expanded,
+                                                boolean leaf, int row) {
+        delegate.setValue(value);
+        return editorComponent;
+    }
+
+    /** Implements the <code>TableCellEditor</code> interface. */
+    public Component getTableCellEditorComponent(JTable table, Object value,
+                                                 boolean isSelected,
+                                                 int row, int column) {
+        delegate.setValue(value);
+        if (editorComponent instanceof JCheckBox) {
+            // The check box editor takes the renderer's look so the cell does not jump.
+            javax.swing.table.TableCellRenderer renderer = table.getCellRenderer(row, column);
+            Component c = renderer.getTableCellRendererComponent(table, value,
+                    isSelected, true, row, column);
+            if (c != null) {
+                editorComponent.setOpaque(true);
+                editorComponent.setBackground(c.getBackground());
+                if (c instanceof JComponent) {
+                    editorComponent.setBorder(((JComponent) c).getBorder());
+                }
+            } else {
+                editorComponent.setOpaque(false);
+            }
+        }
+        return editorComponent;
+    }
+
+    /** The protected <code>EditorDelegate</code> class. */
+    protected class EditorDelegate implements ActionListener, ItemListener, java.io.Serializable {
+        private static final long serialVersionUID = 1L;
+
+        /** The value of this cell. */
+        protected Object value;
+
+        /** Returns the value of this cell. */
+        public Object getCellEditorValue() {
+            return value;
+        }
+
+        /** Sets the value of this cell. */
+        public void setValue(Object value) {
+            this.value = value;
+        }
+
+        /**
+         * Returns true if <code>anEvent</code> is <b>not</b> a
+         * <code>MouseEvent</code>.  Otherwise, it returns true
+         * if the necessary number of clicks have occurred, and
+         * returns false otherwise.
+         */
+        public boolean isCellEditable(EventObject anEvent) {
+            if (anEvent instanceof MouseEvent) {
+                return ((MouseEvent) anEvent).getClickCount() >= clickCountToStart;
+            }
+            return true;
+        }
+
+        /** Returns true to indicate that the editing cell may be selected. */
+        public boolean shouldSelectCell(EventObject anEvent) {
+            return true;
+        }
+
+        /** Returns true to indicate that editing has begun. */
+        public boolean startCellEditing(EventObject anEvent) {
+            return true;
+        }
+
+        /** Stops editing and returns true to indicate that editing has stopped. */
+        public boolean stopCellEditing() {
+            fireEditingStopped();
+            return true;
+        }
+
+        /** Cancels editing. */
+        public void cancelCellEditing() {
+            fireEditingCanceled();
+        }
+
+        /** When an action is performed, editing is ended. */
+        public void actionPerformed(ActionEvent e) {
+            DefaultCellEditor.this.stopCellEditing();
+        }
+
+        /** When an item's state changes, editing is ended. */
+        public void itemStateChanged(ItemEvent e) {
+            DefaultCellEditor.this.stopCellEditing();
+        }
+    }
 }

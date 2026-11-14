@@ -1,3 +1,4 @@
+// host-contract: patched-args=shadow jvm-args=--add-exports=java.base/jdk.internal.loader=ALL-UNNAMED
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.swing.*;
 import javax.swing.event.*;
@@ -14,7 +15,21 @@ public final class TestSwingContracts {
         if (!actual) failures++;
         System.out.println((actual ? "PASS " : "FAIL ") + name);
     }
+    /**
+     * java.awt.Font is not patchable (its JNI layout differs), so the patched run uses the JDK's
+     * Font, whose static initializer calls Toolkit.loadLibraries() and then the native initIDs.
+     * The patched Toolkit's loadLibraries() is empty because the Android backend loads its own
+     * library, so the JDK's awt library is loaded here into the boot loader, as the JDK's
+     * Toolkit does, before anything reaches Font.
+     */
+    private static void loadJdkAwtLibrary() throws ReflectiveOperationException {
+        Class.forName("jdk.internal.loader.BootLoader").getMethod("loadLibrary", String.class).invoke(null, "awt");
+    }
+
     public static void main(String[] args) throws Exception {
+        if (args.length > 0 && "shadow".equals(args[0])) {
+            loadJdkAwtLibrary();
+        }
         DefaultButtonModel button = new DefaultButtonModel();
         AtomicInteger changes = new AtomicInteger(), items = new AtomicInteger(), actions = new AtomicInteger();
         button.addChangeListener(e -> changes.incrementAndGet());
@@ -237,5 +252,8 @@ public final class TestSwingContracts {
 
         System.out.println("SUMMARY " + total + " checks, " + failures + " failures");
         if(failures!=0)throw new AssertionError(failures+" Swing contract checks failed");
+        // The patched run leaves a non-daemon AWT thread (SwingWorker/EDT of the JDK/shadow
+        // mix) that never shuts down; every check above has completed, so exit explicitly.
+        System.exit(0);
     }
 }

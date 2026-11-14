@@ -1,5 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
     <application android:label="Swing Compatibility Probe" tools:replace="android:label">
-        <activity android:name="net.runelite.mp.compatprobe.SwingContractProbeActivity" android:exported="true" android:theme="@android:style/Theme.Material.Light.NoActionBar" />
+        <activity android:name="net.runelite.mp.compatprobe.SwingContractProbeActivity" android:exported="true" android:screenOrientation="sensorLandscape" android:configChanges="orientation|screenSize|keyboard|keyboardHidden|screenLayout|smallestScreenSize" android:theme="@android:style/Theme.Material.Light.NoActionBar" />
     </application>
 </manifest>

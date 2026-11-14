@@ -4,10 +4,12 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.os.Build
 import android.os.Bundle
+import android.view.ViewConfiguration
 import android.view.Window
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -31,11 +33,55 @@ class MainActivity : ComponentActivity() {
     }
     private lateinit var swingDialogs: net.runelite.mp.ui.bridge.SwingDialogs
     private lateinit var swingClipboard: net.runelite.mp.ui.bridge.SwingClipboard
+    private lateinit var swingDesktop: net.runelite.mp.ui.bridge.SwingDesktop
+
+    // RECORD_AUDIO is asked for the first time a TargetDataLine opens, not at launch: the game
+    // never captures, so only a plugin that records ever shows the prompt.
+    private val recordPermissionLock = Any()
+    private var pendingRecordPermission: java.util.concurrent.CompletableFuture<Boolean>? = null
+    private val recordPermissionLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { granted -> takePendingRecordPermission()?.complete(granted) }
+    private val recordPermission = net.runelite.awt.impl.AndroidAudioBridge.RecordPermission { requestRecordPermission() }
+
+    private fun takePendingRecordPermission() = synchronized(recordPermissionLock) {
+        pendingRecordPermission.also { pendingRecordPermission = null }
+    }
+
+    /** Called on the thread opening the line; blocks it until the user answers the prompt. */
+    private fun requestRecordPermission(): Boolean {
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            return true
+        }
+        // The prompt's answer arrives on the UI thread, so the UI thread cannot wait for it.
+        if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper() || isDestroyed) return false
+        val future = synchronized(recordPermissionLock) {
+            pendingRecordPermission ?: java.util.concurrent.CompletableFuture<Boolean>().also { created ->
+                pendingRecordPermission = created
+                runOnUiThread {
+                    if (isDestroyed) takePendingRecordPermission()?.complete(false)
+                    else recordPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                }
+            }
+        }
+        return try {
+            future.get()
+        } catch (e: InterruptedException) {
+            Thread.currentThread().interrupt()
+            false
+        }
+    }
 
     override fun onDestroy() {
+        // A recreated activity installs its own handler in onCreate; only clear ours.
+        if (net.runelite.awt.impl.AndroidAudioBridge.getRecordPermission() === recordPermission) {
+            net.runelite.awt.impl.AndroidAudioBridge.setRecordPermission(null)
+        }
+        takePendingRecordPermission()?.complete(false)
         net.runelite.client.plugins.mobile.MobileDisplaySettings.detach()
         if (::swingDialogs.isInitialized) swingDialogs.close()
         if (::swingClipboard.isInitialized) swingClipboard.close()
+        if (::swingDesktop.isInitialized) swingDesktop.close()
         super.onDestroy()
     }
 
@@ -77,7 +123,15 @@ class MainActivity : ComponentActivity() {
         window.decorView.addOnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
             if (view.width > 0 && view.height > 0)
                 net.runelite.awt.impl.HeadlessGraphicsConfiguration.updateDisplay(view.width, view.height, resources.displayMetrics.densityDpi)
+            // Toolkit.getScreenInsets: what the system bars and the cutout cover of the viewport.
+            ViewCompat.getRootWindowInsets(view)
+                ?.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+                ?.let { net.runelite.awt.impl.HeadlessGraphicsConfiguration.updateInsets(it.top, it.left, it.bottom, it.right) }
         }
+        // Toolkit desktop properties and beep, from the platform's own touch and sound settings.
+        net.runelite.awt.impl.HostToolkit.setBeeper(net.runelite.awt.impl.ToneBeeper())
+        net.runelite.awt.impl.HostToolkit.updateDesktopProperty("awt.multiClickInterval", ViewConfiguration.getDoubleTapTimeout())
+        net.runelite.awt.impl.HostToolkit.updateDesktopProperty("DnD.gestureMotionThreshold", ViewConfiguration.get(this).scaledTouchSlop)
 
         // Fullscreen + edge-to-edge, hide system bars (immersive sticky behavior).
         WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -102,22 +156,9 @@ class MainActivity : ComponentActivity() {
             )
         }
 
-        // Use the real browser for RuneLite/Google sign-in; credentials stay in the browser.
-        val browserContext = applicationContext
-        java.awt.Desktop.setBrowseHandler { uri ->
-            try {
-                val target = android.net.Uri.parse(uri.toString())
-                if (net.runelite.mp.account.RuneLiteLoginService.isRuneLiteLogin(target)) {
-                    browserContext.startForegroundService(android.content.Intent(
-                        browserContext, net.runelite.mp.account.RuneLiteLoginService::class.java
-                    ).setData(target))
-                } else browserContext.startActivity(android.content.Intent(
-                    android.content.Intent.ACTION_VIEW, android.net.Uri.parse(uri.toString())
-                ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
-            } catch (e: android.content.ActivityNotFoundException) {
-                throw java.io.IOException("No web browser is installed", e)
-            }
-        }
+        // Browse (incl. the RuneLite sign-in redirect), open/edit/print, mail and tray messages.
+        swingDesktop = net.runelite.mp.ui.bridge.SwingDesktop(this)
+        net.runelite.awt.impl.AndroidAudioBridge.setRecordPermission(recordPermission)
         swingDialogs = net.runelite.mp.ui.bridge.SwingDialogs(this)
         swingClipboard = net.runelite.mp.ui.bridge.SwingClipboard(this)
         setContent { AndroidApp() }

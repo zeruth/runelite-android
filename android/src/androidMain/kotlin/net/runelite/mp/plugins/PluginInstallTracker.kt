@@ -3,6 +3,7 @@ package net.runelite.mp.plugins
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.widget.Toast
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
@@ -56,11 +57,21 @@ internal object PluginInstallTracker : PluginHubHooks.Listener
         statuses[internalName] = InstallStatus(internalName, displayName, InstallPhase.Downloading(null), fresh = true, requested = true)
     }
 
-    fun converting(internalName: String, displayName: String?) = update(internalName, displayName, fresh = true) { InstallPhase.Converting }
-    fun converted(internalName: String, millis: Long) = update(internalName, null) { InstallPhase.Loading }
+    fun converting(internalName: String, displayName: String?)
+    {
+        status("converting", internalName)
+        update(internalName, displayName, fresh = true) { InstallPhase.Converting }
+    }
+
+    fun converted(internalName: String, millis: Long)
+    {
+        status("converted", internalName, "ms=$millis")
+        update(internalName, null) { InstallPhase.Loading }
+    }
 
     override fun downloadStarted(internalName: String, displayName: String?, jarSize: Int)
     {
+        status("download", internalName, "size=$jarSize")
         lastPercent.remove(internalName)
         update(internalName, displayName, fresh = true) { InstallPhase.Downloading(null) }
     }
@@ -79,6 +90,7 @@ internal object PluginInstallTracker : PluginHubHooks.Listener
     override fun loaded(internalName: String, displayName: String?, pluginNames: MutableList<String>)
     {
         val names = pluginNames.toList()
+        status("loaded", internalName, "plugins=" + names.joinToString("|"))
         update(internalName, displayName) { InstallPhase.Ready(names) }
         post {
             val status = statuses[internalName] ?: return@post
@@ -92,6 +104,7 @@ internal object PluginInstallTracker : PluginHubHooks.Listener
     {
         val message = describe(stage, cause)
         val detail = cause?.stackTraceToString().orEmpty()
+        status("failed", internalName ?: "-", "stage=$stage message=" + message.replace('\n', ' '))
         if (internalName == null)
         {
             post { if (message !in hubErrors) hubErrors += message }
@@ -141,6 +154,18 @@ internal object PluginInstallTracker : PluginHubHooks.Listener
             PluginHubHooks.Stage.START -> "Failed to start" + (why?.let { ": $it" } ?: "")
         }
     }
+
+    /**
+     * One machine-readable logcat line per install transition, `HUB <event> internal=<name> …`
+     * under [STATUS_TAG]; tools-src/test-hub-plugins.py keys its status matrix off these, so
+     * keep the shape stable (plugins= and message= run to the end of the line).
+     */
+    private fun status(event: String, internalName: String, extra: String = "")
+    {
+        Log.i(STATUS_TAG, "HUB $event internal=$internalName" + if (extra.isEmpty()) "" else " $extra")
+    }
+
+    private const val STATUS_TAG = "RlHubStatus"
 
     private fun toast(text: String)
     {

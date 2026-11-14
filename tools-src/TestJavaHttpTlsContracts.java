@@ -1,3 +1,4 @@
+// host-contract: fixture=keystore
 import java.net.*;
 import java.net.http.*;
 import java.io.*;

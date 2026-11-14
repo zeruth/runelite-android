@@ -1,3 +1,33 @@
+/*
+ * Copyright (c) 2026, Tyler Bochard
+ * All rights reserved.
+ *
+ * Part of android-awt, the Android shadow of the desktop JDK surface used by
+ * runelite-android. Original work of this project, not derived from OpenJDK;
+ * licensed under the BSD 2-Clause License (see the LICENSE file at the
+ * repository root). Files ported from OpenJDK carry the OpenJDK header instead;
+ * see android-awt/LICENSE.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ *    list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
 package net.runelite.awt.impl;
 
 import android.graphics.Typeface;
@@ -27,6 +57,31 @@ import java.util.concurrent.atomic.AtomicInteger;
  * Family name is parsed from the TTF/OTF 'name' table (Windows Unicode BMP record,
  * nameID=1). If parsing fails we fall back to a synthetic "rl-font-N" name; that
  * still works for lookup as long as the caller holds onto {@code font.getFamily()}.
+ *
+ * <h3>Family mapping</h3>
+ * {@link #lookup(String, int)} resolves a {@code Font} name to a Typeface in this order:
+ * <ol>
+ * <li>Logical families, case-insensitive, never overridden by a registered face (as on
+ *     desktop): {@code Dialog} and {@code SansSerif} → {@code sans-serif} (Roboto),
+ *     {@code Serif} → {@code serif} (Noto Serif), {@code Monospaced} and
+ *     {@code DialogInput} → {@code monospace} (Droid Sans Mono). Styles come from the
+ *     system family's own bold/italic members via {@code Typeface.create(tf, style)}.
+ *     The table itself is {@link FontFamilies#androidFamilyFor(String)}.</li>
+ * <li>Families registered by {@code Font.createFont}: exact, then case-insensitive.</li>
+ * <li>Android system families listed in {@code /system/etc/fonts.xml}
+ *     ({@code sans-serif-condensed}, {@code serif-monospace}, {@code casual}, ...), via
+ *     {@code Typeface.create(name, NORMAL)}.</li>
+ * <li>A registered family that starts with the name or that the name starts with
+ *     ({@code "RuneScape"} vs {@code "RuneScape Plain"}).</li>
+ * <li>Any other name (the gamepack's {@code "Helvetica"}, a plugin's {@code "Arial"})
+ *     renders with the primary RuneScape face. This is a deliberate deviation: desktop
+ *     would draw it in Dialog, but on a phone the OSRS face is what those strings were
+ *     drawn in before logical families existed here, and {@code Font.getFamily()} still
+ *     reports {@code Dialog} for such names, as desktop does.</li>
+ * </ol>
+ * The names those families report ({@code getFamily}, {@code getFontName},
+ * {@code GraphicsEnvironment.getAvailableFontFamilyNames}) come from {@link FontFamilies},
+ * which this class feeds on every registration.
  */
 public final class AwtFontRegistry
 {
@@ -46,6 +101,93 @@ public final class AwtFontRegistry
 	{
 		Integer s = tf != null ? FACE_STYLES.get(tf) : null;
 		return s != null ? s : 0;
+	}
+
+	/** Whether {@code tf} was loaded by {@link #register(InputStream)}. */
+	public static boolean isRegistered(Typeface tf)
+	{
+		return tf != null && FACE_STYLES.containsKey(tf);
+	}
+
+	/** 'maxp' numGlyphs of registered faces. */
+	private static final ConcurrentHashMap<Typeface, Integer> GLYPH_COUNTS = new ConcurrentHashMap<>();
+	/** Inverse caret slope from the 'post' italicAngle of registered italic faces. */
+	private static final ConcurrentHashMap<Typeface, Float> ITALIC_SLOPES = new ConcurrentHashMap<>();
+	/** System family name → its NORMAL Typeface, and system font file → its glyph count. */
+	private static final ConcurrentHashMap<String, Typeface> SYSTEM = new ConcurrentHashMap<>();
+	private static final ConcurrentHashMap<String, Integer> SYSTEM_GLYPH_COUNTS = new ConcurrentHashMap<>();
+
+	/** Run-over-rise slope of a registered italic face, NaN when its 'post' table has none. */
+	public static float italicSlope(Typeface tf)
+	{
+		Float s = tf != null ? ITALIC_SLOPES.get(tf) : null;
+		return s != null ? s : Float.NaN;
+	}
+
+	/**
+	 * Glyph count of the face {@code family}/{@code style} renders with, from 'maxp':
+	 * registered faces from their bytes, logical and system families from their regular
+	 * file under /system/fonts. -1 when unknown.
+	 */
+	public static int numGlyphs(String family, int style)
+	{
+		String android = FontFamilies.androidFamilyFor(family);
+		String system = android != null ? android : FontFamilies.registered(family) == null ? FontFamilies.system(family) : null;
+		if (system != null)
+		{
+			return systemGlyphCount(FontFamilies.systemFontFile(system));
+		}
+		Typeface tf = lookup(family, style);
+		Integer n = tf != null ? GLYPH_COUNTS.get(tf) : null;
+		return n != null ? n : -1;
+	}
+
+	private static Typeface systemTypeface(String family)
+	{
+		Typeface tf = SYSTEM.get(family);
+		if (tf == null)
+		{
+			tf = Typeface.create(family, Typeface.NORMAL);
+			Typeface prev = SYSTEM.putIfAbsent(family, tf);
+			if (prev != null) tf = prev;
+		}
+		return tf;
+	}
+
+	private static int systemGlyphCount(String file)
+	{
+		if (file == null) return -1;
+		Integer cached = SYSTEM_GLYPH_COUNTS.get(file);
+		if (cached != null) return cached;
+		int n = -1;
+		try (java.io.RandomAccessFile raf = new java.io.RandomAccessFile(new File("/system/fonts", file), "r"))
+		{
+			long base = 0;
+			if (raf.readInt() == 0x74746366 /* 'ttcf' */)
+			{
+				raf.seek(12);
+				base = raf.readInt() & 0xFFFFFFFFL;
+			}
+			raf.seek(base + 4);
+			int numTables = raf.readUnsignedShort();
+			for (int i = 0; i < numTables; i++)
+			{
+				raf.seek(base + 12 + i * 16L);
+				if (raf.readInt() == 0x6D617870 /* 'maxp' */)
+				{
+					raf.readInt(); // checksum
+					raf.seek((raf.readInt() & 0xFFFFFFFFL) + 4);
+					n = raf.readUnsignedShort();
+					break;
+				}
+			}
+		}
+		catch (Throwable t)
+		{
+			Log.w(TAG, "font: maxp read failed for " + file, t);
+		}
+		SYSTEM_GLYPH_COUNTS.put(file, n);
+		return n;
 	}
 	private static final AtomicInteger SYNTHETIC_COUNTER = new AtomicInteger();
 
@@ -104,6 +246,12 @@ public final class AwtFontRegistry
 		Typeface tf = loadTypeface(bytes, family);
 		if (tf == null) return null;
 		FACE_STYLES.put(tf, style);
+		int glyphs = parseGlyphCount(bytes);
+		if (glyphs > 0) GLYPH_COUNTS.put(tf, glyphs);
+		float slope = parseItalicSlope(bytes);
+		if (!Float.isNaN(slope)) ITALIC_SLOPES.put(tf, slope);
+		String fullName = parseName(bytes, 4);
+		FontFamilies.registerFace(family, style, fullName != null ? fullName : family, parseName(bytes, 6));
 		synchronized (FAMILIES)
 		{
 			slots = FAMILIES.get(family);
@@ -125,9 +273,18 @@ public final class AwtFontRegistry
 
 	/** Best registered face of {@code family} for java.awt.Font style bits: the exact
 	 *  member if registered, else the closest one (the caller synthesizes the rest, see
-	 *  {@link #faceStyle}). Same family fallbacks as {@link #lookup(String)}. */
+	 *  {@link #faceStyle}). Logical and system families return their NORMAL system
+	 *  Typeface, from which {@code Typeface.create(tf, style)} picks the family's real
+	 *  styled member. The order is the family mapping in the class comment. */
 	public static Typeface lookup(String family, int style)
 	{
+		String android = FontFamilies.androidFamilyFor(family);
+		if (android != null) return systemTypeface(android);
+		if (family != null && FontFamilies.registered(family) == null)
+		{
+			String system = FontFamilies.system(family);
+			if (system != null) return systemTypeface(system);
+		}
 		Typeface[] slots = slotsFor(family);
 		if (slots == null) return null;
 		style &= 3;
@@ -138,15 +295,104 @@ public final class AwtFontRegistry
 		return null;
 	}
 
+	/** Per-face code point → glyph code and its inverse, so a GlyphVector built from
+	 *  {@code int[]} glyph codes (usually codes read back from another vector) can find
+	 *  the characters to outline and measure. */
+	private static final ConcurrentHashMap<Typeface, GlyphMap> GLYPH_MAPS = new ConcurrentHashMap<>();
+
+	private static final class GlyphMap
+	{
+		final ConcurrentHashMap<Integer, Integer> codes = new ConcurrentHashMap<>();
+		final ConcurrentHashMap<Integer, Integer> codePoints = new ConcurrentHashMap<>();
+		volatile boolean seeded;
+	}
+
+	private static GlyphMap glyphMap(Typeface tf)
+	{
+		GlyphMap map = GLYPH_MAPS.get(tf);
+		if (map == null)
+		{
+			GlyphMap fresh = new GlyphMap();
+			map = GLYPH_MAPS.putIfAbsent(tf, fresh);
+			if (map == null) map = fresh;
+		}
+		return map;
+	}
+
+	/**
+	 * Glyph code of {@code codePoint} in {@code tf}. On API 31+ this is the font's real glyph
+	 * id, read from {@link android.graphics.text.TextRunShaper} shaping the code point alone
+	 * (a code point the face lacks gets the id of the fallback font Minikin picks, so ids of
+	 * different fonts can share a vector). Below API 31 Android has no public glyph-id API and
+	 * the code is the Unicode code point itself, which is stable and round-trips but does not
+	 * match the font's cmap the way desktop codes do.
+	 */
+	public static int glyphCode(Typeface tf, int codePoint)
+	{
+		if (android.os.Build.VERSION.SDK_INT < 31) return codePoint;
+		GlyphMap map = glyphMap(tf);
+		Integer known = map.codes.get(codePoint);
+		if (known != null) return known;
+		int code = Shaper31.shape(tf, codePoint);
+		map.codes.put(codePoint, code);
+		map.codePoints.putIfAbsent(code, codePoint);
+		return code;
+	}
+
+	/**
+	 * Inverse of {@link #glyphCode}: the code point a glyph code stands for, or -1 when it is
+	 * unknown. On API 31+ only codes this process has produced for {@code tf} are known, plus
+	 * U+0020..U+024F (Basic Latin through Latin Extended-B), which are shaped once per face on
+	 * the first miss; Android cannot enumerate a font's glyphs.
+	 */
+	public static int codePointForGlyph(Typeface tf, int glyphCode)
+	{
+		if (android.os.Build.VERSION.SDK_INT < 31)
+		{
+			return glyphCode > 0 && Character.isValidCodePoint(glyphCode) ? glyphCode : -1;
+		}
+		GlyphMap map = glyphMap(tf);
+		Integer cp = map.codePoints.get(glyphCode);
+		if (cp == null && !map.seeded)
+		{
+			for (int c = 0x20; c <= 0x24F; c++) glyphCode(tf, c);
+			map.seeded = true;
+			cp = map.codePoints.get(glyphCode);
+		}
+		return cp != null ? cp : -1;
+	}
+
+	@android.annotation.TargetApi(31)
+	private static final class Shaper31
+	{
+		private static final ThreadLocal<android.graphics.Paint> PAINT = new ThreadLocal<android.graphics.Paint>()
+		{
+			@Override
+			protected android.graphics.Paint initialValue()
+			{
+				return new android.graphics.Paint();
+			}
+		};
+
+		static int shape(Typeface tf, int codePoint)
+		{
+			android.graphics.Paint paint = PAINT.get();
+			paint.setTypeface(tf);
+			char[] chars = Character.toChars(codePoint);
+			android.graphics.text.PositionedGlyphs glyphs = android.graphics.text.TextRunShaper.shapeTextRun(
+				chars, 0, chars.length, 0, chars.length, 0f, 0f, false, paint);
+			return glyphs.glyphCount() > 0 ? glyphs.getGlyphId(0) : 0;
+		}
+	}
+
 	private static final java.util.Set<String> WARNED = java.util.Collections.synchronizedSet(new java.util.HashSet<>());
 
-	/** Lookup; returns null when {@code family} isn't a registered TTF. Tries an
-	 *  exact match first, then case-insensitive, then a startswith probe (e.g. RL
-	 *  may pass "RuneScape" while the TTF registered itself as "RuneScape Plain").
-	 *  Falls back to the primary "RuneScape" registration when nothing else matches
-	 *  so generic AWT/Swing fonts (Dialog, Helvetica, SansSerif, …) still render in
-	 *  the OSRS face on Android instead of Roboto. Logs the miss once per family
-	 *  so it's easy to spot in logcat. */
+	/** PLAIN lookup. Registered families try an exact match first, then
+	 *  case-insensitive, then a startswith probe (e.g. RL may pass "RuneScape" while
+	 *  the TTF registered itself as "RuneScape Plain"). A name that is neither logical,
+	 *  registered nor a system family falls back to the primary "RuneScape"
+	 *  registration so unknown physical names (Helvetica, Arial, …) still render in the
+	 *  OSRS face; the miss is logged once per family so it's easy to spot in logcat. */
 	public static Typeface lookup(String family)
 	{
 		return lookup(family, java.awt.Font.PLAIN);
@@ -240,6 +486,37 @@ public final class AwtFontRegistry
 			Log.w(TAG, "font: OS/2 parse failed", t);
 		}
 		return style;
+	}
+
+	private static int parseGlyphCount(byte[] bytes)
+	{
+		try
+		{
+			int maxp = findTable(bytes, 0x6D617870 /* 'maxp' */);
+			if (maxp < 0 || maxp + 6 > bytes.length) return -1;
+			return ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN).getShort(maxp + 4) & 0xFFFF;
+		}
+		catch (Throwable t)
+		{
+			return -1;
+		}
+	}
+
+	/** 'post' italicAngle (16.16 degrees, negative leaning right) as run over rise; NaN for
+	 *  an upright or unreadable face. */
+	private static float parseItalicSlope(byte[] bytes)
+	{
+		try
+		{
+			int post = findTable(bytes, 0x706F7374 /* 'post' */);
+			if (post < 0 || post + 8 > bytes.length) return Float.NaN;
+			double degrees = ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN).getInt(post + 4) / 65536.0;
+			return degrees == 0 ? Float.NaN : (float) Math.tan(Math.toRadians(-degrees));
+		}
+		catch (Throwable t)
+		{
+			return Float.NaN;
+		}
 	}
 
 	private static int findTable(byte[] bytes, int wantTag)

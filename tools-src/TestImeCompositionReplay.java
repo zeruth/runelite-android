@@ -17,6 +17,13 @@ public final class TestImeCompositionReplay {
     }
     public static String run(Context context) throws Exception {
         require(android.os.Looper.myLooper()==android.os.Looper.getMainLooper(),"Replay must run on Android's UI thread");
+        KeyboardFocusManager manager=KeyboardFocusManager.getCurrentKeyboardFocusManager();
+        java.awt.Component previous=manager.getFocusOwner();
+        EventQueue.invokeAndWait(manager::clearGlobalFocusOwner);
+        try { return runGameReplay(context); }
+        finally { EventQueue.invokeAndWait(()->{if(previous!=null)previous.requestFocusInWindow();}); }
+    }
+    private static String runGameReplay(Context context) throws Exception {
         Class<?> type=Class.forName("net.runelite.mp.ui.bridge.KeyboardInputView");
         Object view=type.getConstructor(Context.class).newInstance(context);
         Field open=type.getDeclaredField("isSessionOpen");open.setAccessible(true);

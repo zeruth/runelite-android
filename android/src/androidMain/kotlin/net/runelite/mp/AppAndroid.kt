@@ -628,6 +628,8 @@ private fun GameViewport(modifier: Modifier = Modifier) {
                                               time: Long, device: Int, canceled: Boolean) {
                         mouse.button(id, button, Offset(x, y), IntSize(width, height), canceled)
                     }
+
+                    override fun awtCursor(x: Float, y: Float): java.awt.Cursor? = mouse.hoverCursor()
                 }
             },
             modifier = Modifier.matchParentSize(),
@@ -1193,7 +1195,7 @@ private fun clickDirectWidget(direct: java.awt.Component, winX: Int, winY: Int, 
         is javax.swing.JTabbedPane -> {
             val (dx, dy) = localCoords(direct, winX, winY)
             val idx = direct.indexAtLocation(dx, dy)
-            if (idx >= 0 && button == BUTTON1) {
+            if (idx >= 0 && button == BUTTON1 && direct.isEnabledAt(idx)) {
                 direct.selectedIndex = if (direct.selectedIndex == idx) -1 else idx
             }
         }
@@ -1723,6 +1725,17 @@ private class MouseBridge {
             val (lx, ly) = localCoords(target, wx, wy)
             fire(target, java.awt.event.MouseEvent.MOUSE_ENTERED, lx, ly, held, java.awt.event.MouseEvent.NOBUTTON, 0)
         }
+    }
+
+    /** The cursor of the hovered component as the JDK resolves it (an unset cursor is the
+     *  nearest ancestor's), so ClientUI.setCursor and the CustomCursor plugin reach the pointer. */
+    fun hoverCursor(): java.awt.Cursor? {
+        var c = grab ?: hover
+        while (c != null) {
+            c.cursor?.let { return it }
+            c = c.parent
+        }
+        return null
     }
 
     private fun targetAt(window: java.awt.Window, wx: Int, wy: Int): java.awt.Component? {

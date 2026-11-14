@@ -1,7 +1,7 @@
 import java.nio.file.*;
 import java.util.*;
 import java.util.zip.*;
-import net.runelite.mp.plugins.DesktopRegexTransformer;
+import net.runelite.mp.compat.JdkRetargeter;
 
 /** Transform a real hub JAR and verify unchanged resources and idempotent class rewrites. */
 public class TestDesktopRegexTransform {
@@ -13,7 +13,7 @@ public class TestDesktopRegexTransform {
         method.visitMethodInsn(org.objectweb.asm.Opcodes.INVOKESTATIC,"host/UnchangedApi","accept","(Ljava/util/regex/Pattern;)V",false);
         method.visitInsn(org.objectweb.asm.Opcodes.RETURN);method.visitMaxs(1,0);method.visitEnd();writer.visitEnd();
         try {
-            DesktopRegexTransformer.rewrite("ExternalBoundaryFixture.class",writer.toByteArray(),Set.of("ExternalBoundaryFixture"));
+            JdkRetargeter.rewrite("ExternalBoundaryFixture.class",writer.toByteArray(),Set.of("ExternalBoundaryFixture"),true);
             throw new AssertionError("host API crossing was not rejected");
         } catch(IllegalArgumentException expected) {
             if(!expected.getMessage().contains("crosses host API"))throw expected;
@@ -28,9 +28,9 @@ public class TestDesktopRegexTransform {
             for(var entries=input.entries();entries.hasMoreElements();) {
                 var entry=entries.nextElement();byte[] bytes;
                 try(var in=input.getInputStream(entry)){bytes=in.readAllBytes();}
-                byte[] result=DesktopRegexTransformer.rewrite(entry.getName(),bytes,classes);
+                byte[] result=JdkRetargeter.rewrite(entry.getName(),bytes,classes,true);
                 if(!Arrays.equals(bytes,result))changed++;
-                if(!Arrays.equals(result,DesktopRegexTransformer.rewrite(entry.getName(),result,classes)))throw new AssertionError("not idempotent");
+                if(!Arrays.equals(result,JdkRetargeter.rewrite(entry.getName(),result,classes,true)))throw new AssertionError("not idempotent");
                 output.putNextEntry(new ZipEntry(entry.getName()));output.write(result);output.closeEntry();
             }
             System.out.println("PASS "+Path.of(args[0]).getFileName()+" changedClasses="+changed);

@@ -1,3 +1,33 @@
+/*
+ * Copyright (c) 2026, Tyler Bochard
+ * All rights reserved.
+ *
+ * Part of android-awt, the Android shadow of the desktop JDK surface used by
+ * runelite-android. Original work of this project, not derived from OpenJDK;
+ * licensed under the BSD 2-Clause License (see the LICENSE file at the
+ * repository root). Files ported from OpenJDK carry the OpenJDK header instead;
+ * see android-awt/LICENSE.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ *    list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
 package javax.swing;
 
 import java.awt.event.ActionListener;
@@ -12,7 +42,35 @@ import javax.swing.event.PopupMenuListener;
  * "comboBoxChanged" ActionEvents. Keeping a private copy of the selection here meant
  * array-built combos started blank and removeAllItems() never cleared anything.
  */
-public class JComboBox<E> extends JComponent implements ListDataListener {
+public class JComboBox<E> extends JComponent implements ListDataListener, javax.accessibility.Accessible {
+    private static final String uiClassID = "ComboBoxUI";
+    public String getUIClassID() { return uiClassID; }
+
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleJComboBox();
+        }
+        return accessibleContext;
+    }
+
+    /**
+     * Accessibility support for combo boxes: role COMBO_BOX, EDITABLE when editable. The
+     * children are the box's own accessible components; the JDK's basic UI reports its
+     * popup list instead, which this port draws without a component.
+     */
+    protected class AccessibleJComboBox extends AccessibleJComponent {
+        public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.COMBO_BOX;
+        }
+
+        public javax.accessibility.AccessibleStateSet getAccessibleStateSet() {
+            javax.accessibility.AccessibleStateSet states = super.getAccessibleStateSet();
+            if (JComboBox.this.isEditable()) {
+                states.add(javax.accessibility.AccessibleState.EDITABLE);
+            }
+            return states;
+        }
+    }
     private static final long serialVersionUID = -2378717525866512215L;
 
     public interface KeySelectionManager {
@@ -55,9 +113,8 @@ public class JComboBox<E> extends JComponent implements ListDataListener {
         revalidate(); repaint();
     }
     @Override public void updateUI() {
+        // BasicComboBoxUI.installUI installs the editor (createEditor) as the JDK's does.
         setUI(new javax.swing.plaf.basic.BasicComboBoxUI());
-        if (editor == null || editor instanceof javax.swing.plaf.UIResource)
-            setEditor(new javax.swing.plaf.basic.BasicComboBoxEditor.UIResource());
     }
     public ComboBoxEditor getEditor() { return editor; }
     public void setEditor(ComboBoxEditor value) {
@@ -218,7 +275,71 @@ public class JComboBox<E> extends JComponent implements ListDataListener {
     @Override public void intervalRemoved(ListDataEvent e) { contentsChanged(e); }
 
     public int getMaximumRowCount() { return maximumRowCount; }
-    public void setMaximumRowCount(int count) { this.maximumRowCount = count; }
+    public void setMaximumRowCount(int count) {
+        int old = maximumRowCount;
+        maximumRowCount = count;
+        firePropertyChange("maximumRowCount", old, count);
+    }
+
+    protected KeySelectionManager keySelectionManager;
+
+    /**
+     * Selects the list item that corresponds to the specified keyboard
+     * character and returns true, if there is an item corresponding
+     * to that character.  Otherwise, returns false.
+     */
+    public boolean selectWithKeyChar(char keyChar) {
+        if (keySelectionManager == null) {
+            keySelectionManager = createDefaultKeySelectionManager();
+        }
+        int index = keySelectionManager.selectionForKey(keyChar, getModel());
+        if (index != -1) {
+            setSelectedIndex(index);
+            return true;
+        }
+        return false;
+    }
+
+    public void setKeySelectionManager(KeySelectionManager aManager) { keySelectionManager = aManager; }
+    public KeySelectionManager getKeySelectionManager() { return keySelectionManager; }
+
+    /** Returns an instance of the default key-selection manager. */
+    protected KeySelectionManager createDefaultKeySelectionManager() {
+        return new DefaultKeySelectionManager();
+    }
+
+    /**
+     * The JDK's default: the next item after the selection whose toString() starts with the
+     * key, ignoring case, wrapping around to the top.
+     */
+    class DefaultKeySelectionManager implements KeySelectionManager, java.io.Serializable {
+        public int selectionForKey(char aKey, ComboBoxModel<?> aModel) {
+            int currentSelection = -1;
+            Object selectedItem = aModel.getSelectedItem();
+            if (selectedItem != null) {
+                for (int i = 0, c = aModel.getSize(); i < c; i++) {
+                    if (selectedItem == aModel.getElementAt(i)) {
+                        currentSelection = i;
+                        break;
+                    }
+                }
+            }
+            aKey = ("" + aKey).toLowerCase().charAt(0);
+            for (int i = ++currentSelection, c = aModel.getSize(); i < c; i++) {
+                if (startsWith(aModel.getElementAt(i), aKey)) return i;
+            }
+            for (int i = 0; i < currentSelection; i++) {
+                if (startsWith(aModel.getElementAt(i), aKey)) return i;
+            }
+            return -1;
+        }
+
+        private boolean startsWith(Object elem, char key) {
+            if (elem == null || elem.toString() == null) return false;
+            String v = elem.toString().toLowerCase();
+            return v.length() > 0 && v.charAt(0) == key;
+        }
+    }
 
     // Prototype value real Swing uses to size the combo's cells before data loads. We don't
     // lay out from it, but plugins set it (resource-packs' HubPanel) and without the method
@@ -226,7 +347,12 @@ public class JComboBox<E> extends JComponent implements ListDataListener {
     // plugin from registering its toolbar nav button.
     private Object prototypeDisplayValue;
     public Object getPrototypeDisplayValue() { return prototypeDisplayValue; }
-    public void setPrototypeDisplayValue(Object value) { this.prototypeDisplayValue = value; invalidate(); }
+    public void setPrototypeDisplayValue(Object value) {
+        Object old = prototypeDisplayValue;
+        prototypeDisplayValue = value;
+        firePropertyChange("prototypeDisplayValue", old, value);
+        invalidate();
+    }
     public interface PopupHandler { void show(JComboBox<?> combo, boolean visible); }
     private static volatile PopupHandler popupHandler;
     public static void setPopupHandler(PopupHandler handler) { popupHandler = handler; }
@@ -343,6 +469,16 @@ public class JComboBox<E> extends JComponent implements ListDataListener {
     }
 
     /**
+     * The JDK's JComponent asks the delegate before the layout; the shadow one asks the
+     * layout first, and BasicComboBoxUI's layout answers {@code parent.getMinimumSize()},
+     * so the combo answers here with its own measurement to end that loop.
+     */
+    @Override public java.awt.Dimension getMinimumSize() {
+        if (isMinimumSizeSet()) return super.getMinimumSize();
+        return getPreferredSize();
+    }
+
+    /**
      * BasicComboBoxUI.paintCurrentValue: the renderer component paints the selected value,
      * with the combo's font and colours forced on it, left of the arrow.
      */
@@ -350,6 +486,23 @@ public class JComboBox<E> extends JComponent implements ListDataListener {
         if (paintDelegate(g)) return;
         hostPaintValue(g, new java.awt.Rectangle(4, 1, Math.max(0, getWidth() - 20), Math.max(0, getHeight() - 2)));
     }
+    /**
+     * Android: the plain BasicComboBoxUI draws the combo's outline in its
+     * background pass, and an editable combo's editor child covers the edges of it;
+     * the outline is drawn again over the children so editable combos keep the
+     * frame they had before the editor became a real child. Look and feel
+     * subclasses (FlatLaf) paint their own border and are left alone.
+     */
+    @Override protected void paintChildren(java.awt.Graphics g) {
+        super.paintChildren(g);
+        if (isEditable && getBorder() == null && ui != null
+                && ui.getClass() == javax.swing.plaf.basic.BasicComboBoxUI.class
+                && getWidth() > 0 && getHeight() > 0) {
+            g.setColor(isEnabled() ? getForeground() : java.awt.Color.GRAY);
+            g.drawRect(0, 0, getWidth() - 1, getHeight() - 1);
+        }
+    }
+
     public void hostPaintValue(java.awt.Graphics g, java.awt.Rectangle bounds) {
         java.awt.Color fg = isEnabled() ? getForeground() : java.awt.Color.GRAY;
         g.setColor(fg);

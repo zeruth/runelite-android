@@ -1,0 +1,27 @@
+<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
+<hierarchy rotation="1">
+  <node index="0" text="" resource-id="" class="android.widget.FrameLayout" package="net.runelite.mp" content-desc="" checkable="false" checked="false" clickable="false" bounds="[0,0][2400,1080]">
+    <node index="0" text="" resource-id="" class="android.view.View" package="net.runelite.mp" content-desc="Plugins" checkable="false" checked="false" clickable="true" bounds="[2330,10][2390,70]" />
+    <node index="1" text="" resource-id="" class="android.view.View" package="net.runelite.mp" content-desc="Notes" checkable="false" checked="false" clickable="true" bounds="[2330,80][2390,140]" />
+    <node index="2" text="" resource-id="" class="android.view.View" package="net.runelite.mp" content-desc="RuneLite" checkable="false" checked="false" clickable="false" bounds="[10,10][200,200]" />
+    <node index="3" text="Plugins" resource-id="" class="android.view.View" package="net.runelite.mp" content-desc="" checkable="false" checked="false" clickable="true" bounds="[1830,20][1980,60]" />
+    <node index="4" text="External" resource-id="" class="android.view.View" package="net.runelite.mp" content-desc="" checkable="false" checked="false" clickable="true" bounds="[2130,20][2310,60]" />
+    <node index="5" text="" resource-id="" class="android.widget.EditText" package="net.runelite.mp" content-desc="" checkable="false" checked="false" clickable="true" bounds="[1820,80][2320,120]" />
+    <node index="6" text="Plugin Hub" resource-id="" class="android.widget.TextView" package="net.runelite.mp" content-desc="" checkable="false" checked="false" clickable="false" bounds="[1830,125][2100,140]" />
+    <node index="7" text="Quest Helper" resource-id="" class="android.widget.TextView" package="net.runelite.mp" content-desc="" checkable="false" checked="false" clickable="false" bounds="[1830,141][2100,151]" />
+    <node index="8" text="Quest Helper" resource-id="" class="android.widget.TextView" package="net.runelite.mp" content-desc="" checkable="false" checked="false" clickable="false" bounds="[1880,160][2150,195]" />
+    <node index="9" text="by Zoinkwiz · 120k users" resource-id="" class="android.widget.TextView" package="net.runelite.mp" content-desc="" checkable="false" checked="false" clickable="false" bounds="[1880,195][2150,220]" />
+    <node index="10" text="Remove" resource-id="" class="android.view.View" package="net.runelite.mp" content-desc="" checkable="false" checked="false" clickable="true" bounds="[2200,170][2310,220]" />
+    <node index="11" text="Quest Helper Extra" resource-id="" class="android.widget.TextView" package="net.runelite.mp" content-desc="" checkable="false" checked="false" clickable="false" bounds="[1880,260][2150,295]" />
+    <node index="12" text="Install" resource-id="" class="android.view.View" package="net.runelite.mp" content-desc="" checkable="false" checked="false" clickable="true" bounds="[2200,270][2310,320]" />
+    <node index="13" text="117 HD" resource-id="" class="android.widget.TextView" package="net.runelite.mp" content-desc="" checkable="false" checked="false" clickable="false" bounds="[1880,360][2150,395]" />
+    <node index="14" text="Unavailable" resource-id="" class="android.view.View" package="net.runelite.mp" content-desc="" checkable="false" checked="false" clickable="true" bounds="[2200,370][2310,420]" />
+    <node index="15" text="Quest Helper" resource-id="" class="android.view.View" package="net.runelite.mp" content-desc="" checkable="false" checked="false" clickable="true" bounds="[1820,500][2320,540]">
+      <node index="0" text="" resource-id="" class="android.view.View" package="net.runelite.mp" content-desc="Quest Helper" checkable="true" checked="true" clickable="true" bounds="[2270,510][2310,530]" />
+    </node>
+    <node index="16" text="Example Plugin, ⚙" resource-id="" class="android.view.View" package="net.runelite.mp" content-desc="" checkable="false" checked="false" clickable="true" bounds="[1820,550][2320,590]">
+      <node index="0" text="" resource-id="" class="android.view.View" package="net.runelite.mp" content-desc="Example Plugin" checkable="true" checked="false" clickable="true" bounds="[2270,560][2310,580]" />
+    </node>
+    <node index="17" text="Abc, Launch" resource-id="" class="android.view.View" package="net.runelite.mp" content-desc="" checkable="false" checked="false" clickable="true" bounds="[100,700][900,760]" />
+  </node>
+</hierarchy>

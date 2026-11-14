@@ -1,3 +1,33 @@
+/*
+ * Copyright (c) 2026, Tyler Bochard
+ * All rights reserved.
+ *
+ * Part of android-awt, the Android shadow of the desktop JDK surface used by
+ * runelite-android. Original work of this project, not derived from OpenJDK;
+ * licensed under the BSD 2-Clause License (see the LICENSE file at the
+ * repository root). Files ported from OpenJDK carry the OpenJDK header instead;
+ * see android-awt/LICENSE.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ *    list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
 package java.awt;
 
 import java.io.Serializable;
@@ -41,11 +71,14 @@ public class FlowLayout implements LayoutManager, Serializable {
         Insets ins = target.getInsets();
         int n = target.getComponentCount();
         int w = 0, h = 0;
+        boolean firstVisible = true;
         for (int i = 0; i < n; i++) {
             Component c = target.getComponent(i);
             if (!c.isVisible()) continue;
             Dimension d = c.getPreferredSize();
-            w += d.width + (i > 0 ? hgap : 0);
+            // The gap goes between visible components only, as in the JDK.
+            w += d.width + (firstVisible ? 0 : hgap);
+            firstVisible = false;
             if (d.height > h) h = d.height;
         }
         return new Dimension(ins.left + ins.right + w + 2 * hgap, ins.top + ins.bottom + h + 2 * vgap);
@@ -54,54 +87,76 @@ public class FlowLayout implements LayoutManager, Serializable {
     @Override
     public Dimension minimumLayoutSize(Container target) { return preferredLayoutSize(target); }
 
+    /**
+     * The JDK's algorithm: rows fill {@code width - insets - 2 * hgap} starting {@code hgap}
+     * inside the left inset, a row's slack goes where the alignment says, and a
+     * right-to-left container mirrors every row (LEFT and RIGHT swap, LEADING and
+     * TRAILING follow the orientation).
+     */
     @Override
     public void layoutContainer(Container target) {
-        int n = target.getComponentCount();
-        if (n == 0) return;
-        Insets ins = target.getInsets();
-        int width = target.getWidth() - ins.left - ins.right;
-        int y = ins.top + vgap;
-        // Gather rows.
-        int rowStart = 0, rowW = 0, rowH = 0;
-        int[] childW = new int[n], childH = new int[n];
-        boolean[] visible = new boolean[n];
-        for (int i = 0; i < n; i++) {
-            Component c = target.getComponent(i);
-            visible[i] = c.isVisible();
-            if (!visible[i]) continue;
-            Dimension d = c.getPreferredSize();
-            childW[i] = d.width;
-            childH[i] = d.height;
+        synchronized (target.getTreeLock()) {
+            Insets insets = target.getInsets();
+            int maxwidth = target.getWidth() - (insets.left + insets.right + hgap * 2);
+            int nmembers = target.getComponentCount();
+            int x = 0, y = insets.top + vgap;
+            int rowh = 0, start = 0;
+            boolean ltr = target.getComponentOrientation().isLeftToRight();
+
+            for (int i = 0; i < nmembers; i++) {
+                Component m = target.getComponent(i);
+                if (m.isVisible()) {
+                    Dimension d = m.getPreferredSize();
+                    m.setSize(d.width, d.height);
+                    if ((x == 0) || ((x + d.width) <= maxwidth)) {
+                        if (x > 0) {
+                            x += hgap;
+                        }
+                        x += d.width;
+                        rowh = Math.max(rowh, d.height);
+                    } else {
+                        rowh = moveComponents(target, insets.left + hgap, y, maxwidth - x, rowh, start, i, ltr);
+                        x = d.width;
+                        y += vgap + rowh;
+                        rowh = d.height;
+                        start = i;
+                    }
+                }
+            }
+            moveComponents(target, insets.left + hgap, y, maxwidth - x, rowh, start, nmembers, ltr);
         }
-        int idx = 0;
-        while (idx < n) {
-            rowStart = idx;
-            rowW = 0; rowH = 0;
-            int rowEnd = idx;
-            while (rowEnd < n) {
-                if (!visible[rowEnd]) { rowEnd++; continue; }
-                int next = rowW + childW[rowEnd] + (rowEnd > rowStart ? hgap : 0);
-                if (rowEnd > rowStart && next > width) break;
-                rowW = next;
-                if (childH[rowEnd] > rowH) rowH = childH[rowEnd];
-                rowEnd++;
-            }
-            int slack;
-            switch (align) {
-                case CENTER: slack = (width - rowW) / 2; break;
-                case RIGHT:
-                case TRAILING: slack = width - rowW; break;
-                default: slack = 0; break;
-            }
-            int xOffset = ins.left + Math.max(0, slack);
-            int x = xOffset;
-            for (int i = rowStart; i < rowEnd; i++) {
-                if (!visible[i]) continue;
-                target.getComponent(i).setBounds(x, y + (rowH - childH[i]) / 2, childW[i], childH[i]);
-                x += childW[i] + hgap;
-            }
-            y += rowH + vgap;
-            idx = rowEnd;
+    }
+
+    private int moveComponents(Container target, int x, int y, int width, int height,
+                               int rowStart, int rowEnd, boolean ltr) {
+        switch (align) {
+            case LEFT:
+                x += ltr ? 0 : width;
+                break;
+            case CENTER:
+                x += width / 2;
+                break;
+            case RIGHT:
+                x += ltr ? width : 0;
+                break;
+            case LEADING:
+                break;
+            case TRAILING:
+                x += width;
+                break;
         }
+        for (int i = rowStart; i < rowEnd; i++) {
+            Component m = target.getComponent(i);
+            if (m.isVisible()) {
+                int cy = y + (height - m.getHeight()) / 2;
+                if (ltr) {
+                    m.setLocation(x, cy);
+                } else {
+                    m.setLocation(target.getWidth() - x - m.getWidth(), cy);
+                }
+                x += m.getWidth() + hgap;
+            }
+        }
+        return height;
     }
 }

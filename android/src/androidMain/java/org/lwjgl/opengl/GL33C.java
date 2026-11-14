@@ -33,6 +33,87 @@ public class GL33C extends GlesBindings {
         int width = b instanceof ByteBuffer ? 1 : b instanceof ShortBuffer ? 2 : b instanceof LongBuffer || b instanceof DoubleBuffer ? 8 : 4;
         return Math.multiplyExact(b.remaining(), width);
     }
+    public static void glBlendFunc(int source, int destination) { GLES32.glBlendFunc(source, destination); }
+    public static int glCheckFramebufferStatus(int target) { return GLES32.glCheckFramebufferStatus(target); }
+    public static void glUniform1iv(int location, int[] values) { GLES32.glUniform1iv(location, values.length, values, 0); }
+    public static void glBufferData(int target, IntBuffer data, int usage) { GLES32.glBufferData(target, bytes(data), data, usage); }
+    public static ByteBuffer glMapBuffer(int target, int access) { return glMapBuffer(target, access, null); }
+    public static void glTexImage3D(int target, int level, int internalFormat, int width, int height, int depth,
+            int border, int format, int type, ShortBuffer data) {
+        checkClientPixels(false);
+        if (data != null) checkPixelStorage(data, width, height, depth, format, type, false);
+        GLES32.glTexImage3D(target, level, internalFormat, width, height, depth, border, format, type, data);
+    }
+    public static void glTexSubImage3D(int target, int level, int x, int y, int z, int width, int height, int depth,
+            int format, int type, ByteBuffer data) {
+        checkClientPixels(false);
+        checkPixelStorage(data, width, height, depth, format, type, false);
+        GLES32.glTexSubImage3D(target, level, x, y, z, width, height, depth, format, type, data);
+    }
+    public static void glReadPixels(int x, int y, int width, int height, int format, int type, int[] pixels) {
+        checkClientPixels(true);
+        int capacity = Math.multiplyExact(pixels.length, Integer.BYTES);
+        long required = pixelStorage(width, height, 1, format, type, true);
+        if (required > capacity) throw new IllegalArgumentException("Pixel array is too small for the GL pack state");
+        try (org.lwjgl.system.MemoryStack stack = org.lwjgl.system.MemoryStack.stackPush()) {
+            ByteBuffer data = stack.malloc(capacity);
+            data.asIntBuffer().put(pixels);
+            GLES32.glReadPixels(x, y, width, height, format, type, data);
+            data.asIntBuffer().get(pixels);
+        }
+    }
+    private static void checkClientPixels(boolean pack) {
+        if (glGetInteger(pack ? 0x88ED : 0x88EF) != 0)
+            throw new IllegalStateException("Client pixel buffers require the pixel buffer object to be unbound");
+    }
+    private static void checkPixelStorage(Buffer data, int width, int height, int depth, int format, int type, boolean pack) {
+        if (!data.isDirect()) throw new IllegalArgumentException("Direct pixel buffer required");
+        if (pixelStorage(width, height, depth, format, type, pack) > bytes(data))
+            throw new IllegalArgumentException("Pixel buffer is too small for the GL pixel store state");
+    }
+    private static long pixelStorage(int width, int height, int depth, int format, int type, boolean pack) {
+        if (width < 0 || height < 0 || depth < 0) throw new IllegalArgumentException("Negative image size");
+        if (width == 0 || height == 0 || depth == 0) return 0;
+        int pixel = pixelBytes(format, type);
+        int alignment = glGetInteger(pack ? 0x0D05 : 0x0CF5);
+        int rowLength = glGetInteger(pack ? 0x0D02 : 0x0CF2);
+        int skipRows = glGetInteger(pack ? 0x0D03 : 0x0CF3);
+        int skipPixels = glGetInteger(pack ? 0x0D04 : 0x0CF4);
+        int imageHeight = pack ? height : glGetInteger(0x806E);
+        int skipImages = pack ? 0 : glGetInteger(0x806D);
+        if (alignment != 1 && alignment != 2 && alignment != 4 && alignment != 8)
+            throw new IllegalStateException("Invalid GL pixel alignment or no current context");
+        long row = Math.multiplyExact((long)(rowLength == 0 ? width : rowLength), pixel);
+        row = Math.multiplyExact((Math.addExact(row, alignment - 1)) / alignment, alignment);
+        long image = Math.multiplyExact(row, imageHeight == 0 ? height : imageHeight);
+        long images = Math.multiplyExact((long)skipImages + depth - 1, image);
+        long rows = Math.multiplyExact((long)skipRows + height - 1, row);
+        long last = Math.multiplyExact((long)skipPixels + width, pixel);
+        return Math.addExact(Math.addExact(images, rows), last);
+    }
+    private static int pixelBytes(int format, int type) {
+        switch (type) {
+            case 0x8363: case 0x8033: case 0x8034: return 2;
+            case 0x8368: case 0x8C3B: case 0x8C3E: case 0x84FA: return 4;
+            case 0x8DAD: return 8;
+        }
+        int component;
+        switch (type) {
+            case 0x1400: case 0x1401: component = 1; break;
+            case 0x1402: case 0x1403: case 0x140B: component = 2; break;
+            case 0x1404: case 0x1405: case 0x1406: component = 4; break;
+            default: throw new UnsupportedOperationException("Unsupported GLES pixel type: " + type);
+        }
+        int channels;
+        switch (format) {
+            case 0x1902: case 0x1903: case 0x8D94: channels = 1; break;
+            case 0x8227: case 0x8228: channels = 2; break;
+            case 0x1907: case 0x8D98: channels = 3; break;
+            case 0x1908: case 0x8D99: channels = 4; break;
+            default: throw new UnsupportedOperationException("Unsupported GLES pixel format: " + format);
+        }
+        return component * channels;
+    }
     public static int glGenBuffers() { int[] v = INT1.get(); GLES32.glGenBuffers(1,v,0); return v[0]; }
     public static int glGenTextures() { int[] v = INT1.get(); GLES32.glGenTextures(1,v,0); return v[0]; }
     public static int glGenFramebuffers() { int[] v = INT1.get(); GLES32.glGenFramebuffers(1,v,0); return v[0]; }

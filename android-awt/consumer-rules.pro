@@ -11,15 +11,27 @@
 # into these classes by their canonical JDK names. Renaming any of them — even
 # private members of public classes — risks breaking a reflection lookup or a
 # Class.forName call inside the obfuscated client jar. Keep the entire surface.
+#
+# This block is the `shadowPackages` / `shadowClasses` list in build.gradle.kts,
+# one line per entry: :android-awt:shadowKeepRulesCheck fails when they differ or
+# when a compiled shadow class falls outside the list, and :android:
+# checkReleaseShadowMapping proves the release mapping kept every class by name.
+# Edit the list first, then mirror it here.
 # ----------------------------------------------------------------------------
+-keep class java.applet.** { *; }
 -keep class java.awt.** { *; }
-# Android supplies JavaBeans callbacks; keep their shadow declarations compatible.
 -keep class java.beans.** { *; }
--keep class javax.swing.** { *; }
--keep class javax.sound.** { *; }
+-keep class java.lang.management.** { *; }
+-keep class java.net.http.** { *; }
+-keep class javax.accessibility.** { *; }
 -keep class javax.imageio.** { *; }
+-keep class javax.management.** { *; }
+-keep class javax.print.** { *; }
+-keep class javax.sound.** { *; }
+-keep class javax.swing.** { *; }
 -keep class sun.** { *; }
 -keep class com.sun.** { *; }
+-keep class java.lang.ProcessHandle** { *; }
 
 # ----------------------------------------------------------------------------
 # JNI bridges. The Rust crate (`runelite-awt-native`) registers its entry points
@@ -35,6 +47,20 @@
 # ----------------------------------------------------------------------------
 -keep class net.runelite.awt.AwtNative { *; }
 -keep class net.runelite.awt.AwtCompat { *; }
+
+# FontBackend loads the Android font backend by name so java.awt.Font names nothing
+# from android.* (the host contracts run Font over the JDK's); keep that name and
+# its no-arg constructor or every Font metric throws after R8.
+-keep class net.runelite.awt.impl.AndroidFontBackend { <init>(); }
+
+# CompressedAudio loads the MediaCodec decoder by name for the same reason (the host
+# contracts patch the compressed-audio reader and codec over the JDK's sound API).
+-keep class net.runelite.awt.impl.MediaCodecAudioDecoder { <init>(); }
+
+# javax.sound.midi needs no rule of its own: MidiProviders and SampledProviders construct
+# the Gervill providers directly (no ServiceLoader, no Class.forName), and the only by-name
+# load in com.sun.media.sound (JARSoundbankReader) loads classes from the user's jar. No
+# soundbank is bundled (0 bytes); SoftSynthesizer generates and caches EmergencySoundbank.
 
 # ----------------------------------------------------------------------------
 # rlawt shim. Published with a stable FQN that the injected runelite-client jar

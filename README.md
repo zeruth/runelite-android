@@ -82,6 +82,14 @@ Questions, bug reports and contributing: join us on [Discord](https://discord.gg
 
 ## Legal
 
-RuneLite's code is BSD 2-Clause licensed; the Android-specific layer is mine.
+RuneLite's code is BSD 2-Clause licensed; the Android-specific layer is mine, under the same BSD 2-Clause license (`LICENSE`).
+
+### Third-party notices
+
+- **OpenJDK.** The `android-awt` module supplies the desktop JDK surface Android lacks (`java.awt`, `javax.swing`, `javax.imageio`, `javax.sound`, `java.beans`, `sun.*`). Part of it is ported from [OpenJDK](https://github.com/openjdk/jdk8u) and is therefore a derivative work of OpenJDK, licensed under the GNU General Public License version 2 **with the Classpath Exception**. Each ported file keeps its OpenJDK header; files that are original work of this project carry a BSD 2-Clause header. `android-awt/LICENSE` has the full GPLv2 + Classpath Exception text and explains which files are which, and `python tools-src/check-license-headers.py` verifies that every source file in the module carries one of the two headers.
+
+  The Classpath Exception is what OpenJDK itself relies on so that Java programs linked against the JDK class library are not GPL works. It applies here the same way: the ported files, and modifications to them, are GPLv2 + Classpath Exception, while the RuneLite client, the Plugin Hub, the Android app and the APK as a whole are independent modules that link against `android-awt` and keep their own licenses. The APK is not GPL-licensed by virtue of including `android-awt`.
+- **117 HD** (`third-party/rlhd`, the `android-hd` module) is BSD 2-Clause, copyright its authors.
+- **RuneLite** and the **Plugin Hub** plugins downloaded on device are BSD 2-Clause, copyright their respective authors.
 
 This project is not affiliated with, endorsed by, or supported by Jagex Ltd. or RuneLite. "RuneScape", "Old School RuneScape" and related marks are trademarks of Jagex Ltd. The RuneLite name and logo are trademarks of RuneLite.

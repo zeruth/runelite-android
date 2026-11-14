@@ -1,15 +1,10 @@
 package net.runelite.mp.util;
 
-import java.lang.invoke.MethodHandles;
-import java.lang.reflect.Constructor;
-import java.util.function.Function;
-import java.util.regex.MatchResult;
-import java.util.regex.Matcher;
-
 /**
  * Runtime helper that {@code DesugarStringConcatTask} rewrites
  * {@code invokedynamic makeConcatWithConstants} sites into. Plain Java 8 bytecode, no
- * invokedynamic — survives D8 untouched.
+ * invokedynamic — survives D8 untouched. JDK member polyfills live in
+ * {@code net.runelite.mp.compat.jdk}, driven by the {@code JdkRetargets} table.
  */
 public final class IndyConcat {
     private IndyConcat() {}
@@ -46,41 +41,6 @@ public final class IndyConcat {
         if (literal.length() > 0) {
             out.append(literal);
             literal.setLength(0);
-        }
-    }
-
-    /**
-     * Replaces Java 9+ Matcher.replaceAll(Function) with Java 8 compatible bytecode.
-     */
-    public static String replaceAllJava8(Matcher matcher, Function<MatchResult, String> function) {
-        StringBuffer sb = new StringBuffer();
-        while (matcher.find()) {
-            MatchResult matchResult = matcher.toMatchResult();
-            String replacement = function.apply(matchResult);
-            matcher.appendReplacement(sb, Matcher.quoteReplacement(replacement));
-        }
-        matcher.appendTail(sb);
-        return sb.toString();
-    }
-
-    /**
-     * Polyfills Java 9+ MethodHandles.privateLookupIn(Class, Lookup) for Android.
-     */
-    public static MethodHandles.Lookup privateLookupInJava8(Class<?> targetClass, MethodHandles.Lookup lookup) throws Exception {
-        try {
-            // Check if native version exists (future-proofing or high API targets)
-            return (MethodHandles.Lookup) MethodHandles.class
-                    .getMethod("privateLookupIn", Class.class, MethodHandles.Lookup.class)
-                    .invoke(null, targetClass, lookup);
-        } catch (NoSuchMethodException e) {
-            // Fallback: Emulate deep private lookup via Java 8 reflection trickery
-            Constructor<MethodHandles.Lookup> constructor = MethodHandles.Lookup.class.getDeclaredConstructor(Class.class, int.class);
-            if (!constructor.isAccessible()) {
-                constructor.setAccessible(true);
-            }
-            // 0x40 represents Lookup.PRIVATE | Lookup.PROTECTED | Lookup.PACKAGE | Lookup.PUBLIC
-            // This provides all-access internal capability required by RuneLite's eventbus
-            return constructor.newInstance(targetClass, 0x40);
         }
     }
 }

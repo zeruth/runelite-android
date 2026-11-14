@@ -1,3 +1,33 @@
+/*
+ * Copyright (c) 2026, Tyler Bochard
+ * All rights reserved.
+ *
+ * Part of android-awt, the Android shadow of the desktop JDK surface used by
+ * runelite-android. Original work of this project, not derived from OpenJDK;
+ * licensed under the BSD 2-Clause License (see the LICENSE file at the
+ * repository root). Files ported from OpenJDK carry the OpenJDK header instead;
+ * see android-awt/LICENSE.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ *    list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
 package javax.swing.text;
 
 import java.awt.*;
@@ -27,6 +57,15 @@ public class DefaultCaret implements Caret, DocumentListener, java.io.Serializab
     public void setUpdatePolicy(int value){if(value<0||value>2)throw new IllegalArgumentException("policy");updatePolicy=value;}public int getUpdatePolicy(){return updatePolicy;}
     public int getDot(){return dot;}public int getMark(){return mark;}
     private int bound(int p){return Math.max(0,Math.min(component==null?0:component.getDocument().getLength(),p));}
+    protected final JTextComponent getComponent() { return component; }
+    protected void adjustVisibility(Rectangle location) {
+        final JTextComponent owner = component;
+        if (owner == null) return;
+        final Rectangle bounds = new Rectangle(location);
+        java.awt.EventQueue.invokeLater(() -> {
+            if (component == owner) owner.scrollRectToVisible(bounds);
+        });
+    }
     public void setDot(int p){p=bound(p);if(dot!=p||mark!=p){dot=mark=p;fireStateChanged();}}
     public void moveDot(int p){p=bound(p);if(dot!=p){dot=p;fireStateChanged();}}
     public void insertUpdate(DocumentEvent e){if(updatePolicy==NEVER_UPDATE)return;int at=e.getOffset(),n=e.getLength();if(dot>=at)dot+=n;if(mark>=at)mark+=n;dot=bound(dot);mark=bound(mark);fireStateChanged();}

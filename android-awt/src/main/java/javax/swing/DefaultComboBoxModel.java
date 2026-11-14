@@ -1,8 +1,36 @@
+/*
+ * Copyright (c) 2026, Tyler Bochard
+ * All rights reserved.
+ *
+ * Part of android-awt, the Android shadow of the desktop JDK surface used by
+ * runelite-android. Original work of this project, not derived from OpenJDK;
+ * licensed under the BSD 2-Clause License (see the LICENSE file at the
+ * repository root). Files ported from OpenJDK carry the OpenJDK header instead;
+ * see android-awt/LICENSE.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ *    list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
 package javax.swing;
 
-import java.util.ArrayList;
 import java.util.Collection;
-import java.util.List;
 import java.util.Vector;
 
 /**
@@ -13,17 +41,19 @@ import java.util.Vector;
  */
 public class DefaultComboBoxModel<E> extends AbstractListModel<E> implements MutableComboBoxModel<E> {
     private static final long serialVersionUID = 1L;
-    private final List<E> objects;
+    // A Vector, and the caller's own Vector for the Vector constructor: the JDK model wraps
+    // it without copying, so a caller that keeps mutating the vector sees it in the model.
+    private final Vector<E> objects;
     private Object selectedObject;
 
-    public DefaultComboBoxModel() { objects = new ArrayList<>(); }
+    public DefaultComboBoxModel() { objects = new Vector<E>(); }
     public DefaultComboBoxModel(E[] items) {
-        objects = new ArrayList<>(items.length);
-        for (E e : items) objects.add(e);
+        objects = new Vector<E>(items.length);
+        for (E e : items) objects.addElement(e);
         if (getSize() > 0) selectedObject = getElementAt(0);
     }
     public DefaultComboBoxModel(Vector<E> v) {
-        objects = new ArrayList<>(v);
+        objects = v;
         if (getSize() > 0) selectedObject = getElementAt(0);
     }
 
@@ -71,7 +101,9 @@ public class DefaultComboBoxModel<E> extends AbstractListModel<E> implements Mut
             selectedObject = null;
         }
     }
+    // JDK 9+ (11): jdk17u src/java.desktop/share/classes/javax/swing/DefaultComboBoxModel.java
     public void addAll(Collection<? extends E> c) { addAll(objects.size(), c); }
+    // JDK 9+ (11): jdk17u src/java.desktop/share/classes/javax/swing/DefaultComboBoxModel.java
     public void addAll(int index, Collection<? extends E> c) {
         if (index < 0 || index > getSize()) throw new ArrayIndexOutOfBoundsException("index out of range: " + index);
         if (c.isEmpty()) return;

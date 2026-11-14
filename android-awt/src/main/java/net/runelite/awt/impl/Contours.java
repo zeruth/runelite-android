@@ -1,3 +1,33 @@
+/*
+ * Copyright (c) 2026, Tyler Bochard
+ * All rights reserved.
+ *
+ * Part of android-awt, the Android shadow of the desktop JDK surface used by
+ * runelite-android. Original work of this project, not derived from OpenJDK;
+ * licensed under the BSD 2-Clause License (see the LICENSE file at the
+ * repository root). Files ported from OpenJDK carry the OpenJDK header instead;
+ * see android-awt/LICENSE.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ *    list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
 package net.runelite.awt.impl;
 
 import java.awt.geom.AffineTransform;
@@ -136,11 +166,19 @@ public final class Contours {
     // ---------------------------------------------------------------------------------
 
     /**
+     * Device-space chord tolerance of the JDK's software fill, clip and thin-stroke loops:
+     * ShapeSpanIterator.c subdivides a curve until every control point is within
+     * {@code sqrt(MAX_FLAT_SQ) = 1.0} px of its chord. Fills, clips and thin draws pass this
+     * so curves come out with the same segment count as on desktop.
+     */
+    public static final double JDK_FLATNESS = 1.0;
+
+    /**
      * Append {@code it}'s path, with quadratic / cubic segments subdivided until within
-     * {@code flatness} of the true curve. Our shadow shapes emit curves verbatim even from
-     * {@code getPathIterator(at, flatness)}, so everything that wants polygons goes through
-     * here. Coordinates are optionally mapped by {@code at} and then scaled by
-     * {@code scale} (the graphics deviceScale).
+     * {@code flatness} of the true curve. The backend flattens itself rather than asking
+     * {@code getPathIterator(at, flatness)} so the tolerance is applied in device space,
+     * after {@code at} and {@code scale} (the graphics deviceScale), which is where the
+     * JDK's software loops measure it too (ShapeSpanIterator.c, MAX_FLAT_SQ).
      */
     public void appendFlattened(PathIterator it, AffineTransform at, double scale, double flatness) {
         if (it == null) return;

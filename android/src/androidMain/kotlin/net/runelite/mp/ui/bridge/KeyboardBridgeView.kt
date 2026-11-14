@@ -14,6 +14,12 @@ import android.view.inputmethod.InputConnection
 import android.view.inputmethod.InputMethodManager
 import androidx.compose.runtime.mutableStateOf
 import java.lang.ref.WeakReference
+import java.awt.Component
+import java.awt.KeyboardFocusManager
+import java.awt.event.InputMethodEvent
+import java.awt.font.TextHitInfo
+import java.text.AttributedString
+import net.runelite.awt.impl.HostInputContext
 
 object SoftKeyboardController {
     val isKeyboardVisible = mutableStateOf(false)
@@ -40,6 +46,62 @@ object SoftKeyboardController {
 
     fun registerView(view: KeyboardInputView) {
         attachedViewRef = WeakReference(view)
+        installFocusBridge()
+    }
+
+    // --- AWT focus -> IME ---------------------------------------------------------------
+
+    private var focusBridgeInstalled = false
+    /** The text component the bridge opened the IME for; the IconStrip toggle and chat sessions leave it null. */
+    @Volatile private var openedFor: WeakReference<java.awt.Component>? = null
+    @Volatile private var suppressFocusBridge = false
+
+    /**
+     * Opens the IME when AWT focus lands on an enabled, editable text component inside a
+     * Window (a Swing dialog or frame), and closes it when focus leaves one the bridge opened
+     * for. Sidebar panels are mounted without a Window and keep their overlay editor.
+     */
+    private fun installFocusBridge() {
+        if (focusBridgeInstalled) return
+        focusBridgeInstalled = true
+        java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager().addPropertyChangeListener("focusOwner",
+            java.beans.PropertyChangeListener { event ->
+                // A focus change fires twice (old -> null, null -> new); deciding on the UI thread
+                // from the settled owner keeps a move between two fields from flashing the IME.
+                if (suppressFocusBridge || event.newValue == null && openedFor == null) return@PropertyChangeListener
+                attachedViewRef?.get()?.let { view -> view.post { reconcileFocus(view) } }
+            })
+    }
+
+    /**
+     * Runs a focus request from SwingPanelHost's tap path: its own overlay editor takes the
+     * text, so the request does not open the IME, and a session the bridge opened is closed.
+     */
+    fun <T> hostEditing(request: () -> T): T {
+        if (openedFor != null) {
+            openedFor = null
+            hide()
+        }
+        suppressFocusBridge = true
+        try {
+            return request()
+        } finally {
+            suppressFocusBridge = false
+        }
+    }
+
+    private fun reconcileFocus(view: KeyboardInputView) {
+        val owner = java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager().focusOwner
+        val text = owner as? javax.swing.text.JTextComponent
+        if (text != null && text.isEnabled && text.isEditable && javax.swing.SwingUtilities.getWindowAncestor(text) != null) {
+            if (openedFor?.get() === text && view.isSessionOpen) return
+            openedFor = WeakReference(text)
+            updatePasswordMode(text is javax.swing.JPasswordField)
+            view.openSession()
+        } else if (openedFor != null) {
+            openedFor = null
+            view.endSession()
+        }
     }
 
     fun unregisterView(view: KeyboardInputView) {
@@ -76,6 +138,9 @@ class KeyboardInputView @JvmOverloads constructor(
     private var connectionGeneration = 0
     private var imeWasVisible = false
     private var inputConnection: InputConnection? = null
+    private val composition = InlineComposition()
+    // InputContext.endComposition from the EDT; asynchronous here, the IME's state lives on this thread.
+    private val endComposition = Runnable { post { inputConnection?.finishComposingText() } }
 
     init {
         isFocusable = false
@@ -95,6 +160,7 @@ class KeyboardInputView @JvmOverloads constructor(
         isFocusableInTouchMode = true
         isFocusable = true
         if (!requestFocus()) { endSession(); return }
+        HostInputContext.setEndCompositionHandler(endComposition)
         val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
         imm?.restartInput(this)
         imm?.showSoftInput(this, 0)
@@ -103,6 +169,7 @@ class KeyboardInputView @JvmOverloads constructor(
     fun endSession() {
         if (!isSessionOpen) return
         isSessionOpen = false
+        HostInputContext.setEndCompositionHandler(null)
         resetConnection()
         imeWasVisible = false
         SoftKeyboardController.isKeyboardVisible.value = false
@@ -163,6 +230,8 @@ class KeyboardInputView @JvmOverloads constructor(
 
             override fun closeConnection() {
                 closed = true
+                // Desktop commits the composition when the input method session ends.
+                java.awt.EventQueue.invokeLater { composition.commitShown() }
                 super.closeConnection()
                 editable?.apply { clear(); clearSpans() }
             }
@@ -181,14 +250,16 @@ class KeyboardInputView @JvmOverloads constructor(
                 return accepted
             }
 
+            // Neither changes the text, so the key path sends nothing; an input method client
+            // sees its composed text committed, or committed text turned back into composition.
             override fun finishComposingText(): Boolean {
                 if (!active()) return false
-                return super.finishComposingText()
+                return edit { super.finishComposingText() }
             }
 
             override fun setComposingRegion(start: Int, end: Int): Boolean {
                 if (!active()) return false
-                return super.setComposingRegion(start, end)
+                return edit { super.setComposingRegion(start, end) }
             }
 
             override fun setSelection(start: Int, end: Int): Boolean {
@@ -234,7 +305,7 @@ class KeyboardInputView @JvmOverloads constructor(
                 // Numeric IMEs can send key events instead of commitText. Keep Android's
                 // editor state in sync without emitting those characters a second time.
                 if (event.action == android.view.KeyEvent.ACTION_DOWN) {
-                    super.finishComposingText()
+                    finishComposingText()
                     editable?.let { TextKeyListener.getInstance().onKeyDown(this@KeyboardInputView, it, event.keyCode, event) }
                 } else if (event.action == android.view.KeyEvent.ACTION_UP) {
                     editable?.let { TextKeyListener.getInstance().onKeyUp(this@KeyboardInputView, it, event.keyCode, event) }
@@ -249,7 +320,7 @@ class KeyboardInputView @JvmOverloads constructor(
 
             override fun performEditorAction(actionCode: Int): Boolean {
                 if (!active()) return false
-                super.finishComposingText()
+                finishComposingText()
                 when (actionCode) {
                     EditorInfo.IME_ACTION_DONE,
                     EditorInfo.IME_ACTION_SEND,
@@ -273,21 +344,23 @@ class KeyboardInputView @JvmOverloads constructor(
              * Forward only the resulting difference through the existing key-event bridge. */
             private fun edit(unknownBackspaces: Int = 0, operation: () -> Boolean): Boolean {
                 if (!active()) return false
-                val before = editable?.toString() ?: ""
+                val before = snapshot()
                 val accepted = operation()
                 if (!accepted) return false
-                val after = editable?.toString() ?: ""
-                var commonPrefixLen = 0
-                val minLen = minOf(before.length, after.length)
-                while (unknownBackspaces == 0 && commonPrefixLen < minLen && before[commonPrefixLen] == after[commonPrefixLen]) {
-                    commonPrefixLen++
-                }
-                // The game may contain text from before this keyboard session. Preserve
-                // the existing ability to backspace into that untracked prefix.
-                repeat(before.length - commonPrefixLen + unknownBackspaces) { KeyDispatch.sendBackspace() }
-                KeyDispatch.sendString(after.substring(commonPrefixLen))
+                val after = snapshot()
+                // One EDT hop per edit: the focus owner decides between inline composition and
+                // keys, and the events it sends stay in order with the bridge's queued key events.
+                java.awt.EventQueue.invokeLater { composition.apply(before, after, unknownBackspaces) }
                 updateSelection()
                 return true
+            }
+
+            private fun snapshot(): ImeSnapshot {
+                val buffer = editable ?: return ImeSnapshot("", -1, -1, 0)
+                val start = BaseInputConnection.getComposingSpanStart(buffer)
+                val end = BaseInputConnection.getComposingSpanEnd(buffer)
+                return ImeSnapshot(buffer.toString(), minOf(start, end), maxOf(start, end),
+                    Selection.getSelectionEnd(buffer))
             }
 
             private fun updateSelection() {
@@ -299,5 +372,86 @@ class KeyboardInputView @JvmOverloads constructor(
                     BaseInputConnection.getComposingSpanStart(buffer), BaseInputConnection.getComposingSpanEnd(buffer))
             }
         }.also { inputConnection = it }
+    }
+}
+
+/** The IME's editor state at one instant, split around its composing span. */
+private class ImeSnapshot(val text: String, start: Int, end: Int, cursor: Int) {
+    private val hasSpan = start in 0..end && end <= text.length
+    private val from = if (hasSpan) start else text.length
+    private val to = if (hasSpan) end else text.length
+    val committed: String = text.substring(0, from) + text.substring(to)
+    val composed: String = text.substring(from, to)
+    /** The cursor relative to the composed text, as InputMethodEvent carries it. */
+    val caret: Int = (cursor - from).coerceIn(0, composed.length)
+}
+
+/**
+ * EDT-confined. A focused input method client (a Swing text component) shows the IME's
+ * composition inline through [InputMethodEvent]s, as a desktop input method does; any other
+ * target, the game canvas included, keeps receiving the difference as typed keys.
+ */
+private class InlineComposition {
+    private var client: Component? = null
+    private var shown = ""
+    private var shownCaret = 0
+
+    fun apply(before: ImeSnapshot, after: ImeSnapshot, unknownBackspaces: Int) {
+        val target = KeyboardFocusManager.getCurrentKeyboardFocusManager().focusOwner
+            ?.takeIf { it.isInputMethodClient && it.isEnabled }
+        if (client != null && client !== target) commitShown()
+        if (target == null || (client == null && after.composed.isEmpty())) {
+            typeDifference(before.text, after.text, unknownBackspaces)
+            return
+        }
+        // Without a shown composition everything before was typed into the client as keys.
+        val base = if (client == null) before.text else before.committed
+        val committed = after.committed
+        var prefix = 0
+        val shared = minOf(base.length, committed.length)
+        while (unknownBackspaces == 0 && prefix < shared && base[prefix] == committed[prefix]) prefix++
+        val added = committed.substring(prefix)
+        if (prefix == base.length && unknownBackspaces == 0) {
+            if (added.isNotEmpty() || after.composed != shown) {
+                send(target, added + after.composed, added.length, after.caret)
+            } else if (after.caret != shownCaret) {
+                target.dispatchEvent(InputMethodEvent(target, InputMethodEvent.CARET_POSITION_CHANGED,
+                    TextHitInfo.leading(after.caret), null))
+                shownCaret = after.caret
+            }
+        } else {
+            // Committed text was deleted or rewritten: drop the composition, edit with keys,
+            // then show the new composition at the client's caret.
+            if (shown.isNotEmpty()) send(target, "", 0, 0)
+            typeDifference(base, committed, unknownBackspaces)
+            if (after.composed.isNotEmpty()) send(target, after.composed, 0, after.caret)
+        }
+        client = if (shown.isEmpty()) null else target
+    }
+
+    /** Commits whatever the client still shows as composed text. */
+    fun commitShown() {
+        val owner = client ?: return
+        if (shown.isNotEmpty()) send(owner, shown, shown.length, 0)
+        client = null
+    }
+
+    private fun send(target: Component, text: String, committedCount: Int, caret: Int) {
+        val iterator = if (text.isEmpty()) null else AttributedString(text).iterator
+        val hit = if (text.length > committedCount) TextHitInfo.leading(caret) else null
+        target.dispatchEvent(InputMethodEvent(target, InputMethodEvent.INPUT_METHOD_TEXT_CHANGED,
+            iterator, committedCount, hit, null))
+        shown = text.substring(committedCount)
+        shownCaret = caret
+    }
+
+    private fun typeDifference(before: String, after: String, unknownBackspaces: Int) {
+        var prefix = 0
+        val shared = minOf(before.length, after.length)
+        while (unknownBackspaces == 0 && prefix < shared && before[prefix] == after[prefix]) prefix++
+        // The game may contain text from before this keyboard session. Preserve
+        // the existing ability to backspace into that untracked prefix.
+        repeat(before.length - prefix + unknownBackspaces) { KeyDispatch.sendBackspace() }
+        KeyDispatch.sendString(after.substring(prefix))
     }
 }
