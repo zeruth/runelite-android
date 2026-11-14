@@ -43,7 +43,9 @@ public class HTMLEditorKit extends EditorKit {
     public static final String DEFAULT_CSS = "default.css";
     public static final String BOLD_ACTION = "html-bold-action";
 
-    public abstract static class HTMLFactory {}
+    public static class HTMLFactory implements javax.swing.text.ViewFactory {
+        public javax.swing.text.View create(javax.swing.text.Element element) { return new javax.swing.HtmlView(element); }
+    }
     public abstract static class HTMLTextAction {}
 
     private StyleSheet styles;
@@ -53,6 +55,7 @@ public class HTMLEditorKit extends EditorKit {
     @Override public String getContentType() { return "text/html"; }
     @Override public Action[] getActions() { return new Action[0]; }
     @Override public Caret createCaret() { return new javax.swing.text.DefaultCaret(); }
+    @Override public javax.swing.text.ViewFactory getViewFactory() { return new HTMLFactory(); }
     @Override public Document createDefaultDocument() { return new HTMLDocument(getStyleSheet()); }
     @Override public Object clone() { return new HTMLEditorKit(); }
 

@@ -77,9 +77,10 @@ public final class SampledProviders {
     private static final List<AudioFileWriter> WRITERS = Collections.unmodifiableList(Arrays.<AudioFileWriter>asList(
         new AiffFileWriter(), new AuFileWriter(), new WaveFileWriter(), new WaveFloatFileWriter()));
 
+    // Match desktop provider priority; AudioSystem uses the first matching codec.
     private static final List<FormatConversionProvider> CONVERTERS = Collections.unmodifiableList(
         Arrays.<FormatConversionProvider>asList(
-            new AlawCodec(), new AudioFloatFormatConverter(), new PCMtoPCMCodec(), new UlawCodec(),
+            new UlawCodec(), new PCMtoPCMCodec(), new AudioFloatFormatConverter(), new AlawCodec(),
             new CompressedAudioCodec()));
 
     private static final List<MixerProvider> MIXERS = Collections.<MixerProvider>singletonList(new AndroidMixerProvider());

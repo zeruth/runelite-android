@@ -165,6 +165,7 @@ public class TestChooserContracts {
         chooser.cancelSelection();
         check(commands.size() == 2 && JFileChooser.CANCEL_SELECTION.equals(commands.get(1)), "cancel fires");
 
+        chooser.setFileHidingEnabled(true);
         List<String> properties = new ArrayList<>();
         chooser.addPropertyChangeListener(e -> properties.add(e.getPropertyName()));
         chooser.setDialogType(JFileChooser.SAVE_DIALOG);
@@ -182,7 +183,7 @@ public class TestChooserContracts {
                 JFileChooser.FILE_HIDING_CHANGED_PROPERTY,
                 JFileChooser.MULTI_SELECTION_ENABLED_CHANGED_PROPERTY,
                 JFileChooser.FILE_SELECTION_MODE_CHANGED_PROPERTY,
-                JFileChooser.DIALOG_TITLE_CHANGED_PROPERTY)), "bound properties");
+                JFileChooser.DIALOG_TITLE_CHANGED_PROPERTY)), "bound properties: " + properties);
         check("Export".equals(chooser.getUI().getApproveButtonText(chooser))
                 && "Export profile".equals(chooser.getUI().getDialogTitle(chooser)), "approve text and title");
         chooser.setDialogType(JFileChooser.OPEN_DIALOG);
@@ -206,15 +207,17 @@ public class TestChooserContracts {
         };
         chooser.setMultiSelectionEnabled(false);
         chooser.addChoosableFileFilter(jsonOnly);
+        check(chooser.getFileFilter() == all, "adding a filter preserves the active filter");
+        chooser.setFileFilter(jsonOnly);
         check(chooser.getFileFilter() == jsonOnly && chooser.accept(json) && !chooser.accept(text), "active filter");
         chooser.setSelectedFile(text);
         chooser.setFileFilter(custom);
         check(text.equals(chooser.getSelectedFile()) && chooser.accept(text), "custom filter keeps accepted file");
         chooser.setFileFilter(jsonOnly);
         check(chooser.getSelectedFile() == null, "filter drops a rejected selection");
-        check(chooser.getChoosableFileFilters().length == 2, "choosable filters");
+        check(chooser.getChoosableFileFilters().length == 3, "choosable filters include an explicitly selected custom filter");
         chooser.setAcceptAllFileFilterUsed(false);
-        check(chooser.getChoosableFileFilters().length == 1 && !chooser.isAcceptAllFileFilterUsed(), "drop accept all");
+        check(chooser.getChoosableFileFilters().length == 2 && !chooser.isAcceptAllFileFilterUsed(), "drop accept all");
 
         if (shadow && chooser.getUI() instanceof BasicFileChooserUI) {
             BasicFileChooserUI ui = (BasicFileChooserUI) chooser.getUI();

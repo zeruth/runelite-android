@@ -468,7 +468,13 @@ public class JTableHeader extends JComponent implements TableColumnModelListener
      * @see JComponent#updateUI
      */
     public void updateUI(){
-        setUI((TableHeaderUI)UIManager.getUI(this));
+        try {
+            ComponentUI delegate = UIManager.getUI(this);
+            setUI(delegate instanceof TableHeaderUI ? (TableHeaderUI) delegate : new javax.swing.plaf.basic.BasicTableHeaderUI());
+        } catch (LinkageError incompatible) {
+            ui = null;
+            setUI(new javax.swing.plaf.basic.BasicTableHeaderUI());
+        }
 
         TableCellRenderer renderer = getDefaultRenderer();
         if (renderer instanceof Component) {

@@ -33,15 +33,26 @@ package java.awt.font;
 import android.graphics.Paint;
 import android.graphics.Path;
 import java.awt.Font;
+import java.awt.Graphics2D;
+import java.awt.geom.Point2D;
+import java.awt.geom.Rectangle2D;
 import java.awt.Shape;
 import java.awt.geom.AffineTransform;
 import java.awt.geom.GeneralPath;
 import net.runelite.awt.impl.AndroidGlyphFace;
 import net.runelite.awt.impl.BufferedImageFontMetrics;
 
-/** Single-font text outline in baseline-relative user coordinates. */
+/**
+ * Single-font text layout in baseline-relative user coordinates.
+ * Uses the existing Android text path backend; attributed runs, bidi layout,
+ * justification and caret navigation are not implemented here.
+ */
 public final class TextLayout {
     private final GeneralPath outline = new GeneralPath();
+    private final LineMetrics metrics;
+    private final int characterCount;
+    private final float advance;
+    private final float visibleAdvance;
 
     public TextLayout(String text, Font font, FontRenderContext context) {
         if (text == null || text.isEmpty() || font == null || context == null)
@@ -49,10 +60,42 @@ public final class TextLayout {
         Paint paint = BufferedImageFontMetrics.paintFor(font);
         paint.setAntiAlias(context.isAntiAliased());
         paint.setSubpixelText(context.usesFractionalMetrics());
+        characterCount = text.length();
+        metrics = font.getLineMetrics(text, context);
+        int visibleLimit = text.length();
+        while (visibleLimit > 0 && Character.isWhitespace(text.codePointBefore(visibleLimit))) {
+            visibleLimit -= Character.charCount(text.codePointBefore(visibleLimit));
+        }
+        Point2D.Float full = new Point2D.Float(paint.measureText(text), 0);
+        Point2D.Float visible = new Point2D.Float(paint.measureText(text, 0, visibleLimit), 0);
+        if (font.isTransformed()) {
+            font.getTransform().deltaTransform(full, full);
+            font.getTransform().deltaTransform(visible, visible);
+        }
+        advance = full.x;
+        visibleAdvance = visible.x;
         Path glyphs = new Path();
         paint.getTextPath(text, 0, text.length(), 0, 0, glyphs);
         AndroidGlyphFace.appendAndroidPath(glyphs, outline);
         if (font.isTransformed()) outline.transform(font.getTransform());
+    }
+
+    public int getCharacterCount() { return characterCount; }
+    public float getAdvance() { return advance; }
+    public float getVisibleAdvance() { return visibleAdvance; }
+    public float getAscent() { return metrics.getAscent(); }
+    public float getDescent() { return metrics.getDescent(); }
+    public float getLeading() { return metrics.getLeading(); }
+    public byte getBaseline() { return (byte)metrics.getBaselineIndex(); }
+    public float[] getBaselineOffsets() { return metrics.getBaselineOffsets().clone(); }
+
+    public Rectangle2D getBounds() {
+        return outline.getBounds2D();
+    }
+
+    public void draw(Graphics2D graphics, float x, float y) {
+        if (graphics == null) throw new IllegalArgumentException("graphics == null");
+        graphics.fill(getOutline(AffineTransform.getTranslateInstance(x, y)));
     }
 
     public Shape getOutline(AffineTransform transform) {

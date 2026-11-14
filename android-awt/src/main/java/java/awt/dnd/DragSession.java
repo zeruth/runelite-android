@@ -147,8 +147,11 @@ final class DragSession implements DragDropHost.Session, MouseListener, MouseMot
 
     public void cancel() {
         if (ended || dropping) return;
-        exitTarget();
-        end(DnDConstants.ACTION_NONE, false);
+        try {
+            exitTarget();
+        } finally {
+            end(DnDConstants.ACTION_NONE, false);
+        }
     }
 
     // The pointer

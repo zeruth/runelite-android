@@ -134,30 +134,26 @@ public class CellRendererPane extends Container implements Accessible {
             this.add(c);
         }
 
-        c.setBounds(x, y, w, h);
-
-        if (shouldValidate) {
-            c.validate();
-        }
-
-        boolean wasDoubleBuffered = false;
-        if ((c instanceof JComponent) && ((JComponent) c).isDoubleBuffered()) {
-            wasDoubleBuffered = true;
-            ((JComponent) c).setDoubleBuffered(false);
-        }
-
-        Graphics cg = g.create(x, y, w, h);
+        JComponent swing = c instanceof JComponent ? (JComponent)c : null;
+        boolean wasDoubleBuffered = swing != null && swing.isDoubleBuffered();
+        Graphics cg = null;
         try {
+            c.setBounds(x, y, w, h);
+            if (shouldValidate) c.validate();
+            if (wasDoubleBuffered) swing.setDoubleBuffered(false);
+            cg = g.create(x, y, w, h);
             c.paint(cg);
         } finally {
-            cg.dispose();
+            try {
+                if (cg != null) cg.dispose();
+            } finally {
+                try {
+                    if (wasDoubleBuffered) swing.setDoubleBuffered(true);
+                } finally {
+                    c.setBounds(-w, -h, 0, 0);
+                }
+            }
         }
-
-        if (wasDoubleBuffered && (c instanceof JComponent)) {
-            ((JComponent) c).setDoubleBuffered(true);
-        }
-
-        c.setBounds(-w, -h, 0, 0);
     }
 
     /**

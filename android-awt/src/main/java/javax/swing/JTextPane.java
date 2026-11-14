@@ -29,37 +29,163 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 package javax.swing;
+
 import javax.swing.text.*;
 import java.awt.*;
+
 public class JTextPane extends JEditorPane {
-    private static final String uiClassID = "TextPaneUI";
-    public String getUIClassID() { return uiClassID; }
-    public JTextPane() { setDocument(new DefaultStyledDocument()); }
-    public JTextPane(Document doc) { this(); if(doc!=null)setDocument(doc); }
-    public JTextPane(StyledDocument doc) { this((Document)doc); }
-    public StyledDocument getStyledDocument() { return (StyledDocument)getDocument(); }
+    private java.util.Set<Component> embeddedComponents = new java.util.HashSet<>();
+    private final MutableAttributeSet inputAttributes = new SimpleAttributeSet();
+    public String getUIClassID() { return "TextPaneUI"; }
+    public JTextPane() {
+        setDocument(new DefaultStyledDocument());
+        addCaretListener(e -> updateInputAttributes());
+    }
+    public JTextPane(Document doc) { this(); if (doc != null) setDocument(doc); }
+    public JTextPane(StyledDocument doc) { this((Document) doc); }
+    public StyledDocument getStyledDocument() { return (StyledDocument) getDocument(); }
     public void setStyledDocument(StyledDocument doc) { setDocument(doc); }
-    private int layoutStyled(Graphics g) {
-        String text=getText(); Insets in=getInsets();int width=Math.max(1,getWidth()-in.left-in.right);int x=0,y=in.top;
-        Font base=getFont();FontMetrics metrics=getFontMetrics(base);int line=metrics.getHeight();
-        DefaultStyledDocument doc=(DefaultStyledDocument)getDocument();
-        for(int i=0;i<text.length();i++){
-            AttributeSet a=doc.getCharacterElement(i).getAttributes();Font font=base.deriveFont((StyleConstants.isBold(a)?Font.BOLD:0)|(StyleConstants.isItalic(a)?Font.ITALIC:0));
-            FontMetrics fm=getFontMetrics(font);char ch=text.charAt(i);int cw=fm.charWidth(ch);
-            if(ch=='\n'){y+=line;x=0;continue;}
-            if(x>0 && x+cw>width){y+=line;x=0;}
-            if(g!=null){g.setFont(font);Object color=a.getAttribute(StyleConstants.Foreground);g.setColor(color instanceof Color?(Color)color:getForeground());g.drawString(String.valueOf(ch),in.left+x,y+fm.getAscent());}
-            x+=cw;
+    public AttributeSet getCharacterAttributes() {
+        int offset = Math.min(getCaretPosition(), getDocument().getLength());
+        return getStyledDocument().getCharacterElement(offset).getAttributes();
+    }
+    public MutableAttributeSet getInputAttributes() { return inputAttributes; }
+    private void updateInputAttributes() {
+        if (inputAttributes == null || !(getDocument() instanceof StyledDocument)) return;
+        int start = getSelectionStart();
+        AttributeSet attrs = getStyledDocument().getCharacterElement(start == getSelectionEnd() ? Math.max(0, start - 1) : start).getAttributes();
+        inputAttributes.removeAttributes(inputAttributes);
+        inputAttributes.addAttributes(attrs);
+        inputAttributes.removeAttribute(StyleConstants.ComponentAttribute);
+        inputAttributes.removeAttribute(StyleConstants.IconAttribute);
+        inputAttributes.removeAttribute(StyleConstants.NameAttribute);
+    }
+    public void setCharacterAttributes(AttributeSet attrs, boolean replace) {
+        int start = getSelectionStart(), length = getSelectionEnd() - start;
+        if (length != 0) getStyledDocument().setCharacterAttributes(start, length, attrs, replace);
+        if (replace) inputAttributes.removeAttributes(inputAttributes);
+        inputAttributes.addAttributes(attrs);
+        revalidate(); repaint();
+    }
+    @Override public void replaceSelection(String value) {
+        if (!isEditable()) return;
+        replaceStyledSelection(value, new SimpleAttributeSet(inputAttributes));
+    }
+    private void replaceStyledSelection(String value, AttributeSet attrs) {
+        int start = getSelectionStart(), length = getSelectionEnd() - start;
+        try {
+            Document doc = getDocument();
+            if (doc instanceof AbstractDocument) ((AbstractDocument) doc).replace(start, length, value, attrs);
+            else { doc.remove(start, length); doc.insertString(start, value, attrs); }
+            setCaretPosition(start + (value == null ? 0 : value.length()));
+        } catch (BadLocationException e) { throw new IllegalArgumentException(e); }
+    }
+    public void insertIcon(Icon icon) {
+        SimpleAttributeSet attrs = new SimpleAttributeSet();
+        StyleConstants.setIcon(attrs, icon);
+        replaceStyledSelection(" ", attrs);
+    }
+    public void insertComponent(Component component) {
+        SimpleAttributeSet attrs = new SimpleAttributeSet();
+        StyleConstants.setComponent(attrs, component);
+        replaceStyledSelection(" ", attrs);
+        if (component != null && component.getParent() != this) add(component);
+    }
+    private Font styledFont(AttributeSet attrs) {
+        Font base = getFont();
+        String family = attrs.isDefined(StyleConstants.FontFamily) ? StyleConstants.getFontFamily(attrs) : base.getFamily();
+        int size = attrs.isDefined(StyleConstants.FontSize) ? StyleConstants.getFontSize(attrs) : base.getSize();
+        return new Font(family, (StyleConstants.isBold(attrs) ? Font.BOLD : 0) | (StyleConstants.isItalic(attrs) ? Font.ITALIC : 0), size);
+    }
+    private static final class Layout {
+        final Rectangle[] positions;
+        int width, height;
+        Layout(int length) { positions = new Rectangle[length + 1]; }
+    }
+    private Layout layoutStyled(Graphics graphics) {
+        String text = getText();
+        Insets in = getInsets();
+        int available = Math.max(1, getWidth() - in.left - in.right);
+        int x = 0, y = in.top, lineHeight = getFontMetrics(getFont()).getHeight();
+        Layout layout = new Layout(text.length());
+        java.util.Set<Component> embedded = new java.util.HashSet<>();
+        for (int i = 0; i < text.length();) {
+            AttributeSet attrs = getStyledDocument().getCharacterElement(i).getAttributes();
+            Font font = styledFont(attrs);
+            FontMetrics fm = getFontMetrics(font);
+            Icon icon = StyleConstants.getIcon(attrs);
+            Component child = StyleConstants.getComponent(attrs);
+            int next = i + Character.charCount(text.codePointAt(i));
+            String glyph = text.substring(i, next);
+            Dimension childSize = child == null ? null : child.getPreferredSize();
+            int width = childSize != null ? childSize.width : icon != null ? icon.getIconWidth() : fm.stringWidth(glyph);
+            int height = childSize != null ? childSize.height : icon != null ? icon.getIconHeight() : fm.getHeight();
+            boolean newline = text.charAt(i) == '\n';
+            if (!newline && x > 0 && x + width > available) { y += lineHeight; x = 0; lineHeight = fm.getHeight(); }
+            lineHeight = Math.max(lineHeight, height);
+            Rectangle bounds = new Rectangle(in.left + x, y, newline ? 1 : Math.max(1, width), lineHeight);
+            for (int pos = i; pos < next; pos++) layout.positions[pos] = bounds;
+            if (child != null) {
+                embedded.add(child);
+                if (child.getParent() != this) add(child);
+                child.setBounds(bounds.x, bounds.y, width, height);
+            }
+            if (graphics != null && !newline) {
+                if (getCaret().isSelectionVisible() && i >= getSelectionStart() && i < getSelectionEnd()) {
+                    graphics.setColor(getSelectionColor()); graphics.fillRect(bounds.x, bounds.y, width, lineHeight);
+                }
+                if (icon != null) icon.paintIcon(this, graphics, bounds.x, bounds.y);
+                else if (child == null) {
+                    graphics.setFont(font);
+                    Object color = attrs.getAttribute(StyleConstants.Foreground);
+                    graphics.setColor(color instanceof Color ? (Color) color : getForeground());
+                    graphics.drawString(glyph, bounds.x, bounds.y + fm.getAscent());
+                }
+            }
+            if (newline) { layout.width = Math.max(layout.width, x); y += lineHeight; x = 0; lineHeight = fm.getHeight(); }
+            else x += width;
+            layout.width = Math.max(layout.width, x);
+            i = next;
         }
-        return y+line+in.bottom;
+        for (Component child : embeddedComponents) if (!embedded.contains(child) && child.getParent() == this) remove(child);
+        embeddedComponents = embedded;
+        layout.positions[text.length()] = new Rectangle(in.left + x, y, 1, lineHeight);
+        layout.width += in.left + in.right;
+        layout.height = y + lineHeight + in.bottom;
+        return layout;
     }
-    @Override public Dimension getPreferredSize(){
-        if(isPreferredSizeSet() || !(getDocument() instanceof DefaultStyledDocument))return super.getPreferredSize();
-        Dimension d=super.getPreferredSize();return new Dimension(d.width,layoutStyled(null));
+    @Override public Rectangle modelToView(int offset) throws BadLocationException {
+        if (!(getDocument() instanceof StyledDocument) || getDocument() instanceof javax.swing.text.html.HTMLDocument) return super.modelToView(offset);
+        if (offset < 0 || offset > getDocument().getLength()) throw new BadLocationException("offset", offset);
+        Rectangle bounds = new Rectangle(layoutStyled(null).positions[offset]);
+        bounds.width = 1;
+        return bounds;
     }
-    @Override protected void paintComponent(Graphics g){
-        if(!(getDocument() instanceof DefaultStyledDocument)){super.paintComponent(g);return;}
-        if(isOpaque()){g.setColor(getBackground());g.fillRect(0,0,getWidth(),getHeight());}
-        layoutStyled(g);
+    @Override public int viewToModel(Point point) {
+        if (!(getDocument() instanceof StyledDocument) || getDocument() instanceof javax.swing.text.html.HTMLDocument) return super.viewToModel(point);
+        Layout layout = layoutStyled(null);
+        int best = 0; double distance = Double.MAX_VALUE;
+        for (int i = 0; i < layout.positions.length; i++) {
+            Rectangle r = layout.positions[i];
+            double dy = point.y < r.y ? r.y - point.y : point.y >= r.y + r.height ? point.y - r.y - r.height + 1 : 0;
+            double score = dy * (getWidth() + 1.0) + Math.abs(point.x - r.x);
+            if (score < distance) { distance = score; best = i; }
+        }
+        return best;
+    }
+    @Override public Dimension getPreferredSize() {
+        if (isPreferredSizeSet() || !(getDocument() instanceof StyledDocument) || getDocument() instanceof javax.swing.text.html.HTMLDocument) return super.getPreferredSize();
+        Layout layout = layoutStyled(null);
+        return new Dimension(layout.width, layout.height);
+    }
+    @Override protected void paintComponent(Graphics graphics) {
+        if (!(getDocument() instanceof StyledDocument) || getDocument() instanceof javax.swing.text.html.HTMLDocument) { super.paintComponent(graphics); return; }
+        Graphics copy = graphics.create();
+        try {
+            if (isOpaque()) { copy.setColor(getBackground()); copy.fillRect(0, 0, getWidth(), getHeight()); }
+            if (getHighlighter() != null) getHighlighter().paint(copy);
+            layoutStyled(copy);
+            getCaret().paint(copy);
+        } finally { copy.dispose(); }
     }
 }

@@ -219,7 +219,7 @@ if (androidSdkAvailable) {
         "implementation"(project(":android-awt"))
         "implementation"(project(":android-hd"))
         "implementation"(project(":jshell"))
-        "implementation"(project(":client"))
+        "implementation"(project(path = ":client", configuration = "androidRuntimeElements"))
         "implementation"("net.runelite:runelite-api:${project.version}")
         "implementation"(libs.rs.cache)
         // FlatLaf jars are pure Java; classes load fine on Android, even though
@@ -312,6 +312,39 @@ if (androidSdkAvailable) {
 // One version controls both the APK compiler and the on-device plugin/client compiler.
 val coreLibraryVersion = "2.1.4"
 if (androidSdkAvailable) {
+    val clientProject = project(":client")
+    val androidClientJar = layout.buildDirectory.file("compat-client/runelite-client-android.jar")
+    val retargetToolClasspath = configurations.create("jdkRetargetToolClasspath") {
+        isCanBeConsumed = false
+    }
+    dependencies.add(retargetToolClasspath.name, "org.ow2.asm:asm:9.8")
+    dependencies.add(retargetToolClasspath.name, "org.ow2.asm:asm-commons:9.8")
+    val compileRetargetTool = tasks.register<JavaCompile>("compileBundledClientRetargetTool") {
+        source(rootProject.file("tools-src/RetargetBundledClient.java"),
+            file("src/androidMain/java/net/runelite/mp/compat/JdkRetargeter.java"),
+            file("src/androidMain/java/net/runelite/mp/compat/jdk/JdkRetargets.java"))
+        classpath = retargetToolClasspath
+        destinationDirectory.set(layout.buildDirectory.dir("compat-client/tool"))
+    }
+    val originalClientJar = provider {
+        clientProject.tasks.named<Jar>("jar").get().archiveFile.get().asFile
+    }
+    val retargetBundledClient = tasks.register<JavaExec>("retargetBundledClient") {
+        dependsOn(":client:jar", compileRetargetTool)
+        classpath = files(compileRetargetTool.flatMap { it.destinationDirectory }) + retargetToolClasspath
+        mainClass.set("RetargetBundledClient")
+        inputs.file(originalClientJar)
+        outputs.file(androidClientJar)
+        doFirst { args(originalClientJar.get().absolutePath, androidClientJar.get().asFile.absolutePath) }
+    }
+    // Keep the desktop artifact untouched and retain the client's transitive dependencies.
+    clientProject.plugins.withId("java-library") {
+        clientProject.configurations.create("androidRuntimeElements") {
+            isCanBeResolved = false
+            extendsFrom(*clientProject.configurations.getByName("runtimeElements").extendsFrom.toTypedArray())
+            outgoing.artifact(androidClientJar) { builtBy(retargetBundledClient) }
+        }
+    }
     val runtimeDesugarConfiguration = configurations.create("runtimeDesugarConfiguration") {
         isCanBeConsumed = false
         isTransitive = false
@@ -481,9 +514,9 @@ if (androidSdkAvailable) {
         if (name == "assembleRelease") dependsOn(checkReleaseShadowMapping)
     }
 
-    // JdkRetargeter rewrites only the downloaded client and hub jars, so android-awt and the app
-    // itself must never call a JdkRetargets member: on API 26-35 that is a NoSuchMethodError no
-    // pass would catch. The rows are read from the table's source (one onStatic/onVirtual/
+    // The bundled client is audited after retargeting; android-awt and the app compile
+    // directly against Android and must not call a member that needs retargeting.
+    // The rows are read from the table's source (one onStatic/onVirtual/
     // onInterface call per row, owner, name and descriptor first) and matched against the
     // method references and class constants in the compiled classes' constant pools.
     // The method references (`owner.namedescriptor`) and class constants (`class owner`) of a
@@ -523,8 +556,9 @@ if (androidSdkAvailable) {
     val jdkRetargetCheck = tasks.register("jdkRetargetCheck") {
         group = "verification"
         description = "Fail when android-awt or the app calls a JDK member the JdkRetargets table retargets."
-        dependsOn(":android-awt:compileReleaseJavaWithJavac", appCompileTasks)
+        dependsOn(":android-awt:compileReleaseJavaWithJavac", appCompileTasks, retargetBundledClient)
         inputs.file(retargetTable)
+        inputs.file(androidClientJar)
         inputs.dir(hostApi)
         inputs.files(provider { appCompileTasks.flatMap { it.outputs.files.files } })
         doLast {
@@ -536,15 +570,22 @@ if (androidSdkAvailable) {
             val roots = listOf(hostApi.get()) + appCompileTasks.flatMap { it.outputs.files.files }.filter { it.isDirectory }
             val hits = sortedSetOf<String>()
             var scanned = 0
+            fun inspect(name: String, bytes: ByteArray) {
+                if (name.startsWith("net/runelite/mp/compat/jdk/")) return
+                scanned++
+                for (ref in constantPoolRefs(bytes)) {
+                    if (ref in rows || ref in relocated) hits += "$name -> $ref"
+                }
+            }
             for (root in roots) {
                 root.walkTopDown().filter { it.isFile && it.extension == "class" }.forEach { file ->
                     val name = file.relativeTo(root).invariantSeparatorsPath.removeSuffix(".class")
-                    // The shims are the one place allowed to name what they stand in for.
-                    if (name.startsWith("net/runelite/mp/compat/jdk/")) return@forEach
-                    scanned++
-                    for (ref in constantPoolRefs(file.readBytes())) {
-                        if (ref in rows || ref in relocated) hits += "$name -> $ref"
-                    }
+                    inspect(name, file.readBytes())
+                }
+            }
+            java.util.zip.ZipFile(androidClientJar.get().asFile).use { zip ->
+                zip.entries().asSequence().filter { it.name.endsWith(".class") }.forEach { entry ->
+                    zip.getInputStream(entry).use { inspect(entry.name.removeSuffix(".class"), it.readBytes()) }
                 }
             }
             println("== JDK retarget check: ${rows.size} rows, ${relocated.size} relocated types, $scanned classes ==")
@@ -556,7 +597,7 @@ if (androidSdkAvailable) {
         }
     }
     tasks.configureEach {
-        if (name == "assembleDebug" || name == "check") dependsOn(jdkRetargetCheck)
+        if (name == "assembleDebug" || name == "assembleRelease" || name == "check") dependsOn(jdkRetargetCheck)
     }
 }
 

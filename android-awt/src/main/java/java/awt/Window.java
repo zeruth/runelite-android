@@ -38,7 +38,13 @@ public class Window extends Container implements javax.accessibility.Accessible 
 
     public interface VisibilityHandler { void changed(Window window, boolean visible); }
     private static volatile VisibilityHandler visibilityHandler;
-    public static void setVisibilityHandler(VisibilityHandler h) { visibilityHandler = h; }
+    public static synchronized void setVisibilityHandler(VisibilityHandler h) { visibilityHandler = h; }
+    /** Replace a host only if it still owns the bridge, as during Activity teardown. */
+    public static synchronized boolean replaceVisibilityHandler(VisibilityHandler expected, VisibilityHandler replacement) {
+        if (visibilityHandler != expected) return false;
+        visibilityHandler = replacement;
+        return true;
+    }
     private static final AtomicReference<Window> LATEST = new AtomicReference<>();
     private static final java.util.List<java.lang.ref.WeakReference<Window>> ALL_WINDOWS =
         new java.util.concurrent.CopyOnWriteArrayList<>();
@@ -53,6 +59,7 @@ public class Window extends Container implements javax.accessibility.Accessible 
     private volatile float opacity = 1.0f;
     private volatile java.awt.Shape shape;
     private boolean alwaysOnTop, locationByPlatform;
+    private boolean sizing;
     private Dialog.ModalExclusionType modalExclusionType = Dialog.ModalExclusionType.NO_EXCLUDE;
     private final java.util.List<java.awt.event.WindowListener> windowListeners = new java.util.concurrent.CopyOnWriteArrayList<>();
     private final java.util.List<java.awt.event.WindowFocusListener> windowFocusListeners = new java.util.concurrent.CopyOnWriteArrayList<>();
@@ -203,16 +210,22 @@ public class Window extends Container implements javax.accessibility.Accessible 
 
     @Override
     public void setSize(int w, int h) {
-        super.setSize(w, h);
+        boolean wasSizing = sizing;
+        sizing = true;
+        try {
+            super.setSize(w, h);
+        } finally {
+            sizing = wasSizing;
+        }
         ensureBackbuffer();
         doLayout();
     }
 
     @Override
     public void setBounds(int x, int y, int w, int h) {
-        // The JDK clears it for SET_BOUNDS and SET_LOCATION, never SET_SIZE: setSize (and so
-        // pack) does not come through here, so a platform-placed window keeps the flag.
-        locationByPlatform = false;
+        // Component.setSize dispatches through setBounds; only an explicit bounds/location
+        // change cancels platform placement, not resizing or packing the window.
+        if (!sizing) locationByPlatform = false;
         super.setBounds(x, y, w, h);
         ensureBackbuffer();
         doLayout();
