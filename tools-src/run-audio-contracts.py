@@ -43,6 +43,7 @@ def main():
     runner = out / 'AudioContractMain.java'
     runner.write_text('''public class AudioContractMain {
  public static void main(String[] args) {
+  System.setProperty("java.io.tmpdir", "/data/local/tmp");
   try { System.out.println("BEGIN " + args[0]); Class.forName(args[0]).getMethod("main", String[].class).invoke(null, (Object) java.util.Arrays.copyOfRange(args, 1, args.length)); System.exit(0); }
   catch (Throwable error) { while(error.getCause()!=null) error=error.getCause(); error.printStackTrace(System.out); System.exit(1); }
  }
@@ -81,8 +82,8 @@ def main():
         if args.standalone or args.package:
             with zipfile.ZipFile(args.awt_jar) as awt:
                 for name in awt.namelist():
-                    if name.endswith('.class') and name.startswith(('javax/sound/sampled/', 'net/runelite/awt/impl/AndroidClip', 'net/runelite/awt/impl/WavDecoder',
-                                                                         'net/runelite/awt/impl/AndroidMixer', 'net/runelite/awt/impl/SampledProviders',
+                    if name.endswith('.class') and name.startswith(('javax/sound/sampled/', 'javax/sound/midi/', 'net/runelite/awt/impl/AndroidClip', 'net/runelite/awt/impl/WavDecoder',
+                                                                         'net/runelite/awt/impl/AndroidMixer', 'net/runelite/awt/impl/SampledProviders', 'net/runelite/awt/impl/MidiProviders',
                                                                          'net/runelite/awt/impl/CompressedAudio', 'net/runelite/awt/impl/MediaCodecAudioDecoder',
                                                                          'com/sun/media/sound/')):
                         archive.writestr(name, awt.read(name))

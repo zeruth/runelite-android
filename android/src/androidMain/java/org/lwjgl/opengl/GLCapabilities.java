@@ -6,12 +6,12 @@ import android.opengl.GLES32;
 public final class GLCapabilities {
     public final boolean OpenGL31, OpenGL33;
     public final boolean forwardCompatible=true; // GLES has no desktop compatibility point-sprite toggle.
-    public final boolean OpenGL40=false, OpenGL43=false;
+    public final boolean OpenGL21=false, OpenGL40=false, OpenGL43=false, OpenGL45=false;
     public final boolean GL_ARB_buffer_storage=false, GL_ARB_draw_indirect=false, GL_ARB_multi_draw_indirect=false;
     public final boolean GL_ARB_copy_buffer, GL_ARB_map_buffer_range;
     public final boolean GL_ARB_shader_image_load_store=false;
     public final boolean GL_EXT_texture_filter_anisotropic;
-    public final long glDebugMessageControl=0, glTexStorage3D;
+    public final long glDebugMessageControl=0, glInvalidateBufferData=0, glTexStorage3D;
     GLCapabilities() {
         int major=GL33C.glGetInteger(GLES32.GL_MAJOR_VERSION), minor=GL33C.glGetInteger(GLES32.GL_MINOR_VERSION);
         OpenGL31=OpenGL33=major>3 || major==3 && minor>=2;

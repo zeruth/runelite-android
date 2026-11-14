@@ -185,10 +185,14 @@ def main():
     failures = ["Missing runtime class " + name for name in RUNTIME_CLASSES if name not in actual]
     for name, member in JRE_FLAVOUR_MEMBERS:
         signature = name + "." + member[1] + member[2]
-        if member not in expected.get(name, (0, {}))[1]:
-            failures.append("Library guava is not the -jre flavour, lacks " + signature)
-        if member not in actual.get(name, (0, {}))[1]:
-            failures.append("APK lacks guava-jre member " + signature)
+        # These must remain public instance default methods, not abstract
+        # declarations that link successfully but fail when a plugin invokes them.
+        for label, surface in (("Library", expected), ("APK", actual)):
+            flags = surface.get(name, (0, {}))[1].get(member)
+            if flags is None:
+                failures.append(label + " lacks guava-jre member " + signature)
+            elif not flags & 1 or flags & (8 | 0x400):
+                failures.append(label + " lacks public instance default implementation " + signature)
     for name, interface in JRE_FLAVOUR_INTERFACES:
         edge = name + " extends " + interface
         if interface not in expected_interfaces.get(name, ()):

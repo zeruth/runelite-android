@@ -343,7 +343,8 @@ public class JTabbedPane extends JComponent implements SwingConstants, javax.acc
      */
     public void updateUI() {
         try {
-            setUI((javax.swing.plaf.TabbedPaneUI) UIManager.getUI(this));
+            javax.swing.plaf.ComponentUI delegate = UIManager.getUI(this);
+            setUI(delegate instanceof javax.swing.plaf.TabbedPaneUI ? (javax.swing.plaf.TabbedPaneUI) delegate : new javax.swing.plaf.basic.BasicTabbedPaneUI());
         } catch (LinkageError incompatible) {
             ui = null;
             setUI(new javax.swing.plaf.basic.BasicTabbedPaneUI());

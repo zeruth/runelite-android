@@ -137,7 +137,10 @@ public class BufferedImage extends Image implements WritableRenderedImage {
         // The type is read off the model as given, before its alpha state is forced to
         // the raster's, which is the order the desktop constructor uses.
         this.imageType = detectType(cm, raster);
-        this.colorModel = cm.coerceData(raster,isRasterPremultiplied);
+        this.colorModel = cm;
+        if (cm.hasAlpha() && cm.isAlphaPremultiplied() != isRasterPremultiplied) {
+            this.colorModel = cm.coerceData(raster, isRasterPremultiplied);
+        }
         this.raster = raster;
         this.properties = properties;
         DataBuffer db = raster.getDataBuffer();

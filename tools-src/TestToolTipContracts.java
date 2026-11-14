@@ -102,6 +102,23 @@ public final class TestToolTipContracts {
         manager.unregisterComponent(component);
         check("unregisterComponent", !listens(component, manager));
 
+        JComponent[] widgets = {
+            new javax.swing.JButton(), new javax.swing.JLabel(), new javax.swing.JList<String>(),
+            new javax.swing.JMenuItem(), new javax.swing.JPanel(), new javax.swing.JTextArea(),
+            new javax.swing.JTextField(), new javax.swing.JTextPane()
+        };
+        for (JComponent widget : widgets) {
+            String name = widget.getClass().getSimpleName();
+            widget.setToolTipText("tip for " + name);
+            JToolTip widgetTip = widget.createToolTip();
+            check(name + " creates a tooltip owned by the component",
+                widgetTip != null && widgetTip.getComponent() == widget);
+            check(name + " returns its tooltip text", ("tip for " + name).equals(widget.getToolTipText()));
+            check(name + " returns its tooltip text for a mouse event",
+                ("tip for " + name).equals(widget.getToolTipText(event(widget, MouseEvent.MOUSE_MOVED, 0, 0))));
+            widget.setToolTipText(null);
+        }
+
         if (shadow) {
             shadow(manager);
         }

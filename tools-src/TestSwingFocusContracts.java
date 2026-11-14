@@ -34,8 +34,8 @@ import javax.swing.plaf.UIResource;
  * LayoutFocusTraversalPolicy order of a two-column form.
  *
  * Headless, so there is no Window: the JInternalFrame is the one top ancestor the JDK's
- * KeyboardManager accepts without one, and it is shown through addNotify + setVisible, which a
- * lightweight root allows. A focus transfer itself needs a Window on the JDK, and on the host the
+ * KeyboardManager accepts without one. On Android the fixture explicitly mounts its root
+ * through the host showing hook; addNotify alone does not mount an Android panel. A focus transfer itself needs a Window on the JDK, and on the host the
  * JDK's own Component and KeyboardFocusManager run in both modes, so the veto a tab-out goes
  * through is reached directly in the patched run (argument {@code shadow}): FocusVeto.accept is
  * the call the shadow KeyboardFocusManager makes before every focus change, and it runs the
@@ -101,6 +101,15 @@ public final class TestSwingFocusContracts {
         return SwingUtilities.processKeyBindings(event);
     }
 
+    private static void mountAndroidRoot(Component root) {
+        if (!"Dalvik".equals(System.getProperty("java.vm.name"))) return;
+        try {
+            Component.class.getMethod("setHostShowing", boolean.class).invoke(root, true);
+        } catch (ReflectiveOperationException failure) {
+            throw new AssertionError("Unable to mount the Android test tree", failure);
+        }
+    }
+
     static void bindingWalk() {
         JInternalFrame frame = new JInternalFrame();
         JPanel form = new JPanel(null);
@@ -131,6 +140,7 @@ public final class TestSwingFocusContracts {
         }, KeyStroke.getKeyStroke(KeyEvent.VK_F5, 0), JComponent.WHEN_IN_FOCUSED_WINDOW);
 
         frame.addNotify();
+        mountAndroidRoot(frame);
         frame.setVisible(true);
         check("internal frame tree is showing", other.isShowing() && focused.isShowing());
 
@@ -176,6 +186,7 @@ public final class TestSwingFocusContracts {
         bind(item, JComponent.WHEN_IN_FOCUSED_WINDOW, f6, "itemF6");
 
         frame.addNotify();
+        mountAndroidRoot(frame);
         frame.setVisible(true);
         check("menu bar: shown with the frame", bar.isShowing() && focused.isShowing());
         check("menu bar: the popup's item is not showing", !item.isShowing());
@@ -306,6 +317,7 @@ public final class TestSwingFocusContracts {
             form.add(right[row]);
         }
         form.addNotify();
+        mountAndroidRoot(form);
         LayoutFocusTraversalPolicy policy = new LayoutFocusTraversalPolicy();
         List<Component> forward = new ArrayList<>();
         Component c = policy.getFirstComponent(form);

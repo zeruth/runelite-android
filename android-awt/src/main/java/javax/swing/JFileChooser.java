@@ -219,6 +219,7 @@ public class JFileChooser extends JComponent implements Accessible {
 
     private Vector<FileFilter> filters = new Vector<FileFilter>(5);
     private JDialog dialog = null;
+    private transient boolean dialogShowing;
     private int dialogType = OPEN_DIALOG;
     private int returnValue = ERROR_OPTION;
     private JComponent accessory = null;
@@ -568,6 +569,19 @@ public class JFileChooser extends JComponent implements Accessible {
      */
     public int showDialog(Component parent, String approveButtonText)
         throws HeadlessException {
+        synchronized (this) {
+            if (dialogShowing) return ERROR_OPTION;
+            dialogShowing = true;
+        }
+        try {
+            return showDialogImpl(parent, approveButtonText);
+        } finally {
+            synchronized (this) { dialogShowing = false; }
+        }
+    }
+
+    private int showDialogImpl(Component parent, String approveButtonText)
+        throws HeadlessException {
         if (dialog != null) {
             // Prevent to show second instance of dialog if the previous one still exists
             return JFileChooser.ERROR_OPTION;
@@ -579,7 +593,8 @@ public class JFileChooser extends JComponent implements Accessible {
         }
 
         DialogHandler handler = dialogHandler;
-        if (handler != null) {
+        // The Android system picker cannot host a Swing accessory panel.
+        if (handler != null && getAccessory() == null) {
             returnValue = ERROR_OPTION;
             rescanCurrentDirectory();
             int result = handler.show(this, getDialogType() == SAVE_DIALOG);
@@ -601,15 +616,15 @@ public class JFileChooser extends JComponent implements Accessible {
         returnValue = ERROR_OPTION;
         rescanCurrentDirectory();
 
-        dialog.setVisible(true);
-        firePropertyChange("JFileChooserDialogIsClosingProperty", dialog, null);
-
-        // Remove all components from dialog. The MetalFileChooserUI.installUI() method (and other LAFs)
-        // registers AWT listener for dialogs and produces memory leaks. It happens when
-        // installUI invoked after the showDialog method.
-        dialog.getContentPane().removeAll();
-        dialog.dispose();
-        dialog = null;
+        try {
+            dialog.setVisible(true);
+            firePropertyChange("JFileChooserDialogIsClosingProperty", dialog, null);
+        } finally {
+            JDialog showing = dialog;
+            dialog = null;
+            try { showing.getContentPane().removeAll(); }
+            finally { showing.dispose(); }
+        }
         return returnValue;
     }
 
@@ -875,7 +890,6 @@ public class JFileChooser extends JComponent implements Accessible {
                 setFileFilter(filter);
             }
         }
-        setFileFilter(filter);
     }
 
     /**
@@ -1116,6 +1130,7 @@ public class JFileChooser extends JComponent implements Accessible {
                 setSelectedFile(null);
             }
         }
+        if (filter != null && !filters.contains(filter)) addChoosableFileFilter(filter);
         firePropertyChange(FILE_FILTER_CHANGED_PROPERTY, oldValue, fileFilter);
     }
 
@@ -1413,7 +1428,8 @@ public class JFileChooser extends JComponent implements Accessible {
         }
         FileChooserUI ui = null;
         try {
-            ui = (FileChooserUI) UIManager.getUI(this);
+            javax.swing.plaf.ComponentUI candidate = UIManager.getUI(this);
+            if (candidate instanceof FileChooserUI) ui = (FileChooserUI) candidate;
         } catch (LinkageError e) {
             // A look and feel whose delegate extends a class the shadow lacks
             // (FlatLaf's Metal-based chooser) must not make the chooser

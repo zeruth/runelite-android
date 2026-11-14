@@ -1,5 +1,6 @@
 #include <jni.h>
 #include <stdint.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 #include <EGL/egl.h>
@@ -93,6 +94,26 @@ JNIEXPORT void JNICALL Java_org_lwjgl_system_MemoryUtil_nmemFree(JNIEnv *env, jc
 JNIEXPORT jobject JNICALL Java_org_lwjgl_system_MemoryUtil_view(JNIEnv *env, jclass cls, jlong ptr, jint size) {
     (void)cls;
     return (*env)->NewDirectByteBuffer(env, (void *)(uintptr_t)ptr, size);
+}
+JNIEXPORT jint JNICALL Java_org_lwjgl_system_MemoryUtil_pointerSize(JNIEnv *env, jclass cls) {
+    (void)env; (void)cls;
+    return (jint)sizeof(void *);
+}
+JNIEXPORT jbyteArray JNICALL Java_org_lwjgl_system_MemoryUtil_readNullTerminated(JNIEnv *env, jclass cls, jlong ptr) {
+    (void)cls;
+    if (ptr == 0) {
+        (*env)->ThrowNew(env, (*env)->FindClass(env, "java/lang/IllegalArgumentException"), "Null string address");
+        return NULL;
+    }
+    const char *text = (const char *)(uintptr_t)ptr;
+    size_t length = strnlen(text, INT_MAX);
+    if (length == INT_MAX) {
+        (*env)->ThrowNew(env, (*env)->FindClass(env, "java/lang/IllegalArgumentException"), "Native string exceeds Java array size");
+        return NULL;
+    }
+    jbyteArray bytes = (*env)->NewByteArray(env, (jsize)length);
+    if (bytes != NULL && length != 0) (*env)->SetByteArrayRegion(env, bytes, 0, (jsize)length, (const jbyte *)text);
+    return bytes;
 }
 JNIEXPORT jlong JNICALL Java_org_lwjgl_system_MemoryUtil_memAddress0(JNIEnv *env, jclass cls, jobject buffer) {
     (void)cls;

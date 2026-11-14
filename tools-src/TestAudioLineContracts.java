@@ -7,7 +7,7 @@ import net.runelite.awt.impl.AndroidAudioBridge;
 /**
  * Standalone Android probe. The playback cases use silent PCM; the capture case records two seconds
  * from the microphone and plays them back. Does not change application settings.
- * Argument {@code capture} runs the capture case alone.
+ * Argument {@code capture} runs capture alone; {@code playback} skips the microphone case.
  */
 public final class TestAudioLineContracts {
     static void check(boolean value,String message){if(!value)throw new AssertionError(message);}
@@ -88,6 +88,6 @@ public final class TestAudioLineContracts {
         check(!writer.isAlive(),"close releases writer");check(failure.get()==null,"close/write race: "+failure.get());
         Thread.sleep(2200);
         System.out.println("PASS: independent lines, playback/pause/drain/flush, rapid reopen, concurrent close/write and deferred retirement");
-        capture();
+        if (args.length == 0 || !args[0].equals("playback")) capture();
     }
 }

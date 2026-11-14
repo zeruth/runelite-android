@@ -30,7 +30,7 @@ public final class TestSwingWorkerContracts {
     }
 
     /** Records every EDT callback of a worker, in the order the EDT ran them. */
-    private static final class Recording extends SwingWorker<String, Integer> {
+    private static class Recording extends SwingWorker<String, Integer> {
         final List<String> events = Collections.synchronizedList(new ArrayList<String>());
         final List<Integer> chunks = Collections.synchronizedList(new ArrayList<Integer>());
         final AtomicBoolean offEdt = new AtomicBoolean();

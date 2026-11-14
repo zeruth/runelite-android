@@ -64,7 +64,7 @@ public class JEditorPane extends JTextComponent {
     private final javax.swing.event.EventListenerList hyperlinks=new javax.swing.event.EventListenerList();
     public JEditorPane() {
         setEditorKit(getEditorKitForContentType("text/plain"));
-        addMouseListener(new java.awt.event.MouseAdapter(){public void mouseClicked(java.awt.event.MouseEvent event){if(!isEditable()&&html()){String link=linkAt(event.getX(),event.getY());if(link!=null){URL target=null;try{target=page==null?new URL(link):new URL(page,link);}catch(java.net.MalformedURLException ignored){}fireHyperlinkUpdate(new javax.swing.event.HyperlinkEvent(JEditorPane.this,javax.swing.event.HyperlinkEvent.EventType.ACTIVATED,target,link));}}}});
+        addMouseListener(new java.awt.event.MouseAdapter(){public void mouseClicked(java.awt.event.MouseEvent event){if(!isEditable()&&html()){String link=linkAt(event.getX(),event.getY());if(link!=null){URL target=null;try{target=page==null?new URL(link):new URL(page,link);}catch(java.net.MalformedURLException ignored){}fireHyperlinkUpdate(new javax.swing.event.HyperlinkEvent(JEditorPane.this,javax.swing.event.HyperlinkEvent.EventType.ACTIVATED,target,link,null,event));}}}});
     }
     public JEditorPane(URL initialPage) throws IOException { this();setPage(initialPage); }
     public JEditorPane(String url) throws IOException { this(new URL(url)); }
@@ -81,6 +81,39 @@ public class JEditorPane extends JTextComponent {
     public void removeHyperlinkListener(HyperlinkListener listener) { hyperlinks.remove(HyperlinkListener.class,listener); }
     public void fireHyperlinkUpdate(javax.swing.event.HyperlinkEvent e) { for(HyperlinkListener listener:hyperlinks.getListeners(HyperlinkListener.class))listener.hyperlinkUpdate(e); }
     public HyperlinkListener[] getHyperlinkListeners(){return hyperlinks.getListeners(HyperlinkListener.class);}
+
+    public void scrollToReference(String reference) {
+        if (reference == null || !(getDocument() instanceof javax.swing.text.html.HTMLDocument)) return;
+        java.util.regex.Matcher anchors = java.util.regex.Pattern.compile(
+            "(?is)<[^>]*\\b(?:id|name)\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)'|([^\\s>]+))[^>]*>").matcher(getText());
+        while (anchors.find()) {
+            String name = anchors.group(1) != null ? anchors.group(1) : anchors.group(2) != null ? anchors.group(2) : anchors.group(3);
+            if (!reference.equals(name)) continue;
+            javax.swing.text.View view = getUI().getRootView(this).getView(0);
+            java.awt.Insets in = getInsets();
+            view.setSize(textWidth(), getHeight());
+            try {
+                java.awt.Shape shape = view.modelToView(anchors.end(), new java.awt.Rectangle(in.left, in.top, textWidth(), getHeight()), javax.swing.text.Position.Bias.Forward);
+                scrollRectToVisible(shape.getBounds());
+            } catch (javax.swing.text.BadLocationException ignored) { }
+            return;
+        }
+    }
+
+    @Override public java.awt.Rectangle modelToView(int offset) throws javax.swing.text.BadLocationException {
+        if (!html()) return super.modelToView(offset);
+        javax.swing.text.View view = getUI().getRootView(this).getView(0);
+        java.awt.Insets in = getInsets();
+        view.setSize(textWidth(), getHeight());
+        return view.modelToView(offset, new java.awt.Rectangle(in.left, in.top, textWidth(), getHeight()), javax.swing.text.Position.Bias.Forward).getBounds();
+    }
+    @Override public int viewToModel(java.awt.Point point) {
+        if (!html()) return super.viewToModel(point);
+        javax.swing.text.View view = getUI().getRootView(this).getView(0);
+        java.awt.Insets in = getInsets();
+        view.setSize(textWidth(), getHeight());
+        return view.viewToModel(point.x, point.y, new java.awt.Rectangle(in.left, in.top, textWidth(), getHeight()), new javax.swing.text.Position.Bias[1]);
+    }
 
     private String linkAt(int x,int y){java.awt.Insets in=getInsets();java.awt.FontMetrics metrics=getFontMetrics(getFont());HtmlTextRenderer.Layout layout=HtmlTextRenderer.measure(renderedHtml(),metrics,textWidth());int row=(y-in.top)/Math.max(1,metrics.getHeight());if(y<in.top||row<0||row>=layout.lines.size())return null;int left=in.left;for(HtmlTextRenderer.Run run:layout.lines.get(row).runs){int width=metrics.stringWidth(run.text);if(x>=left&&x<left+width)return run.href;left+=width;}return null;}
     private String renderedHtml(){return kit instanceof javax.swing.text.html.HTMLEditorKit?((javax.swing.text.html.HTMLEditorKit)kit).getStyleSheet().applyRules(getText()):getText();}

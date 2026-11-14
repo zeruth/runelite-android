@@ -662,7 +662,12 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
             node = node.parent
         }
         val target = sink(base, deepest)
-        if (target is JTextComponent || !handlesDrag(target)) return false
+        if (!handlesDrag(target)) return false
+        if (target is JTextComponent) {
+            val local = SwingUtilities.convertPoint(base, x, y, target)
+            if (!target.dragEnabled || !anySize ||
+                !net.runelite.awt.impl.SwingDragSupport.isDragPossible(target, local)) return false
+        }
         if (!anySize && target.width > logicalWidth / 2) return false
         gesture = target
         gestureTool = tool
@@ -1116,17 +1121,33 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
                 return
             }
             is javax.swing.JSlider -> {
-                val min = control.minimum
-                val max = control.maximum
-                val value = control.value
+                val min = control.minimum.toLong()
+                val upper = (control.maximum.toLong() - control.extent).coerceAtLeast(min)
+                val range = upper - min
+                val steps = range.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+                val value = control.value.toLong().coerceIn(min, upper)
+                val inverted = control.inverted
+                val tick = if (control.snapToTicks) {
+                    control.minorTickSpacing.takeIf { it > 0 } ?: control.majorTickSpacing.coerceAtLeast(0)
+                } else 0
+                fun progressFor(value: Long): Int {
+                    val progress = if (range == 0L) 0 else Math.round((value - min).toDouble() / range * steps).toInt().coerceIn(0, steps)
+                    return if (inverted) steps - progress else progress
+                }
+                fun valueFor(progress: Int): Int {
+                    val directed = if (inverted) steps - progress else progress
+                    var next = min + if (steps == 0) 0L else Math.round(directed.toDouble() / steps * range)
+                    if (tick > 0) next = min + Math.round((next - min).toDouble() / tick) * tick
+                    return next.coerceIn(min, upper).toInt()
+                }
                 post {
                     if (!running || serial != mountSerial) return@post
                     inputPopup?.dismiss()
-                    val seek = android.widget.SeekBar(context).apply { this.max = (max.toLong() - min).coerceIn(0, Int.MAX_VALUE.toLong()).toInt(); progress = value - min }
+                    val seek = android.widget.SeekBar(context).apply { max = steps; progress = progressFor(value) }
                     seek.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
                         override fun onStartTrackingTouch(bar: android.widget.SeekBar) { SwingUtilities.invokeLater { if (isCurrentMount(serial)) control.valueIsAdjusting = true } }
                         override fun onProgressChanged(bar: android.widget.SeekBar, progress: Int, fromUser: Boolean) {
-                            if (fromUser) SwingUtilities.invokeLater { if (isCurrentMount(serial) && control.isEnabled) control.value = min + progress }
+                            if (fromUser) SwingUtilities.invokeLater { if (isCurrentMount(serial) && control.isEnabled) control.value = valueFor(progress) }
                         }
                         override fun onStopTrackingTouch(bar: android.widget.SeekBar) { SwingUtilities.invokeLater { if (isCurrentMount(serial)) control.valueIsAdjusting = false } }
                     })
@@ -1232,11 +1253,15 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
         val labels = items.map { it.text ?: "" }
         val enabled = items.map { it.isEnabled }
         val checked = items.map { it.isSelected }
+        val submenus = items.map { it is javax.swing.JMenu }
+        val requestedSize = if (menu.isPreferredSizeSet) java.awt.Dimension(menu.preferredSize) else null
         post {
             if (!running || serial != mountSerial) { SwingUtilities.invokeLater { menu.isVisible = false }; return@post }
             contextPopup?.dismiss()
             val panelScale = width.toFloat() / logicalWidth
-            val titles = labels.mapIndexed { index, label -> if (checked[index]) "✓ $label" else label }
+            val titles = labels.mapIndexed { index, label ->
+                (if (checked[index]) "✓ $label" else label) + if (submenus[index]) "  ›" else ""
+            }
             val adapter = object : android.widget.ArrayAdapter<String>(context, android.R.layout.simple_list_item_1, titles) {
                 override fun areAllItemsEnabled() = enabled.all { it }
                 override fun isEnabled(position: Int) = enabled[position]
@@ -1261,28 +1286,51 @@ internal class SwingPanelView(context: Context, private val panelKey: String, pr
                     if (isCurrentMount(serial) && item != null && item.isEnabled && item.isVisible) {
                         android.util.Log.i("SwingPanelHost", "Context action $panelKey: ${labels[index]}")
                         item.doClick()
+                        if (item is javax.swing.JMenu) showPopupMenu(item.popupMenu, serial)
                     }
                 }
             }.create()
+            fun resizePopup(size: java.awt.Dimension?) {
+                val screen = resources.displayMetrics
+                val popupWidth = size?.let { (it.width * panelScale).toInt().coerceIn(1, screen.widthPixels.coerceAtLeast(1)) }
+                    ?: width.coerceAtLeast(240)
+                val popupHeight = size?.let { (it.height * panelScale).toInt().coerceIn(1, screen.heightPixels.coerceAtLeast(1)) }
+                    ?: android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+                popup.window?.setLayout(popupWidth, popupHeight)
+            }
+            val sizeListener = java.beans.PropertyChangeListener { event ->
+                if (event.propertyName == "preferredSize" || event.propertyName == "popupSize") {
+                    val size = if (event.propertyName == "popupSize") (event.newValue as? java.awt.Dimension)?.let { java.awt.Dimension(it) }
+                        else if (menu.isPreferredSizeSet) java.awt.Dimension(menu.preferredSize) else null
+                    post { if (running && serial == mountSerial && contextPopup === popup) resizePopup(size) }
+                }
+            }
             popup.setOnDismissListener {
-                SwingUtilities.invokeLater { menu.isVisible = false; if (swingPopup === menu) swingPopup = null }
+                SwingUtilities.invokeLater {
+                    menu.removePropertyChangeListener(sizeListener)
+                    if (swingPopup === menu) {
+                        javax.swing.MenuSelectionManager.defaultManager().clearSelectedPath()
+                        menu.isVisible = false
+                        swingPopup = null
+                    }
+                }
                 if (contextPopup === popup) contextPopup = null
             }
             contextPopup = popup
             popup.show()
             popup.listView.setBackgroundColor(android.graphics.Color.rgb(30, 30, 30))
-            popup.window?.setLayout(width.coerceAtLeast(240), android.view.ViewGroup.LayoutParams.WRAP_CONTENT)
+            resizePopup(requestedSize)
+            SwingUtilities.invokeLater {
+                if (isCurrentMount(serial) && swingPopup === menu) menu.addPropertyChangeListener(sizeListener)
+            }
             android.util.Log.i("SwingPanelHost", "Context menu $panelKey: ${labels.joinToString()}")
         }
         return true
     }
 
     private fun hit(component: Component, x: Int, y: Int): Component {
-        if (component is Container) for (child in component.components) {
-            if (child.isVisible && x >= child.x && y >= child.y && x < child.x + child.width && y < child.y + child.height)
-                return hit(child, x - child.x, y - child.y)
-        }
-        return component
+        // Keep the root fallback for captured gestures that finish outside the panel.
+        return SwingUtilities.getDeepestComponentAt(component, x, y) ?: component
     }
 
 

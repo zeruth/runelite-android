@@ -784,8 +784,10 @@ public class BasicTreeUI extends TreeUI
             treeSelectionModel.addTreeSelectionListener(treeSelectionListener);
         }
 
-        // The JDK installs its TreeTransferHandler here; the shadow has no
-        // TransferHandler or drop target, so trees get no cut/copy/paste of nodes.
+        TransferHandler handler = tree.getTransferHandler();
+        if (handler == null || handler instanceof UIResource) {
+            tree.setTransferHandler(defaultTransferHandler);
+        }
 
         LookAndFeel.installProperty(tree, "opaque", Boolean.TRUE);
     }
@@ -1023,6 +1025,9 @@ public class BasicTreeUI extends TreeUI
     }
 
     protected void uninstallListeners() {
+        if (tree.getTransferHandler() instanceof UIResource) {
+            tree.setTransferHandler(null);
+        }
         if(componentListener != null) {
             tree.removeComponentListener(componentListener);
         }
@@ -3185,8 +3190,98 @@ public class BasicTreeUI extends TreeUI
 
     } // End of class BasicTreeUI.MouseInputHandler
 
-    // The JDK's TreeTransferHandler (copy of the selected rows as text and HTML) is not
-    // ported: the shadow has no TransferHandler to extend.
+    private static final TransferHandler defaultTransferHandler = new TreeTransferHandler();
+
+    static class TreeTransferHandler extends TransferHandler implements UIResource, Comparator<TreePath> {
+
+        private JTree tree;
+
+        /**
+         * Create a Transferable to use as the source for a data transfer.
+         *
+         * @param c  The component holding the data to be transfered.  This
+         *  argument is provided to enable sharing of TransferHandlers by
+         *  multiple components.
+         * @return  The representation of the data to be transfered.
+         *
+         */
+        protected Transferable createTransferable(JComponent c) {
+            if (c instanceof JTree) {
+                tree = (JTree) c;
+                TreePath[] paths = tree.getSelectionPaths();
+
+                if (paths == null || paths.length == 0) {
+                    return null;
+                }
+
+                StringBuffer plainBuf = new StringBuffer();
+                StringBuffer htmlBuf = new StringBuffer();
+
+                htmlBuf.append("<html>\n<body>\n<ul>\n");
+
+                TreeModel model = tree.getModel();
+                TreePath[] displayPaths = getDisplayOrderPaths(paths);
+
+                for (TreePath path : displayPaths) {
+                    Object node = path.getLastPathComponent();
+                    boolean leaf = model.isLeaf(node);
+                    String label = getDisplayString(path, true, leaf);
+
+                    plainBuf.append(label + "\n");
+                    htmlBuf.append("  <li>" + label + "\n");
+                }
+
+                // remove the last newline
+                plainBuf.deleteCharAt(plainBuf.length() - 1);
+                htmlBuf.append("</ul>\n</body>\n</html>");
+
+                tree = null;
+
+                return new BasicTransferable(plainBuf.toString(), htmlBuf.toString());
+            }
+
+            return null;
+        }
+
+        public int compare(TreePath o1, TreePath o2) {
+            int row1 = tree.getRowForPath(o1);
+            int row2 = tree.getRowForPath(o2);
+            return row1 - row2;
+        }
+
+        String getDisplayString(TreePath path, boolean selected, boolean leaf) {
+            int row = tree.getRowForPath(path);
+            boolean hasFocus = tree.getLeadSelectionRow() == row;
+            Object node = path.getLastPathComponent();
+            return tree.convertValueToText(node, selected, tree.isExpanded(row),
+                                           leaf, row, hasFocus);
+        }
+
+        /**
+         * Selection paths are in selection order.  The conversion to
+         * HTML requires display order.  This method resorts the paths
+         * to be in the display order.
+         */
+        TreePath[] getDisplayOrderPaths(TreePath[] paths) {
+            // sort the paths to display order rather than selection order
+            ArrayList<TreePath> selOrder = new ArrayList<TreePath>();
+            for (TreePath path : paths) {
+                selOrder.add(path);
+            }
+            Collections.sort(selOrder, this);
+            int n = selOrder.size();
+            TreePath[] displayPaths = new TreePath[n];
+            for (int i = 0; i < n; i++) {
+                displayPaths[i] = selOrder.get(i);
+            }
+            return displayPaths;
+        }
+
+        public int getSourceActions(JComponent c) {
+            return COPY;
+        }
+
+    }
 
 
     private class Handler implements CellEditorListener, FocusListener,

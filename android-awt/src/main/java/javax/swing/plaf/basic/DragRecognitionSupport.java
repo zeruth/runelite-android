@@ -1,80 +1,176 @@
 /*
- * Copyright (c) 2026, Tyler Bochard
- * All rights reserved.
+ * Copyright (c) 2005, 2008, Oracle and/or its affiliates. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
- * Part of android-awt, the Android shadow of the desktop JDK surface used by
- * runelite-android. Original work of this project, not derived from OpenJDK;
- * licensed under the BSD 2-Clause License (see the LICENSE file at the
- * repository root). Files ported from OpenJDK carry the OpenJDK header instead;
- * see android-awt/LICENSE.
+ * This code is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 only, as
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
+ * This code is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ * version 2 for more details (a copy is included in the LICENSE file that
+ * accompanied this code).
  *
- * 1. Redistributions of source code must retain the above copyright notice, this
- *    list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright notice,
- *    this list of conditions and the following disclaimer in the documentation
- *    and/or other materials provided with the distribution.
+ * You should have received a copy of the GNU General Public License version
+ * 2 along with this work; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
- * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
+ * or visit www.oracle.com if you need additional information or have any
+ * questions.
  */
 package javax.swing.plaf.basic;
 
-import java.awt.event.MouseEvent;
+import java.awt.event.*;
+import java.awt.dnd.DragSource;
+import javax.swing.*;
+import net.runelite.awt.impl.DragDropHost;
 
 /**
- * The JDK's drag gesture recognizer for the list, table and tree delegates.
- * The JDK arms a drag only when the pressed component has a
- * {@code TransferHandler} offering a source action for the modifiers; the
- * shadow has no {@code TransferHandler}, so no press ever arms one and the
- * answers are the JDK's unarmed ones: a press is not consumed, a drag does
- * not start, and a release returns no deferred press. The delegates then
- * handle selection on press exactly as the JDK does without a handler.
+ * Drag gesture recognition support for classes that have a
+ * <code>TransferHandler</code>. The gesture for a drag in this class is a mouse
+ * press followed by movement by <code>DragSource.getDragThreshold()</code>
+ * pixels. Android dispatches Swing pointer events through one EDT, so its
+ * recognition state is shared by the UI delegates on that thread.
+ *
+ * @author Shannon Hickey
  */
 class DragRecognitionSupport {
+    private int motionThreshold;
+    private MouseEvent dndArmedEvent;
+    private JComponent component;
 
     /**
-     * Called before a drag starts, so the delegate can finish the
-     * selection that the deferred press would have made.
+     * This interface allows us to pass in a handler to mouseDragged,
+     * so that we can be notified immediately before a drag begins.
      */
     public static interface BeforeDrag {
         public void dragStarting(MouseEvent me);
     }
 
-    private DragRecognitionSupport() {
+    private static final DragRecognitionSupport INSTANCE = new DragRecognitionSupport();
+
+    private static DragRecognitionSupport getDragRecognitionSupport() {
+        return INSTANCE;
     }
 
     /**
-     * Returns whether the press armed a drag recognition; never, with no
-     * transfer handler to drag from.
+     * Returns whether or not the event is potentially part of a drag sequence.
      */
     public static boolean mousePressed(MouseEvent me) {
-        return false;
+        return getDragRecognitionSupport().mousePressedImpl(me);
     }
 
     /**
-     * Returns the press that was deferred for drag recognition, or null;
-     * always null, since no press is deferred.
+     * If a dnd recognition has been going on, return the MouseEvent
+     * that started the recognition. Otherwise, return null.
      */
     public static MouseEvent mouseReleased(MouseEvent me) {
-        return null;
+        return getDragRecognitionSupport().mouseReleasedImpl(me);
     }
 
     /**
-     * Returns whether the drag was consumed by the recognizer; never, since
-     * nothing is armed.
+     * Returns whether or not a drag gesture recognition is ongoing.
      */
     public static boolean mouseDragged(MouseEvent me, BeforeDrag bd) {
+        return getDragRecognitionSupport().mouseDraggedImpl(me, bd);
+    }
+
+    private void clearState() {
+        dndArmedEvent = null;
+        component = null;
+    }
+
+    private int mapDragOperationFromModifiers(MouseEvent me,
+                                              TransferHandler th) {
+
+        if (th == null || !SwingUtilities.isLeftMouseButton(me)) {
+            return TransferHandler.NONE;
+        }
+
+        return DragDropHost.dropActionFor(me.getModifiersEx(),
+                                         th.getSourceActions(component));
+    }
+
+    /**
+     * Returns whether or not the event is potentially part of a drag sequence.
+     */
+    private boolean mousePressedImpl(MouseEvent me) {
+        component = (JComponent)me.getSource();
+
+        if (mapDragOperationFromModifiers(me, component.getTransferHandler())
+                != TransferHandler.NONE) {
+
+            motionThreshold = DragSource.getDragThreshold();
+            dndArmedEvent = me;
+            return true;
+        }
+
+        clearState();
         return false;
+    }
+
+    /**
+     * If a dnd recognition has been going on, return the MouseEvent
+     * that started the recognition. Otherwise, return null.
+     */
+    private MouseEvent mouseReleasedImpl(MouseEvent me) {
+        /* no recognition has been going on */
+        if (dndArmedEvent == null) {
+            return null;
+        }
+
+        MouseEvent retEvent = null;
+
+        if (me.getSource() == component) {
+            retEvent = dndArmedEvent;
+        } // else component has changed unexpectedly, so return null
+
+        clearState();
+        return retEvent;
+    }
+
+    /**
+     * Returns whether or not a drag gesture recognition is ongoing.
+     */
+    private boolean mouseDraggedImpl(MouseEvent me, BeforeDrag bd) {
+        /* no recognition is in progress */
+        if (dndArmedEvent == null) {
+            return false;
+        }
+
+        /* component has changed unexpectedly, so bail */
+        if (me.getSource() != component) {
+            clearState();
+            return false;
+        }
+
+        if (DragDropHost.isTouch() && !DragDropHost.isLongPressed()) {
+            clearState();
+            return false;
+        }
+
+        int dx = Math.abs(me.getX() - dndArmedEvent.getX());
+        int dy = Math.abs(me.getY() - dndArmedEvent.getY());
+        if ((dx > motionThreshold) || (dy > motionThreshold)) {
+            TransferHandler th = component.getTransferHandler();
+            int action = mapDragOperationFromModifiers(me, th);
+            if (action != TransferHandler.NONE) {
+                /* notify the BeforeDrag instance */
+                if (bd != null) {
+                    bd.dragStarting(dndArmedEvent);
+                }
+                try {
+                    th.exportAsDrag(component, dndArmedEvent, action);
+                } finally {
+                    clearState();
+                }
+            }
+        }
+
+        return true;
     }
 }

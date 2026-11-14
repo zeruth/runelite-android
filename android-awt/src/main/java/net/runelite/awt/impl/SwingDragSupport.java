@@ -111,7 +111,7 @@ public final class SwingDragSupport {
     }
 
     /** The desktop UIs start a drag only from the content being dragged. */
-    static boolean isDragPossible(JComponent c, Point p) {
+    public static boolean isDragPossible(JComponent c, Point p) {
         if (p == null) return false;
         if (c instanceof JList) {
             JList<?> list = (JList<?>) c;

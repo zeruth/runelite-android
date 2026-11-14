@@ -220,8 +220,20 @@ public class TestAwtWidgetContracts {
         for (char ch : text.toCharArray()) c.dispatchEvent(key(c, KeyEvent.KEY_TYPED, KeyEvent.VK_UNDEFINED, ch));
     }
 
+    private static void showForTyping(Component component) {
+        // The shadow focus manager follows the JDK: undisplayed controls cannot receive keys.
+        // Its host mount substitutes for an AWT peer in this Android-only fixture.
+        try {
+            Component.class.getMethod("setHostShowing", boolean.class).invoke(component, true);
+        } catch (ReflectiveOperationException failure) {
+            throw new AssertionError("Unable to mount text fixture", failure);
+        }
+        component.requestFocus();
+    }
+
     private static void textEditing() {
         TextField field = new TextField(10);
+        showForTyping(field);
         ArrayList<TextEvent> texts = new ArrayList<>();
         ArrayList<ActionEvent> actions = new ArrayList<>();
         field.addTextListener(texts::add);
@@ -246,6 +258,7 @@ public class TestAwtWidgetContracts {
         check(field.echoCharIsSet() && field.getEchoChar() == '*', "echo char");
 
         TextArea area = new TextArea("ab", 3, 10);
+        showForTyping(area);
         ArrayList<TextEvent> areaTexts = new ArrayList<>();
         area.addTextListener(areaTexts::add);
         area.append("\ncd");

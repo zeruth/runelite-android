@@ -122,9 +122,9 @@ class RuneLiteLauncher(private val context: android.content.Context? = null) {
 
                 val safeMode = args.contains("--safe-mode")
                 if (safeMode) {
-                    logLine("--safe-mode: skipping PluginBootstrap entirely (no plugins will load)")
+                    logLine("--safe-mode: core plugins use RuneLite safe-mode filtering; skipping Android UI setup")
                 } else if (context != null) {
-                    logLine("bootstrapping plugins (RuneLite.loadCorePlugins doesn't see Android dex)")
+                    logLine("finishing Android plugin UI setup")
                     PluginBootstrap.bootstrap(context)
                     logLine("plugin bootstrap done")
                 } else {

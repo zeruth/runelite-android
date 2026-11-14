@@ -46,6 +46,8 @@ public abstract class EditorKit implements Cloneable {
     public abstract javax.swing.text.Caret createCaret();
     public abstract Document createDefaultDocument();
 
+    public ViewFactory getViewFactory() { return null; }
+
     public void install(JTextComponent c) {}
     public void deinstall(JTextComponent c) {}
 

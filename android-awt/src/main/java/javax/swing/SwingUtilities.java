@@ -237,7 +237,7 @@ public class SwingUtilities implements SwingConstants {
      * @param y the y target location
      */
     public static Component getDeepestComponentAt(Component parent, int x, int y) {
-        if (!contains(parent, x, y)) {
+        if (!parent.contains(x, y)) {
             return null;
         }
         if (parent instanceof Container) {
@@ -249,7 +249,7 @@ public class SwingUtilities implements SwingConstants {
                         comp = getDeepestComponentAt(comp, x - loc.x, y - loc.y);
                     } else {
                         // Component.getComponentAt for a leaf.
-                        comp = contains(comp, x - loc.x, y - loc.y) ? comp : null;
+                        comp = comp.getComponentAt(x - loc.x, y - loc.y);
                     }
                     if (comp != null && comp.isVisible()) {
                         return comp;
@@ -260,11 +260,6 @@ public class SwingUtilities implements SwingConstants {
         return parent;
     }
 
-    // Component.contains, which the shadow Component spells only as the deprecated inside().
-    @SuppressWarnings("deprecation")
-    private static boolean contains(Component c, int x, int y) {
-        return c.inside(x, y);
-    }
 
     /**
      * Returns a MouseEvent similar to <code>sourceEvent</code> except that its x
@@ -1303,7 +1298,7 @@ public class SwingUtilities implements SwingConstants {
                 for (Component child : ((Container) c).getComponents()) {
                     if (child instanceof Accessible && child.isShowing()) {
                         Point location = child.getLocation();
-                        if (contains(child, p.x - location.x, p.y - location.y)) {
+                        if (child.contains(p.x - location.x, p.y - location.y)) {
                             return (Accessible) child;
                         }
                     }
@@ -1313,13 +1308,13 @@ public class SwingUtilities implements SwingConstants {
         }
         if (c instanceof Container) {
             Component ret = c;
-            if (!contains(c, p.x, p.y)) {
+            if (!c.contains(p.x, p.y)) {
                 ret = null;
             } else {
                 for (Component comp : ((Container) c).getComponents()) {
                     if (comp != null && comp.isShowing()) {
                         Point location = comp.getLocation();
-                        if (contains(comp, p.x - location.x, p.y - location.y)) {
+                        if (comp.contains(p.x - location.x, p.y - location.y)) {
                             ret = comp;
                         }
                     }

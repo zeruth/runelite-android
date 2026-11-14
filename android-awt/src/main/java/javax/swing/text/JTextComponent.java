@@ -33,8 +33,8 @@ package javax.swing.text;
 import javax.swing.JComponent;
 import javax.swing.event.CaretListener;
 
-public abstract class JTextComponent extends JComponent implements javax.accessibility.Accessible {
-    public javax.swing.plaf.TextUI getUI() { return (javax.swing.plaf.TextUI) ui; }
+public abstract class JTextComponent extends JComponent implements javax.accessibility.Accessible, javax.swing.Scrollable {
+    public javax.swing.plaf.TextUI getUI() { return ui == null ? net.runelite.awt.impl.TextComponentUI.INSTANCE : (javax.swing.plaf.TextUI) ui; }
     public void setUI(javax.swing.plaf.TextUI ui) { super.setUI(ui); }
 
     public javax.accessibility.AccessibleContext getAccessibleContext() {
@@ -108,6 +108,7 @@ public abstract class JTextComponent extends JComponent implements javax.accessi
     }
 
     public JTextComponent() {
+        enableEvents(java.awt.AWTEvent.KEY_EVENT_MASK | java.awt.AWTEvent.INPUT_METHOD_EVENT_MASK);
         setBorder(new MarginBorder());
         setTransferHandler(new TextTransferHandler());
         this.doc = new PlainDocument();
@@ -500,8 +501,80 @@ public abstract class JTextComponent extends JComponent implements javax.accessi
     public void copy(){String value=getSelectedText();if(value!=null)getToolkit().getSystemClipboard().setContents(new java.awt.datatransfer.StringSelection(value),null);}
     public void cut(){if(isEditable()){copy();replaceSelection("");}}
     public void paste(){if(!isEditable())return;try{java.awt.datatransfer.Transferable value=getToolkit().getSystemClipboard().getContents(this);if(value!=null&&value.isDataFlavorSupported(java.awt.datatransfer.DataFlavor.stringFlavor))replaceSelection((String)value.getTransferData(java.awt.datatransfer.DataFlavor.stringFlavor));}catch(java.awt.datatransfer.UnsupportedFlavorException|java.io.IOException ignored){}}
-    public java.awt.Rectangle modelToView(int offset)throws BadLocationException{if(offset<0||offset>doc.getLength())throw new BadLocationException("offset",offset);String before=doc.getText(0,offset);int newline=before.lastIndexOf('\n');int row=0;for(int i=0;i<before.length();i++)if(before.charAt(i)=='\n')row++;java.awt.FontMetrics fm=getFontMetrics(getFont());java.awt.Insets in=getInsets();return new java.awt.Rectangle(in.left+fm.stringWidth(before.substring(newline+1)),in.top+row*fm.getHeight(),1,fm.getHeight());}
-    public int viewToModel(java.awt.Point point){java.awt.FontMetrics fm=getFontMetrics(getFont());java.awt.Insets in=getInsets();int row=Math.max(0,(point.y-in.top)/Math.max(1,fm.getHeight()));String value=getText();int start=0;while(row-->0){int n=value.indexOf('\n',start);if(n<0)return value.length();start=n+1;}int end=value.indexOf('\n',start);if(end<0)end=value.length();for(int i=start;i<end;i++)if(fm.stringWidth(value.substring(start,i+1))>point.x-in.left)return i;return end;}
+    public java.awt.Dimension getPreferredScrollableViewportSize() { return getPreferredSize(); }
+    public int getScrollableUnitIncrement(java.awt.Rectangle visible, int orientation, int direction) {
+        if (orientation == javax.swing.SwingConstants.VERTICAL) return Math.max(1, getFontMetrics(getFont()).getHeight());
+        if (orientation == javax.swing.SwingConstants.HORIZONTAL) return Math.max(1, getFontMetrics(getFont()).charWidth('m'));
+        throw new IllegalArgumentException("orientation");
+    }
+    public int getScrollableBlockIncrement(java.awt.Rectangle visible, int orientation, int direction) {
+        int unit = getScrollableUnitIncrement(visible, orientation, direction);
+        return Math.max(unit, (orientation == javax.swing.SwingConstants.VERTICAL ? visible.height : visible.width) - unit);
+    }
+    public boolean getScrollableTracksViewportWidth() {
+        return getParent() instanceof javax.swing.JViewport && getParent().getWidth() > getPreferredSize().width;
+    }
+    public boolean getScrollableTracksViewportHeight() {
+        return getParent() instanceof javax.swing.JViewport && getParent().getHeight() > getPreferredSize().height;
+    }
+
+    private boolean wrapsText() {
+        return this instanceof javax.swing.JTextArea ? ((javax.swing.JTextArea) this).getLineWrap() : !(this instanceof javax.swing.JTextField);
+    }
+    private boolean wrapsWords() {
+        return !(this instanceof javax.swing.JTextArea) || ((javax.swing.JTextArea) this).getWrapStyleWord();
+    }
+    private int textTabSize() {
+        return this instanceof javax.swing.JTextArea ? ((javax.swing.JTextArea) this).getTabSize() : 8;
+    }
+    public java.awt.Rectangle modelToView(int offset) throws BadLocationException {
+        if (offset < 0 || offset > doc.getLength()) throw new BadLocationException("offset", offset);
+        java.util.List<String> lines = new java.util.ArrayList<>();
+        java.util.List<int[]> positions = new java.util.ArrayList<>();
+        layoutLines(textWidth(), wrapsText(), wrapsWords(), textTabSize(), lines, positions);
+        java.awt.FontMetrics fm = getFontMetrics(getFont());
+        java.awt.Insets in = getInsets();
+        for (int row = 0; row < lines.size(); row++) {
+            int[] offsets = positions.get(row);
+            boolean last = row == lines.size() - 1;
+            if (last || offset < positions.get(row + 1)[0]) {
+                int column = 0;
+                while (column < offsets.length - 1 && offsets[column] < offset) column++;
+                return new java.awt.Rectangle(in.left + fm.stringWidth(lines.get(row).substring(0, column)), in.top + row * fm.getHeight(), 1, fm.getHeight());
+            }
+        }
+        return new java.awt.Rectangle(in.left, in.top, 1, fm.getHeight());
+    }
+    public int viewToModel(java.awt.Point point) {
+        java.util.List<String> lines = new java.util.ArrayList<>();
+        java.util.List<int[]> positions = new java.util.ArrayList<>();
+        layoutLines(textWidth(), wrapsText(), wrapsWords(), textTabSize(), lines, positions);
+        java.awt.FontMetrics fm = getFontMetrics(getFont());
+        java.awt.Insets in = getInsets();
+        if (point.y < in.top) return 0;
+        int row = (point.y - in.top) / Math.max(1, fm.getHeight());
+        if (row >= lines.size()) return doc.getLength();
+        String line = lines.get(row);
+        int[] offsets = positions.get(row);
+        int previous = 0;
+        for (int i = 0; i < line.length();) {
+            int next = i + Character.charCount(line.codePointAt(i));
+            int right = fm.stringWidth(line.substring(0, next));
+            if (point.x - in.left < (previous + right) / 2.0) return offsets[i];
+            previous = right; i = next;
+        }
+        return offsets[offsets.length - 1];
+    }
+    public java.awt.geom.Rectangle2D modelToView2D(int offset) throws BadLocationException {
+        return ui instanceof javax.swing.plaf.TextUI
+            ? ((javax.swing.plaf.TextUI) ui).modelToView2D(this, offset, Position.Bias.Forward)
+            : modelToView(offset);
+    }
+    public int viewToModel2D(java.awt.geom.Point2D point) {
+        if (ui instanceof javax.swing.plaf.TextUI)
+            return ((javax.swing.plaf.TextUI) ui).viewToModel2D(this, point, new Position.Bias[1]);
+        return viewToModel(new java.awt.Point((int) Math.floor(point.getX()), (int) Math.floor(point.getY())));
+    }
 
     // Input method support, after the JDK: composed text is inserted into the document between
     // two positions (so getText() and the views include it, as on desktop) and replaced by each

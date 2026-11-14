@@ -1003,36 +1003,28 @@ public class TransferHandler implements Serializable {
             component = e.getDropTargetContext().getComponent();
             TransferHandler importer = component instanceof JComponent
                     ? ((JComponent) component).getTransferHandler() : null;
-
-            if (importer == null) {
-                e.rejectDrop();
-                cleanup(false);
-                return;
-            }
-
-            support.setDNDVariables(component, e);
-            boolean canImport = importer.canImport(support);
-
-            if (canImport) {
+            boolean success = false;
+            try {
+                if (importer == null) {
+                    e.rejectDrop();
+                    return;
+                }
+                support.setDNDVariables(component, e);
+                if (!importer.canImport(support)) {
+                    e.rejectDrop();
+                    return;
+                }
                 e.acceptDrop(support.getDropAction());
-
-                boolean showLocation = support.showDropLocationIsSet ? support.showDropLocation : canImport;
-
+                boolean showLocation = !support.showDropLocationIsSet || support.showDropLocation;
                 setComponentDropLocation(showLocation ? support : null, false);
-
-                boolean success;
-
                 try {
                     success = importer.importData(support);
                 } catch (RuntimeException re) {
                     success = false;
                 }
-
                 e.dropComplete(success);
+            } finally {
                 cleanup(success);
-            } else {
-                e.rejectDrop();
-                cleanup(false);
             }
         }
 
@@ -1098,14 +1090,17 @@ public class TransferHandler implements Serializable {
             DragSourceContext dsc = dsde.getDragSourceContext();
             JComponent c = (JComponent) dsc.getComponent();
             TransferHandler th = c.getTransferHandler();
-            if (th != null) {
-                if (dsde.getDropSuccess()) {
-                    th.exportDone(c, dsc.getTransferable(), dsde.getDropAction());
-                } else {
-                    th.exportDone(c, dsc.getTransferable(), NONE);
+            try {
+                if (th != null) {
+                    if (dsde.getDropSuccess()) {
+                        th.exportDone(c, dsc.getTransferable(), dsde.getDropAction());
+                    } else {
+                        th.exportDone(c, dsc.getTransferable(), NONE);
+                    }
                 }
+            } finally {
+                c.setAutoscrolls(scrolls);
             }
-            c.setAutoscrolls(scrolls);
         }
 
         public void dropActionChanged(DragSourceDragEvent dsde) {

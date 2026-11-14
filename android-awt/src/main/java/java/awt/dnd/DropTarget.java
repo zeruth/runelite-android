@@ -467,6 +467,7 @@ public class DropTarget implements DropTargetListener, Serializable {
      * @since 9
      */
     public void removeNotify() {
+        clearAutoscroll();
         synchronized (attached) {
             attached.remove(this);
         }

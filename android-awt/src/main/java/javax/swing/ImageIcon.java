@@ -57,19 +57,27 @@ public class ImageIcon implements Icon, Serializable {
     public ImageIcon(byte[] imageData) { loadImage(loadBytes(imageData)); }
     public ImageIcon(byte[] imageData, String description) { loadImage(loadBytes(imageData)); this.description = description; }
 
-    /**
-     * Records the image and its load status. Every image this class holds is decoded
-     * synchronously (ImageIO, or a caller's already-built image), so there is no
-     * MediaTracker wait: a present image is COMPLETE, a failed decode is ERRORED with
-     * a null image, which getIconWidth/Height report as -1 like a broken JDK icon.
-     */
+    /** Loads producer-backed images through the same tracker used by desktop icons. */
     protected void loadImage(Image image) {
         this.image = image;
         if (image == null) {
             loadStatus = MediaTracker.ERRORED;
-        } else {
-            loadStatus = (image.getWidth(null) < 0 || image.getHeight(null) < 0)
-                ? MediaTracker.ERRORED : MediaTracker.COMPLETE;
+            return;
+        }
+        if (image instanceof BufferedImage) {
+            loadStatus = MediaTracker.COMPLETE;
+            return;
+        }
+        MediaTracker tracker = new MediaTracker(new Component() {});
+        tracker.addImage(image, 0);
+        try {
+            tracker.waitForID(0);
+            loadStatus = tracker.statusID(0, false);
+        } catch (InterruptedException interrupted) {
+            loadStatus = MediaTracker.ABORTED;
+            Thread.currentThread().interrupt();
+        } finally {
+            tracker.removeImage(image, 0);
         }
     }
 

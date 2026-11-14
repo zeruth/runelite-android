@@ -144,7 +144,8 @@ public class JSplitPane extends JComponent implements javax.accessibility.Access
      */
     public void updateUI() {
         try {
-            setUI((javax.swing.plaf.SplitPaneUI) UIManager.getUI(this));
+            javax.swing.plaf.ComponentUI delegate = UIManager.getUI(this);
+            setUI(delegate instanceof javax.swing.plaf.SplitPaneUI ? (javax.swing.plaf.SplitPaneUI) delegate : new javax.swing.plaf.basic.BasicSplitPaneUI());
         } catch (LinkageError incompatible) {
             ui = null;
             setUI(new javax.swing.plaf.basic.BasicSplitPaneUI());

@@ -203,7 +203,10 @@ public class JPopupMenu extends JComponent implements javax.accessibility.Access
 
     /** Lays the open popup out again at its preferred size. */
     public void pack() {
-        if (isVisible()) placeOnScreen();
+        if (isVisible()) {
+            placeOnScreen();
+            firePropertyChange("popupSize", null, new Dimension(getSize()));
+        }
     }
 
     public void setPopupSize(Dimension d) {

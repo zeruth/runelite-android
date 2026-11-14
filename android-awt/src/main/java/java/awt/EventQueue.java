@@ -302,11 +302,27 @@ public class EventQueue {
                 long now = android.os.SystemClock.uptimeMillis();
                 if (now - start < STALL_MS) continue;
                 if (start == reportedFor && now - lastReport < REPEAT_MS) continue;
+                boolean firstReport = start != reportedFor;
                 reportedFor = start;
                 lastReport = now;
                 StringBuilder sb = new StringBuilder("EDT blocked for ").append(now - start).append(" ms in one task:");
                 for (StackTraceElement e : edt.getStackTrace()) sb.append("\n\tat ").append(e);
                 android.util.Log.w("AWT-EDT", sb.toString());
+                // A blocked EDT alone cannot show the other side of a startup lock cycle.
+                // Sample the Android UI/launcher workers once per stalled task, not every poll.
+                if (firstReport) {
+                    try {
+                        for (java.util.Map.Entry<Thread, StackTraceElement[]> entry : Thread.getAllStackTraces().entrySet()) {
+                            String name = entry.getKey().getName();
+                            if (!name.equals("main") && !name.startsWith("DefaultDispatcher")) continue;
+                            StringBuilder trace = new StringBuilder("Startup thread ").append(name)
+                                .append(" state=").append(entry.getKey().getState());
+                            StackTraceElement[] frames = entry.getValue();
+                            for (int i = 0; i < Math.min(frames.length, 24); i++) trace.append("\n\tat ").append(frames[i]);
+                            android.util.Log.w("AWT-EDT", trace.toString());
+                        }
+                    } catch (Throwable error) { android.util.Log.w("AWT-EDT", "Could not sample startup threads", error); }
+                }
             }
         }, "AWT-EDT-Watchdog");
         watchdog.setDaemon(true);

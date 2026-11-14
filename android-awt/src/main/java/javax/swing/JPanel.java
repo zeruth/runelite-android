@@ -66,36 +66,6 @@ public class JPanel extends JComponent implements javax.accessibility.Accessible
     public void updateUI() {
         setUI((javax.swing.plaf.PanelUI) UIManager.getUI(this));
     }
-    // JComponent's sizing of the JDK: the delegate answers first and a null answer (every
-    // BasicPanelUI) falls back to the layout manager. The shadow JComponent skips the
-    // delegate, so the panel asks it here.
-    @Override
-    public java.awt.Dimension getPreferredSize() {
-        if (!isPreferredSizeSet() && ui != null) {
-            java.awt.Dimension d = ui.getPreferredSize(this);
-            if (d != null) return d;
-        }
-        return super.getPreferredSize();
-    }
-
-    @Override
-    public java.awt.Dimension getMinimumSize() {
-        if (!isMinimumSizeSet() && ui != null) {
-            java.awt.Dimension d = ui.getMinimumSize(this);
-            if (d != null) return d;
-        }
-        return super.getMinimumSize();
-    }
-
-    @Override
-    public java.awt.Dimension getMaximumSize() {
-        if (!isMaximumSizeSet() && ui != null) {
-            java.awt.Dimension d = ui.getMaximumSize(this);
-            if (d != null) return d;
-        }
-        return super.getMaximumSize();
-    }
-
     public javax.swing.plaf.PanelUI getUI(){return (javax.swing.plaf.PanelUI)ui;}
     public void setUI(javax.swing.plaf.PanelUI value){super.setUI(value);}
     public String getUIClassID(){return "PanelUI";}

@@ -7,16 +7,7 @@ import java.lang.reflect.Modifier
 
 private const val TAG = "PluginBootstrap"
 
-/**
- * Replicates [PluginManager.loadCorePlugins] on Android. Guava's `ClassPath.from(loader)`
- * relies on URL-based classloader scanning and returns nothing on Android's
- * [dalvik.system.BaseDexClassLoader], so RuneLite ends up with zero registered plugins
- * (and therefore zero toolbar nav buttons).
- *
- * We enumerate classes ourselves by walking each dex file's entries via reflection on
- * `BaseDexClassLoader.pathList.dexElements`, filter to the plugin package, then hand the
- * resulting class list to `PluginManager.loadPlugins` and start them.
- */
+/** Discovers bundled plugins from DEX while preserving RuneLite's startup ordering. */
 object PluginBootstrap {
     /** Every root we scan dex entries under for @PluginDescriptor classes. Comma-namespaced
      *  so we pick up 117HD's {@code rs117.hd} alongside RuneLite's main plugin tree. */
@@ -38,73 +29,38 @@ object PluginBootstrap {
         "net.runelite.client.plugins.gpu",
     )
 
+    /** Called in place of the URL-based scan, before sideloaded or Hub plugins load. */
+    @JvmStatic
+    fun loadCorePlugins(pluginManager: net.runelite.client.plugins.PluginManager) {
+        val classes = enumeratePluginClasses()
+        check(classes.isNotEmpty()) { "No bundled plugin classes found in DEX" }
+        val plugins = pluginManager.loadPlugins(classes, null)
+        Log.i(TAG, "registered ${plugins.size} core plugins before external loading")
+        // Preserve old boolean choices before RuneLite loads enum defaults.
+        net.runelite.mp.hd.AndroidHdHost.migrateConfiguration(configManager())
+    }
+
+    /** Install the Android renderer host after defaults load and before plugins start. */
+    @JvmStatic
+    fun startPlugins(pluginManager: net.runelite.client.plugins.PluginManager) {
+        net.runelite.mp.hd.AndroidHdHost.configure(pluginManager, configManager())
+        pluginManager.startPlugins()
+        Log.i(TAG, "started plugins in RuneLite startup sequence")
+    }
+
+    private fun configManager(): net.runelite.client.config.ConfigManager =
+        (checkNotNull(getInjector()) { "RuneLite injector is not initialized" } as com.google.inject.Injector)
+            .getInstance(net.runelite.client.config.ConfigManager::class.java)
+
+    @Suppress("UNUSED_PARAMETER")
     fun bootstrap(context: Context) {
-        val started = System.currentTimeMillis()
         try {
-            val injector = getInjector() ?: run {
-                Log.e(TAG, "RuneLite.injector is null — RuneLite.start probably failed before reaching plugin loading")
-                return
-            }
-
-            val pluginManagerClass = Class.forName("net.runelite.client.plugins.PluginManager")
-            val getInstance = injector.javaClass.getMethod("getInstance", Class::class.java)
-            val pluginManager = getInstance.invoke(injector, pluginManagerClass)
-            Log.i(TAG, "got pluginManager: $pluginManager")
-
-            val pluginClasses = enumeratePluginClasses(context)
-            Log.i(TAG, "enumerated ${pluginClasses.size} candidate plugin classes")
-
-            val loadPlugins = pluginManagerClass.getMethod(
-                "loadPlugins", List::class.java, java.util.function.BiConsumer::class.java
-            )
-            val plugins = loadPlugins.invoke(pluginManager, pluginClasses, null) as List<*>
-            Log.i(TAG, "loaded ${plugins.size} plugins")
-
-            // Preserve 117's old boolean choices before default loading replaces invalid enum values.
-            net.runelite.mp.hd.AndroidHdHost.migrateConfiguration(
-                (injector as com.google.inject.Injector).getInstance(net.runelite.client.config.ConfigManager::class.java)
-            )
-            val loadDefaultConfig = pluginManagerClass.getMethod(
-                "loadDefaultPluginConfiguration", Collection::class.java
-            )
-            loadDefaultConfig.invoke(pluginManager, null)
-            Log.i(TAG, "loaded default plugin configurations")
-
-            net.runelite.mp.hd.AndroidHdHost.configure(
-                pluginManager as net.runelite.client.plugins.PluginManager,
-                (injector as com.google.inject.Injector).getInstance(net.runelite.client.config.ConfigManager::class.java)
-            )
-
-            val startPlugins = pluginManagerClass.getMethod("startPlugins")
-            startPlugins.invoke(pluginManager)
-            Log.i(TAG, "started plugins in ${System.currentTimeMillis() - started}ms")
-
+            val injector = checkNotNull(getInjector()) { "RuneLite injector is not initialized" }
             pinDefaultPluginsIfUnset(injector)
-
-            // Retry external plugin load now that builtins are registered. The first
-            // pass ran inside RuneLite.main BEFORE PluginBootstrap, so any plugin-hub
-            // plugin that declares an @PluginDependency on a builtin (rasta-hud →
-            // XpTrackerPlugin is the canonical case) failed with "Unmet dependency"
-            // and never loaded. Re-running loadExternalPlugins picks them up: the
-            // already-loaded externals are detected via getPlugins() and skipped, and
-            // the previously-failed ones get a second chance with the builtin registry
-            // populated. SplashScreen has closed by now so the second pass also
-            // applies default config + starts them (same code path as in-session install).
-            retryExternalPluginLoad(injector)
-
-            // Hook in the Compose-side listeners for the desktop plugins' "open the
-            // sidebar panel for X" callbacks. With HEADLESS_CHROME the Swing sidebar
-            // is invisible, so without these the right-click "Lookup", loot-tracker's
-            // auto-show, etc. would silently no-op. See NavBarBridge.installPanelOpenHook.
-            try { net.runelite.mp.ui.bridge.NavBarBridge.installPanelOpenHook() }
-            catch (t: Throwable) { Log.w(TAG, "installPanelOpenHook failed", t) }
+            net.runelite.mp.ui.bridge.NavBarBridge.installPanelOpenHook()
         } catch (t: Throwable) {
-            Log.e(TAG, "bootstrap failed", t)
-            try {
-                AndroidCrashReporter.nonFatal(t)
-            } catch (crashlyticsError: Throwable) {
-                Log.w(TAG, "Failed to report bootstrap exception to Crashlytics", crashlyticsError)
-            }
+            Log.e(TAG, "Android plugin UI setup failed", t)
+            AndroidCrashReporter.nonFatal(t)
         }
     }
 
@@ -149,19 +105,6 @@ object PluginBootstrap {
         }
     }
 
-    private fun retryExternalPluginLoad(injector: Any) {
-        try {
-            val epmClass = Class.forName("net.runelite.client.externalplugins.ExternalPluginManager")
-            val getInstance = injector.javaClass.getMethod("getInstance", Class::class.java)
-            val epm = getInstance.invoke(injector, epmClass)
-            val loadExternal = epmClass.getMethod("loadExternalPlugins")
-            loadExternal.invoke(epm)
-            Log.i(TAG, "retried loadExternalPlugins() after builtin registration")
-        } catch (t: Throwable) {
-            Log.w(TAG, "retry of loadExternalPlugins() failed", t)
-        }
-    }
-
     private fun getInjector(): Any? {
         val runeLiteClass = Class.forName("net.runelite.client.RuneLite")
         val injectorField = runeLiteClass.getDeclaredField("injector")
@@ -171,10 +114,10 @@ object PluginBootstrap {
 
     /**
      * Walk every dex file in the current classloader's pathList and load every class whose
-     * name starts with [PLUGIN_PACKAGE]. We don't filter for @PluginDescriptor here — that's
+     * name starts with [PLUGIN_PACKAGES]. We don't filter for @PluginDescriptor here — that's
      * PluginManager.loadPlugins' job, and we'd rather over-include than miss a plugin.
      */
-    private fun enumeratePluginClasses(context: Context): List<Class<*>> {
+    private fun enumeratePluginClasses(): List<Class<*>> {
         val classLoader = PluginBootstrap::class.java.classLoader
             ?: return emptyList()
 

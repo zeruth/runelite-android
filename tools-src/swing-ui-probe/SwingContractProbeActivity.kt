@@ -51,13 +51,18 @@ class SwingContractProbeActivity : ComponentActivity() {
         }
         nativeRoot.addView(commands)
         setContentView(nativeRoot)
+        // Independent contracts must still run when the general widget fixture fails.
+        if (intent.getStringExtra("probe") == "contract") {
+            nativeRoot.postDelayed({ runAutomaticProbe("contract") }, 700)
+            return
+        }
         SwingUtilities.invokeLater {
             try {
                 val root = widgets()
                 runOnUiThread {
                     nativeRoot.addView(SwingPanelView(this, "contracts", root), LinearLayout.LayoutParams(-1, 0, 1f))
                     Log.i(TAG, "READY checks=$checks")
-                    intent.getStringExtra("probe")?.let { command -> nativeRoot.postDelayed({ runProbe(command) }, 700) }
+                    intent.getStringExtra("probe")?.let { command -> nativeRoot.postDelayed({ runAutomaticProbe(command) }, 700) }
                 }
             } catch (error: Throwable) { Log.e(TAG, "SETUP FAILED", error) }
         }
@@ -69,11 +74,36 @@ class SwingContractProbeActivity : ComponentActivity() {
         Log.i(TAG, "PASS $name")
     }
 
+    private fun runAutomaticProbe(command: String) {
+        if (automaticProbeStarted.compareAndSet(false, true)) runProbe(command)
+    }
+
     private fun runProbe(command: String) {
         val action = Runnable {
             try {
                 Log.i(TAG, "BEGIN $command")
                 when (command) {
+                    "contract" -> {
+                        val name = intent.getStringExtra("contract") ?: error("Missing contract name")
+                        require(name.matches(Regex("Test[A-Za-z0-9]+Contracts|CombinedFirstPassProbe")))
+                        if (name == "TestBasicLookAndFeelContracts") {
+                            val reference = File(cacheDir, "basic-laf-jdk-keys.txt")
+                            assets.open("basic-laf-jdk-keys.txt").use { input -> reference.outputStream().use { input.copyTo(it) } }
+                            System.setProperty("compat.basicLafKeys", reference.absolutePath)
+                        }
+                        val dexName = intent.getStringExtra("contractDex")
+                        val loader = if (dexName != null) {
+                            require(dexName.matches(Regex("[A-Za-z0-9_.-]+[.]jar")))
+                            val dex = File(File(filesDir, "contracts"), dexName)
+                            check(dex.isFile && !dex.canWrite()) { "Contract DEX must be an app-private read-only file" }
+                            DexClassLoader(dex.absolutePath, codeCacheDir.absolutePath, null, javaClass.classLoader)
+                        } else javaClass.classLoader
+                        val contract = loader.loadClass(name)
+                        if (dexName != null) check(contract.classLoader === loader) { "Contract was shadowed by the APK" }
+                        contract.getMethod("main", Array<String>::class.java)
+                            .invoke(null, (intent.getStringExtra("contractArgs")?.let { arrayOf(it) } ?: emptyArray<String>()) as Any)
+                        Log.i(TAG, "RESULT contract=$name passed")
+                    }
                     "input" -> Log.i(TAG, "RESULT input=" + JOptionPane.showInputDialog(null, "Enter probe text", "Text input", JOptionPane.QUESTION_MESSAGE, null, null, "seed"))
                     "choice" -> Log.i(TAG, "RESULT choice=" + JOptionPane.showInputDialog(null, "Choose a value", "Choice", JOptionPane.QUESTION_MESSAGE, null, arrayOf("Alpha", "Beta", "Gamma"), "Beta"))
                     "form" -> {
@@ -111,9 +141,7 @@ class SwingContractProbeActivity : ComponentActivity() {
                     "keyboard-replay" -> {
                         val output = File(filesDir, "keyboard-replay-result.txt")
                         try {
-                            java.awt.EventQueue.invokeAndWait {
-                                Class.forName("TestKeyboardSession").getMethod("run", android.content.Context::class.java).invoke(null, this)
-                            }
+                            Class.forName("TestKeyboardSession").getMethod("run", android.content.Context::class.java).invoke(null, this)
                             val result = Class.forName("TestImeCompositionReplay").getMethod("run", android.content.Context::class.java).invoke(null, this) as String
                             output.writeText("PASS existing keyboard session contracts\n$result")
                             Log.i(TAG, result)
@@ -197,7 +225,7 @@ class SwingContractProbeActivity : ComponentActivity() {
             } catch (error: Throwable) { Log.e(TAG, "FAILED $command", error) }
         }
         if (command == "keyboard-replay") runOnUiThread(action)
-        else if (command in setOf("graphics", "graphics-benchmark", "runtime", "audio")) Thread(action, "Compat-$command").start()
+        else if (command in setOf("graphics", "graphics-benchmark", "runtime", "audio", "contract")) Thread(action, "Compat-$command").start()
         else SwingUtilities.invokeLater(action)
     }
 
@@ -315,13 +343,16 @@ class SwingContractProbeActivity : ComponentActivity() {
         menu.remove(second)
         check("menu bar clears removed selection", !menu.isSelected)
 
-        val tabs = JTabbedPane()
-        repeat(7) { tabs.addTab("$it", JLabel("Content $it")) }
+        val tabs = JTabbedPane(JTabbedPane.TOP, JTabbedPane.SCROLL_TAB_LAYOUT)
+        repeat(7) { tabs.addTab("Tab $it", JLabel("Content $it")) }
         tabs.setSize(150, 100); tabs.selectedIndex = 6; tabs.doLayout()
         val selected = tabs.getBoundsAt(6)
         check("overflow selected tab remains reachable", selected.width > 0 && tabs.indexAtLocation(selected.x + 2, selected.y + 2) == 6)
-        press(tabs, 120, 10)
-        check("overflow arrow exposes preceding tabs", tabs.getBoundsAt(3).width > 0 && tabs.indexAtLocation(120, 10) == -1)
+        val beforeScroll = tabs.getBoundsAt(6).x
+        press(tabs, tabs.width - 36, 10)
+        check("overflow back arrow moves the run", tabs.getBoundsAt(6).x > beforeScroll && tabs.indexAtLocation(tabs.width - 36, 10) == -1)
+        press(tabs, tabs.width - 12, 10)
+        check("overflow forward arrow moves the run", tabs.getBoundsAt(6).x < beforeScroll + 1)
 
         val split = JSplitPane(JSplitPane.HORIZONTAL_SPLIT, JLabel("Left"), JLabel("Right"))
         split.setSize(300, 80); split.dividerLocation = 100; split.isOneTouchExpandable = true; split.doLayout()
@@ -363,7 +394,8 @@ class SwingContractProbeActivity : ComponentActivity() {
         sorter.rowFilter = null
         check("removing filter restores selected model row", table.selectedRow == 0)
         model.insertRow(0, arrayOf<Any>("0", 3))
-        check("table insertion shifts selected model identity", table.getValueAt(table.selectedRow, 0) == "A")
+        val originalViewRow = table.convertRowIndexToView(1)
+        check("table insertion keeps the original model row selected", table.isRowSelected(originalViewRow) && table.getValueAt(originalViewRow, 0) == "A")
     }
 
     private fun press(component: java.awt.Component, x: Int, y: Int) {
@@ -374,5 +406,8 @@ class SwingContractProbeActivity : ComponentActivity() {
     }
 
     override fun onDestroy() { dialogs.close(); super.onDestroy() }
-    companion object { private const val TAG = "SwingContractProbe" }
+    companion object {
+        private const val TAG = "SwingContractProbe"
+        private val automaticProbeStarted = java.util.concurrent.atomic.AtomicBoolean()
+    }
 }

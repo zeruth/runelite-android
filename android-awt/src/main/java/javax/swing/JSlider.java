@@ -216,6 +216,7 @@ public class JSlider extends JComponent implements SwingConstants, javax.accessi
             Object value = elements.nextElement();
             if (value instanceof JComponent) {
                 JComponent component = (JComponent) value;
+                component.updateUI();
                 component.setSize(component.getPreferredSize());
             }
         }

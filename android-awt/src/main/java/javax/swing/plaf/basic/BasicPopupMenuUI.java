@@ -206,10 +206,6 @@ public class BasicPopupMenuUI extends PopupMenuUI {
         c.hostPaintDefaultComponent(g);
     }
 
-    public Dimension getPreferredSize(JComponent c) {
-        return c.hostDefaultPreferredSize();
-    }
-
     static MenuElement getFirstPopup() {
         MenuSelectionManager msm = MenuSelectionManager.defaultManager();
         MenuElement[] p = msm.getSelectedPath();

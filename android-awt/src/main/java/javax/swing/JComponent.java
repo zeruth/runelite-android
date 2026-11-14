@@ -248,6 +248,19 @@ public class JComponent extends Container {
     // wide despite both being set to 25, eating into the plugin name label. Removing the
     // shadows fixes that for every JComponent subclass.
 
+    @Override
+    public Dimension getPreferredSize() {
+        // A UI delegate may measure the layout too, so it uses the same lock order.
+        synchronized (getTreeLock()) {
+            if (isPreferredSizeSet()) return super.getPreferredSize();
+            if (ui != null) {
+                Dimension preferred = ui.getPreferredSize(this);
+                if (preferred != null) return preferred;
+            }
+            return super.getPreferredSize();
+        }
+    }
+
     /**
      * Swing's resolution when nothing was set explicitly: a container answers from its
      * layout manager (even 0x0, as the JDK does), and a leaf from its preferred size — the
@@ -256,26 +269,38 @@ public class JComponent extends Container {
      */
     @Override
     public Dimension getMinimumSize() {
-        if (isMinimumSizeSet()) return super.getMinimumSize();
-        java.awt.LayoutManager lm = getLayout();
-        if (lm != null) {
-            Dimension d = lm.minimumLayoutSize(this);
-            if (d != null) return d;
+        synchronized (getTreeLock()) {
+            if (isMinimumSizeSet()) return super.getMinimumSize();
+            if (ui != null) {
+                Dimension minimum = ui.getMinimumSize(this);
+                if (minimum != null) return minimum;
+            }
+            java.awt.LayoutManager lm = getLayout();
+            if (lm != null) {
+                Dimension d = lm.minimumLayoutSize(this);
+                if (d != null) return d;
+            }
+            return getPreferredSize();
         }
-        return getPreferredSize();
     }
 
     /** Container.getMaximumSize: a LayoutManager2 answers, otherwise Component's
      *  Short.MAX_VALUE square. Labels and buttons override this with their preferred size. */
     @Override
     public Dimension getMaximumSize() {
-        if (isMaximumSizeSet()) return super.getMaximumSize();
-        java.awt.LayoutManager lm = getLayout();
-        if (lm instanceof java.awt.LayoutManager2) {
-            Dimension d = ((java.awt.LayoutManager2) lm).maximumLayoutSize(this);
-            if (d != null) return d;
+        synchronized (getTreeLock()) {
+            if (isMaximumSizeSet()) return super.getMaximumSize();
+            if (ui != null) {
+                Dimension maximum = ui.getMaximumSize(this);
+                if (maximum != null) return maximum;
+            }
+            java.awt.LayoutManager lm = getLayout();
+            if (lm instanceof java.awt.LayoutManager2) {
+                Dimension d = ((java.awt.LayoutManager2) lm).maximumLayoutSize(this);
+                if (d != null) return d;
+            }
+            return new Dimension(Short.MAX_VALUE, Short.MAX_VALUE);
         }
-        return new Dimension(Short.MAX_VALUE, Short.MAX_VALUE);
     }
 
     public boolean isDoubleBuffered() { return doubleBuffered; }
@@ -380,13 +405,14 @@ public class JComponent extends Container {
      */
     @Override
     public void print(java.awt.Graphics g) {
+        boolean wasPrinting = printing;
         printing = true;
-        firePropertyChange("paintingForPrint", false, true);
         try {
+            if (!wasPrinting) firePropertyChange("paintingForPrint", false, true);
             paint(g);
         } finally {
-            printing = false;
-            firePropertyChange("paintingForPrint", true, false);
+            printing = wasPrinting;
+            if (!wasPrinting) firePropertyChange("paintingForPrint", true, false);
         }
     }
 
@@ -400,7 +426,7 @@ public class JComponent extends Container {
     public final boolean isPaintingForPrint() { return printing; }
 
     protected void printComponent(java.awt.Graphics g) { paintComponent(g); }
-    protected void printChildren(java.awt.Graphics g) { paintChildren(g); }
+    protected void printChildren(java.awt.Graphics g) { paintChildren(g, true); }
     protected void printBorder(java.awt.Graphics g) { paintBorder(g); }
 
     // JDK 9+ (9): jdk17u src/java.desktop/share/classes/javax/swing/JComponent.java

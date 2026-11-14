@@ -101,7 +101,15 @@ public class JProgressBar extends JComponent implements SwingConstants, javax.ac
     public JProgressBar() { model.addChangeListener(modelListener); updateUI(); }
 
     /** Resets the UI property to a value from the current look and feel. */
-    public void updateUI() { setUI((javax.swing.plaf.ProgressBarUI) UIManager.getUI(this)); }
+    public void updateUI() {
+        try {
+            javax.swing.plaf.ComponentUI delegate = UIManager.getUI(this);
+            setUI(delegate instanceof javax.swing.plaf.ProgressBarUI ? (javax.swing.plaf.ProgressBarUI) delegate : new javax.swing.plaf.basic.BasicProgressBarUI());
+        } catch (LinkageError incompatible) {
+            ui = null;
+            setUI(new javax.swing.plaf.basic.BasicProgressBarUI());
+        }
+    }
 
     /**
      * Subclasses that want to handle change events from the model
@@ -184,8 +192,8 @@ public class JProgressBar extends JComponent implements SwingConstants, javax.ac
     public BoundedRangeModel getModel() { return model; }
     public void setModel(BoundedRangeModel m) { java.util.Objects.requireNonNull(m);BoundedRangeModel old=model;old.removeChangeListener(modelListener);model=m;m.addChangeListener(modelListener);firePropertyChange("model",old,m);repaint(); }
     public double getPercentComplete() {
-        double range = model.getMaximum() - model.getMinimum();
-        return range == 0 ? 0 : (model.getValue() - model.getMinimum()) / range;
+        double range = (double) model.getMaximum() - model.getMinimum();
+        return range == 0 ? 0 : ((double) model.getValue() - model.getMinimum()) / range;
     }
     public void addChangeListener(ChangeListener l) { listeners.add(ChangeListener.class,l); }
     public void removeChangeListener(ChangeListener l) { listeners.remove(ChangeListener.class,l); }
