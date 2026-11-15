@@ -64,10 +64,7 @@ import net.runelite.mp.ui.AccountManagerOverlay
 private const val FRAME_HEIGHT = 720
 private const val FRAME_WIDTH_FALLBACK = 1280
 
-// OSRS classic fixed-mode canvas dimensions. We hold the AWT Window at this size
-// during boot (splash → title → login screen) so the SW rasterizer never has to redraw
-// at an off-default size; the engine treats 765×503 as the most settled config and the
-// resize-to-aspect happens cleanly once GLES engages.
+// OSRS classic fixed-mode canvas dimensions: the client's minimum frame size.
 private const val FIXED_WIDTH = 765
 private const val FIXED_HEIGHT = 503
 
@@ -220,23 +217,14 @@ private fun GameViewport(modifier: Modifier = Modifier) {
             // `runelite.headlessChrome` system property — see RuneLiteLauncher and the
             // HEADLESS_CHROME constant in ClientUI. No per-frame reflection needed.
             val window = java.awt.Window.primaryFrame()
-            // Read the GLES toggle up front so it can gate both the target window size
-            // (below) and the bitmap-recreation branch (further down). Before GpuGles
-            // engages — i.e., during splash, title, login screen — hold the window at
-            // OSRS classic fixed dimensions; the SW rasterizer paints a clean baseline
-            // canvas, and we only flip to the resize-to-aspect mode once the engine has
-            // actually settled in-game.
+            // Read the GLES toggle up front for the bitmap-recreation branch further down.
+            // The window follows the viewport's aspect under either renderer: the software
+            // renderer is supported in-game now, so holding it at the classic fixed size
+            // would pin the game to a 765x503 box whenever GPU and 117 HD are both off.
             val gles = java.awt.Canvas.isRenderedByGles()
-            val targetW: Int
-            val targetH: Int
-            if (gles) {
-                val target = frameSizeFor(boxSize)
-                targetW = target.width
-                targetH = target.height
-            } else {
-                targetW = FIXED_WIDTH
-                targetH = FIXED_HEIGHT
-            }
+            val target = frameSizeFor(boxSize)
+            val targetW = target.width
+            val targetH = target.height
             // Don't force-resize the splash to the full client viewport — it's a
             // small dialog (~322×~360) that paints its children at fixed absolute
             // positions, so stretching its window to 1280×720 just leaves the
