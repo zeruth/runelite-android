@@ -307,6 +307,23 @@ if (androidSdkAvailable) {
                 "--apk", apk.absolutePath) + libraries.flatMap { listOf("--library-jar", it.absolutePath) })
         }
     }
+
+    // ci/hub-compat.sh scans without building the APK, and tools-src/hub-compat-scan.py looks
+    // host libraries up in the gradle cache; resolving the release runtime classpath's
+    // external jars puts every one the APK ships there. Lenient: AAR-only modules have no
+    // plain jar variant, and none of them is a host library.
+    tasks.register("resolveHubHostLibraries") {
+        group = "verification"
+        description = "Download the release runtime library jars for tools-src/hub-compat-scan.py"
+        doLast {
+            val jars = configurations.getByName("releaseRuntimeClasspath").incoming.artifactView {
+                attributes.attribute(org.gradle.api.attributes.Attribute.of("artifactType", String::class.java), "jar")
+                componentFilter { it is org.gradle.api.artifacts.component.ModuleComponentIdentifier }
+                lenient(true)
+            }.files.files
+            logger.lifecycle("resolved ${jars.size} release runtime library jars")
+        }
+    }
 }
 
 // One version controls both the APK compiler and the on-device plugin/client compiler.

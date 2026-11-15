@@ -1893,6 +1893,8 @@ def build_parser():
     ap.add_argument('--jobs', type=int, default=max(1, min(8, os.cpu_count() or 1)))
     ap.add_argument('--offline', action='store_true', help='use cached manifest and jars only')
     ap.add_argument('--refresh', action='store_true', help='re-download manifest and install counts')
+    ap.add_argument('--prune', action='store_true',
+                    help='delete cached jars and scan results the manifest no longer lists (full scans only)')
     ap.add_argument('--awt-classes', help='android-awt javac output (default: build/intermediates)')
     ap.add_argument('--app-classes', help='android app javac output with the lwjgl/rlawt shims')
     ap.add_argument('--android-jar', help='android.jar (default: sdk.dir + compileSdk)')
@@ -2007,6 +2009,28 @@ def fetch_hub(args):
     return version, jars, display, counts, work
 
 
+def prune_cache(args, work, fingerprint):
+    """Drop cached jars and per-plugin scan results the current scan did not use, so a
+    cache restored and saved run after run holds one hub's worth instead of every jar
+    version and surface fingerprint it ever saw. Only after a full online scan: a
+    --limit/--plugin/--offline run uses a subset and would delete jars still current."""
+    if args.limit or args.plugin or args.offline:
+        sys.stderr.write('warning: --prune ignored for a partial or offline scan\n')
+        return
+    keep_jars = set(os.path.basename(p) for _, p in work)
+    keep_scans = set('%s_%s-%s.json' % (j['internalName'], j['jarHash'], fingerprint) for j, _ in work)
+    removed = 0
+    for sub, keep in (('jar', keep_jars), ('scan', keep_scans)):
+        d = os.path.join(args.cache_dir, sub)
+        if not os.path.isdir(d):
+            continue
+        for name in os.listdir(d):
+            if name not in keep:
+                os.remove(os.path.join(d, name))
+                removed += 1
+    sys.stderr.write('prune: removed %d stale cache files\n' % removed)
+
+
 def main(argv=None):
     args = build_parser().parse_args(argv)
     if args.jdk_gaps:
@@ -2018,6 +2042,8 @@ def main(argv=None):
 
     fingerprint = surface_fingerprint(sources)
     results = scan_all(args.jobs, sources, work, os.path.join(args.cache_dir, 'scan'), fingerprint)
+    if args.prune:
+        prune_cache(args, work, fingerprint)
 
     meta = {
         'generatedAt': datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),

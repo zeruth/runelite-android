@@ -11,15 +11,26 @@ when the scan finds one that is not listed, so a gap can only grow on purpose.
 
 ## In CI
 
-`ci/build.sh`, after the release build:
+The `hub-compat` job of `.github/workflows/CI.yml` runs `ci/hub-compat.sh` alongside the
+release `build` job, not inside it: the release never waits on the gate, and a red gate
+never blocks a publish. It runs on every push and PR, and on demand from the Actions tab
+(`workflow_dispatch`). The script:
 
-1. `./gradlew :client:jar :runelite-api:jar`, so the host jars exist;
-2. `python3 tools-src/hub-compat-scan.py --refresh` (current manifest and install counts;
-   jars come from `build/hub-cache`, which `.github/workflows/CI.yml` restores with
-   `actions/cache`, so only new or updated plugins are downloaded);
+1. compiles the android-awt and app javac output, builds the client and api jars, and runs
+   `:android:resolveHubHostLibraries` so the release runtime libraries are in the gradle
+   cache; no APK, no R8;
+2. `python3 tools-src/hub-compat-scan.py --refresh --prune` (current manifest and install
+   counts; jars come from `build/hub-cache`, restored with `actions/cache/restore`, so only
+   new or updated plugins are downloaded; `--prune` deletes jars and scan results the
+   manifest no longer lists);
 3. `python3 tools-src/hub-compat-issues.py --check`: exits 1 on a signature missing from the
    baseline, lists baseline entries that now resolve, and always writes
    `build/hub-compat/baseline-proposed.json`.
+
+The cache is saved under a key derived from the manifest, so only when the hub changed. A
+warm run is a few minutes (the scan itself is ~10 s); a cold one downloads ~3000
+rate-limited jars and takes ~40 min. Caches are branch-scoped, so a branch's first run can
+start cold when the default branch has no saved cache yet.
 
 The `hub-compat-<run>` artifact holds `report.md`, `report.json` and
 `baseline-proposed.json`; it is uploaded even when the build fails.
