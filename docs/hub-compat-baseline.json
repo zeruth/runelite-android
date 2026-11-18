@@ -1,8 +1,8 @@
 {
  "comment": "Accepted hub-compat-scan signatures; see docs/hub-compat.md. Regenerate with tools-src/hub-compat-issues.py --update-baseline.",
- "hubVersion": "1.13.6",
- "generatedAt": "2026-11-14T19:22:45Z",
- "pluginsScanned": 2949,
+ "hubVersion": "1.13.7",
+ "generatedAt": "2026-11-18T12:15:56Z",
+ "pluginsScanned": 2982,
  "signatures": {
   "class com/google/api/client/auth/oauth2/AuthorizationCodeFlow": {
    "bucket": "other libraries",
@@ -116,19 +116,11 @@
    "bucket": "lwjgl/native",
    "status": "unresolved"
   },
-  "class com/sun/jna/platform/win32/Advapi32Util": {
-   "bucket": "lwjgl/native",
-   "status": "unresolved"
-  },
   "class com/sun/jna/platform/win32/BaseTSD": {
    "bucket": "lwjgl/native",
    "status": "unresolved"
   },
   "class com/sun/jna/platform/win32/BaseTSD$SIZE_T": {
-   "bucket": "lwjgl/native",
-   "status": "unresolved"
-  },
-  "class com/sun/jna/platform/win32/Win32Exception": {
    "bucket": "lwjgl/native",
    "status": "unresolved"
   },
@@ -145,14 +137,6 @@
    "status": "unresolved"
   },
   "class com/sun/jna/platform/win32/WinNT$MEMORY_BASIC_INFORMATION": {
-   "bucket": "lwjgl/native",
-   "status": "unresolved"
-  },
-  "class com/sun/jna/platform/win32/WinReg": {
-   "bucket": "lwjgl/native",
-   "status": "unresolved"
-  },
-  "class com/sun/jna/platform/win32/WinReg$HKEY": {
    "bucket": "lwjgl/native",
    "status": "unresolved"
   },
@@ -1004,10 +988,6 @@
    "bucket": "lwjgl/native",
    "status": "unresolved"
   },
-  "field com/sun/jna/platform/win32/WinReg.HKEY_CURRENT_USERLcom/sun/jna/platform/win32/WinReg$HKEY;": {
-   "bucket": "lwjgl/native",
-   "status": "unresolved"
-  },
   "field com/sun/jna/win32/W32APIOptions.DEFAULT_OPTIONSLjava/util/Map;": {
    "bucket": "lwjgl/native",
    "status": "unresolved"
@@ -1032,7 +1012,15 @@
    "bucket": "text/HTML",
    "status": "unresolved"
   },
+  "field javax/swing/text/html/HTML$Attribute.SRCLjavax/swing/text/html/HTML$Attribute;": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
   "field javax/swing/text/html/HTML$Attribute.TITLELjavax/swing/text/html/HTML$Attribute;": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "field javax/swing/text/html/HTML$Tag.CAPTIONLjavax/swing/text/html/HTML$Tag;": {
    "bucket": "text/HTML",
    "status": "unresolved"
   },
@@ -1040,11 +1028,39 @@
    "bucket": "text/HTML",
    "status": "unresolved"
   },
+  "field javax/swing/text/html/HTML$Tag.H3Ljavax/swing/text/html/HTML$Tag;": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "field javax/swing/text/html/HTML$Tag.H4Ljavax/swing/text/html/HTML$Tag;": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
   "field javax/swing/text/html/HTML$Tag.IMGLjavax/swing/text/html/HTML$Tag;": {
    "bucket": "text/HTML",
    "status": "unresolved"
   },
+  "field javax/swing/text/html/HTML$Tag.OLLjavax/swing/text/html/HTML$Tag;": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "field javax/swing/text/html/HTML$Tag.TABLELjavax/swing/text/html/HTML$Tag;": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "field javax/swing/text/html/HTML$Tag.TDLjavax/swing/text/html/HTML$Tag;": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "field javax/swing/text/html/HTML$Tag.THLjavax/swing/text/html/HTML$Tag;": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
   "field javax/swing/text/html/HTML$Tag.TRLjavax/swing/text/html/HTML$Tag;": {
+   "bucket": "text/HTML",
+   "status": "unresolved"
+  },
+  "field javax/swing/text/html/HTML$Tag.ULLjavax/swing/text/html/HTML$Tag;": {
    "bucket": "text/HTML",
    "status": "unresolved"
   },
@@ -1729,10 +1745,6 @@
    "status": "unresolved"
   },
   "method com/sun/jna/Pointer.nativeValue(Lcom/sun/jna/Pointer;J)V": {
-   "bucket": "lwjgl/native",
-   "status": "unresolved"
-  },
-  "method com/sun/jna/platform/win32/Advapi32Util.registryGetStringValue(Lcom/sun/jna/platform/win32/WinReg$HKEY;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;": {
    "bucket": "lwjgl/native",
    "status": "unresolved"
   },
