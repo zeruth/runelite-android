@@ -107,6 +107,23 @@ final class HtmlTextRenderer
 		return new Layout(lines, width, height);
 	}
 
+    /** Minimum wrap width: formatting boundaries do not split an unbreakable word. */
+    static int minimumWidth(String html, FontMetrics fm) {
+        int width = 0;
+        for (Line line : parse(html)) {
+            StringBuilder text = new StringBuilder();
+            for (Run run : line.runs) text.append(run.text);
+            int start = 0;
+            for (int end = 0; end <= text.length(); end++) {
+                if (end == text.length() || Character.isWhitespace(text.charAt(end))) {
+                    width = Math.max(width, fm.stringWidth(text.substring(start, end)));
+                    start = end + 1;
+                }
+            }
+        }
+        return width;
+    }
+
 	/** Wrap HTML runs at the available label width, retaining their colors. */
 	static Layout measure(String html, FontMetrics fm, int maxWidth)
 	{
