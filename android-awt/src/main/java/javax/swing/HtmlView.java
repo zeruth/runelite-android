@@ -61,6 +61,9 @@ public final class HtmlView extends View {
         if (axis == Y_AXIS) return layout.height;
         throw new IllegalArgumentException("axis");
     }
+    @Override public float getMinimumSpan(int axis) {
+        return axis == X_AXIS ? HtmlTextRenderer.minimumWidth(source(), metrics()) : super.getMinimumSpan(axis);
+    }
     @Override public void paint(Graphics graphics, Shape allocation) {
         Rectangle bounds = allocation.getBounds(); Graphics copy = graphics.create();
         try {

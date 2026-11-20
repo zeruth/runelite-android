@@ -431,13 +431,10 @@ public abstract class AbstractButton extends JComponent {
         if (gap != old) { revalidate(); repaint(); }
     }
 
-    /** Insets between the border and the button's content. Stored but not honored by
-     *  paint (we draw text/icon centered) — plugins set it as a layout hint, that's all
-     *  we need to satisfy. Without the stub Dalvik throws NoSuchMethodError. */
+    /** Content margins are consumed by the installed look-and-feel border. */
     private java.awt.Insets margin;
     public java.awt.Insets getMargin() { return margin; }
     public void setMargin(java.awt.Insets m) { java.awt.Insets old=margin;margin=m==null?null:new java.awt.Insets(m.top,m.left,m.bottom,m.right);firePropertyChange("margin",old,margin);revalidate();repaint(); }
-    @Override public java.awt.Insets getInsets(){java.awt.Insets in=super.getInsets();return margin==null?in:new java.awt.Insets(in.top+margin.top,in.left+margin.left,in.bottom+margin.bottom,in.right+margin.right);}
 
     private transient boolean measuringByUI;
 

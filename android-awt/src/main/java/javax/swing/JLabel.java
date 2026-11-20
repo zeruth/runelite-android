@@ -337,6 +337,10 @@ public class JLabel extends JComponent implements SwingConstants, javax.accessib
      * when the delegate inherits BasicLabelUI's measurement.
      */
     public final java.awt.Dimension hostLabelPreferredSize() {
+        return hostLabelSize(false);
+    }
+
+    private java.awt.Dimension hostLabelSize(boolean minimum) {
         java.awt.Insets in = getInsets();
         boolean html = isHtmlText();
         java.awt.Dimension c = cachedPref;
@@ -345,7 +349,7 @@ public class JLabel extends JComponent implements SwingConstants, javax.accessib
             int textW = 0, textH = 0;
             if (html) {
                 HtmlTextRenderer.Layout layout = HtmlTextRenderer.measure(text, fm, getWidth() - in.left - in.right - 2);
-                textW = layout.width;
+                textW = minimum ? HtmlTextRenderer.minimumWidth(text, fm) : layout.width;
                 textH = layout.height;
             } else if (text != null && !text.isEmpty()) {
                 textW = fm.stringWidth(text);
@@ -373,10 +377,11 @@ public class JLabel extends JComponent implements SwingConstants, javax.accessib
         return new java.awt.Dimension(c.width + in.left + in.right, c.height + in.top + in.bottom);
     }
 
-    // BasicLabelUI reports min = max = preferred.
+    // HTML can wrap below its preferred width; plain labels remain fixed-size.
     @Override
     public java.awt.Dimension getMinimumSize() {
-        return isMinimumSizeSet() ? super.getMinimumSize() : getPreferredSize();
+        if (isMinimumSizeSet()) return super.getMinimumSize();
+        return isHtmlText() ? hostLabelSize(true) : getPreferredSize();
     }
 
     @Override
