@@ -208,6 +208,7 @@ private fun GameViewport(modifier: Modifier = Modifier) {
     LaunchedEffect(Unit) {
         var lastChromePixels: IntArray? = null
         var nextChromePaintAt = 0L
+        var nextChromeSafetyAt = 0L
         var nextDumpAt = 0L
         var nextSwDiagAt = 0L
         var lastWindow: java.awt.Window? = null
@@ -246,8 +247,18 @@ private fun GameViewport(modifier: Modifier = Modifier) {
             // it (sidebar, panels), and repainting the whole AWT tree every vsync (120 Hz) is
             // the main thread's largest cost. Repaint it at CHROME_GLES_INTERVAL_MS then, and
             // immediately on a renderer toggle. The software renderer repaints every frame.
-            val paintChrome = !gles || gles != glesActive || now >= nextChromePaintAt
-            if (gles && paintChrome) nextChromePaintAt = now + CHROME_GLES_INTERVAL_MS
+            // Beyond the rate limit, only render when the AWT tree reported a repaint/relayout
+            // (Window.needsRender); the full-frame pixel compare below used to run every
+            // interval and was ~64% of this thread. Because that signal can't be trusted for
+            // mutators that forget to repaint(), still render at CHROME_GLES_SAFETY_MS
+            // regardless — the compare then catches whatever changed.
+            val paintChrome = !gles || gles != glesActive ||
+                (now >= nextChromePaintAt &&
+                    (window == null || window.needsRender() || now >= nextChromeSafetyAt))
+            if (gles && paintChrome) {
+                nextChromePaintAt = now + CHROME_GLES_INTERVAL_MS
+                nextChromeSafetyAt = now + CHROME_GLES_SAFETY_MS
+            }
             val src = if (!paintChrome) null else window?.renderToBackbuffer()
                 ?: java.awt.Canvas.latest()?.backbuffer
             // `gles` was read at the top of the loop. A change forces the bitmap to be
@@ -1058,6 +1069,9 @@ private fun centroid(event: PointerEvent): Offset {
 
 /** Chrome repaint interval while a GLES renderer owns the game area (~30 Hz). */
 private const val CHROME_GLES_INTERVAL_MS = 33L
+
+/** Max time between chrome renders+compares while GLES is active and no repaint was requested. */
+private const val CHROME_GLES_SAFETY_MS = 500L
 
 private const val BUTTON1 = java.awt.event.MouseEvent.BUTTON1
 private const val BUTTON2 = java.awt.event.MouseEvent.BUTTON2

@@ -70,6 +70,10 @@ public class RepaintManager {
     private Map<Component, Rectangle> dirtyComponents = new IdentityHashMap<Component, Rectangle>();
     /** Coalesced regions per paint root, in root coordinates, waiting for the root's host. */
     private final Map<Component, Rectangle> rootRegions = new WeakHashMap<Component, Rectangle>();
+    /** Roots with a pending repaint raised by something other than a java.awt.Canvas — the
+     *  chrome around a GPU-drawn game canvas. Lets the host skip rendering a frame whose chrome
+     *  cannot have changed without consuming the region (see {@link #hostHasChromeDirty}). */
+    private final Map<Component, Boolean> chromeDirtyRoots = new WeakHashMap<Component, Boolean>();
     private List<Component> invalidComponents;
     private boolean processingScheduled;
 
@@ -247,6 +251,10 @@ public class RepaintManager {
     private void addDirtyRegion0(Component c, int x, int y, int w, int h) {
         if (w <= 0 || h <= 0 || c == null) return;
         if (c.getWidth() <= 0 || c.getHeight() <= 0) return;
+        if (!(c instanceof java.awt.Canvas)) {
+            Component root = paintRoot(c);
+            if (root != null) synchronized (this) { chromeDirtyRoots.put(root, Boolean.TRUE); }
+        }
         if (extendDirtyRegion(c, x, y, w, h)) return;
         if (paintRoot(c) == null) return;
         synchronized (this) {
@@ -406,6 +414,10 @@ public class RepaintManager {
         } else {
             union(r, x, y, w, h);
         }
+        if (!(c instanceof java.awt.Canvas)) {
+            Component root = paintRoot(c);
+            if (root != null) chromeDirtyRoots.put(root, Boolean.TRUE);
+        }
         foldIntoRoot(c, r);
     }
 
@@ -445,8 +457,18 @@ public class RepaintManager {
      * region is cleared, and repaints raised while the host paints land in the next one.
      */
     public synchronized Rectangle hostTakeDirtyRegion(Component root) {
+        chromeDirtyRoots.remove(root);
         collectDirtyComponents();
         return rootRegions.remove(root);
+    }
+
+    /**
+     * Host-only, non-destructive: has anything other than a Canvas asked {@code root} to repaint
+     * since the root's last {@link #hostTakeDirtyRegion}? A GPU renderer draws the game canvas
+     * itself, so the canvas's own per-frame repaints say nothing about the chrome around it.
+     */
+    public synchronized boolean hostHasChromeDirty(Component root) {
+        return chromeDirtyRoots.containsKey(root);
     }
 
     private void scheduleProcessing() {

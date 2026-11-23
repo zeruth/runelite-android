@@ -43,7 +43,10 @@ public final class MobileSwipeScroll {
             if (ended) return;
             if (!current(target.identity, target.bounds)) { ended = true; return; }
             int offset = (int)Math.round((startY - y) / target.scale);
-            if (offset != last) { last = offset; target.scroll.accept(offset); }
+            // Deliver the change since the last move, not the total since the gesture began: the
+            // receiver adds it to the widget's live scroll position, so a Target cached across
+            // gestures (MobileInputPlugin reuses them for up to 200 ms) never replays a stale base.
+            if (offset != last) { int delta = offset - last; last = offset; target.scroll.accept(delta); }
         }
         public void end() { ended = true; }
     }
