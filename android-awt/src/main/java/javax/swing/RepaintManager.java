@@ -414,6 +414,10 @@ public class RepaintManager {
         } else {
             union(r, x, y, w, h);
         }
+        if (!(c instanceof java.awt.Canvas)) {
+            Component root = paintRoot(c);
+            if (root != null) chromeDirtyRoots.put(root, Boolean.TRUE);
+        }
         foldIntoRoot(c, r);
     }
 

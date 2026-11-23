@@ -313,12 +313,13 @@ public class MobileInputPlugin extends Plugin
                 Rectangle scaledBar = barBounds == null ? null : scaleRect(barBounds.x, barBounds.y, barBounds.width, barBounds.height, sx, sy);
                 List<Rectangle> items = new ArrayList<>();
                 collectDragItems(w, items, sx, sy);
-                int initialScroll = w.getScrollY();
                 swipes.add(new MobileSwipeScroll.Target(w, bounds, scaledBar, items.toArray(new Rectangle[0]), sy,
-                    offset -> clientThread.invokeLater(() -> {
+                    delta -> clientThread.invokeLater(() -> {
                         if (client.getGameState() != GameState.LOGGED_IN || client.isMenuOpen() || w.isHidden()
                             || !MobileSwipeScroll.current(w, bounds)) return;
-                        int next = Math.max(0, Math.min(w.getScrollHeight() - w.getHeight(), initialScroll + offset));
+                        // delta is relative to the previous move (see MobileSwipeScroll.Gesture.move), applied
+                        // to the live scroll so the cached Target carries no per-gesture state.
+                        int next = Math.max(0, Math.min(w.getScrollHeight() - w.getHeight(), w.getScrollY() + delta));
                         if (scrollbar != null && !scrollbar.isHidden())
                             client.runScript(ScriptID.UPDATE_SCROLLBAR, scrollbar.getId(), w.getId(), next);
                         else { w.setScrollY(next); w.revalidateScroll(); }
