@@ -62,7 +62,7 @@ public class MobileInputPlugin extends Plugin
     protected void startUp() { updateKeyboardMode(); }
 
     @Subscribe
-    public void onGameStateChanged(GameStateChanged event) { updateKeyboardMode(); }
+    public void onGameStateChanged(GameStateChanged event) { walkDirty = true; updateKeyboardMode(); }
 
     @Subscribe
     public void onConfigChanged(ConfigChanged event)
@@ -91,6 +91,22 @@ public class MobileInputPlugin extends Plugin
 		MobileHitTest.setFixedMode(false);
 		MobileHitTest.setViewportRect(null);
 	}
+
+	/** Max age of the cached touch targets; scroll/drag/script moves fire no event. */
+	private static final long WALK_SAFETY_MS = 200;
+	private volatile boolean walkDirty = true;
+	private long lastWalkMs;
+	private int cachedCanvasW = -1, cachedCanvasH = -1;
+	private double cachedSx, cachedSy;
+	private Rectangle[] cachedRects;
+	private MobileSwipeScroll.Target[] cachedSwipes;
+	private MobileScrollbars.Target[] cachedScrollbars;
+
+	@Subscribe
+	public void onWidgetLoaded(net.runelite.api.events.WidgetLoaded e) { walkDirty = true; }
+
+	@Subscribe
+	public void onWidgetClosed(net.runelite.api.events.WidgetClosed e) { walkDirty = true; }
 
 	@Subscribe
 	public void onBeforeRender(BeforeRender ev)
@@ -182,34 +198,52 @@ public class MobileInputPlugin extends Plugin
             MobileSwipeScroll.publish(new MobileSwipeScroll.Target[0]);
 				return;
 			}
-			List<Rectangle> rects = new ArrayList<>(64);
-			List<MobileScrollbars.Target> scrollbars = new ArrayList<>();
-            List<MobileSwipeScroll.Target> swipes = new ArrayList<>();
+			// The widget walk is the dominant per-frame cost (~22% of the game thread on
+			// a Fire HD 8), so the results are cached and only rebuilt when an interface
+			// was loaded/closed, the game state/canvas/scale changed, or WALK_SAFETY_MS
+			// has elapsed (covers scrolling, drags and script-driven moves that fire no
+			// event). Menu-open gating below still runs every frame from the cache.
 			int canvasW = client.getCanvasWidth();
 			int canvasH = client.getCanvasHeight();
-			for (Widget root : roots)
+			long nowMs = System.currentTimeMillis();
+			if (walkDirty || cachedRects == null || canvasW != cachedCanvasW || canvasH != cachedCanvasH
+				|| sx != cachedSx || sy != cachedSy || nowMs - lastWalkMs >= WALK_SAFETY_MS)
 			{
-				collect(root, rects, scrollbars, swipes, canvasW, canvasH, sx, sy);
-			}
-			Rectangle[] arr;
-			if (sx == 1.0 && sy == 1.0)
-			{
-				arr = rects.toArray(new Rectangle[0]);
-			}
-			else
-			{
-				arr = new Rectangle[rects.size()];
-				for (int i = 0; i < arr.length; i++)
+				walkDirty = false;
+				lastWalkMs = nowMs;
+				cachedCanvasW = canvasW;
+				cachedCanvasH = canvasH;
+				cachedSx = sx;
+				cachedSy = sy;
+				List<Rectangle> rects = new ArrayList<>(64);
+				List<MobileScrollbars.Target> scrollbars = new ArrayList<>();
+				List<MobileSwipeScroll.Target> swipes = new ArrayList<>();
+				for (Widget root : roots)
 				{
-					Rectangle r = rects.get(i);
-					arr[i] = scaleRect(r.x, r.y, r.width, r.height, sx, sy);
+					collect(root, rects, scrollbars, swipes, canvasW, canvasH, sx, sy);
 				}
+				Rectangle[] built;
+				if (sx == 1.0 && sy == 1.0)
+				{
+					built = rects.toArray(new Rectangle[0]);
+				}
+				else
+				{
+					built = new Rectangle[rects.size()];
+					for (int i = 0; i < built.length; i++)
+					{
+						Rectangle r = rects.get(i);
+						built[i] = scaleRect(r.x, r.y, r.width, r.height, sx, sy);
+					}
+				}
+				cachedRects = built;
+				cachedSwipes = swipes.toArray(new MobileSwipeScroll.Target[0]);
+				cachedScrollbars = scrollbars.toArray(new MobileScrollbars.Target[0]);
 			}
+			Rectangle[] arr = cachedRects;
 			MobileHitTest.setInterfaceRects(arr);
-            MobileSwipeScroll.publish(client.isMenuOpen() ? new MobileSwipeScroll.Target[0]
-                : swipes.toArray(new MobileSwipeScroll.Target[0]));
-			MobileScrollbars.publish(client.isMenuOpen() ? new MobileScrollbars.Target[0]
-				: scrollbars.toArray(new MobileScrollbars.Target[0]));
+			MobileSwipeScroll.publish(client.isMenuOpen() ? new MobileSwipeScroll.Target[0] : cachedSwipes);
+			MobileScrollbars.publish(client.isMenuOpen() ? new MobileScrollbars.Target[0] : cachedScrollbars);
 
 			// Periodic visibility into what's being treated as "interface". Helps diagnose
 			// when too many rects are flagged (scene-clicks getting BUTTON1 instead of
