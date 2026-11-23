@@ -246,6 +246,7 @@ if (androidSdkAvailable) {
         // ASM for ClientPreparer's transforms over the downloaded injected client.
         "implementation"("org.ow2.asm:asm:9.8")
         "implementation"("org.ow2.asm:asm-commons:9.8")
+        "implementation"("org.ow2.asm:asm-tree:9.8")
         // Fallback for ClientPreparer's BaseDexClassLoader.addDexPath call (hidden API).
         "implementation"("org.lsposed.hiddenapibypass:hiddenapibypass:4.3")
 
