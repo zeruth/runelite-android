@@ -32,6 +32,8 @@ public final class MobileInventoryOverlay extends Overlay
     private final ClientThread clientThread;
     private final ConfigManager configManager;
     private final int[][] scratch = {new int[0], new int[0], new int[0], new int[0], new int[0]};
+    private final int[] scales = new int[IDS.length];
+    private final boolean[] active = new boolean[IDS.length];
     private static volatile List<Panel> displayed = java.util.Collections.emptyList();
     private static volatile Resize gesture;
 
@@ -85,9 +87,26 @@ public final class MobileInventoryOverlay extends Overlay
     {
         if (!client.isGpu() || !client.isResized()) { clear(); return; }
         // Remove hidden panels before input can use the preceding frame's geometry.
-        List<Panel> visible = new ArrayList<>();
-        for (Panel panel : displayed) if (widget(panel.id) != null) visible.add(panel);
-        displayed = visible;
+        List<Panel> prev = displayed;
+        if (!prev.isEmpty())
+        {
+            List<Panel> visible = null;
+            int n = prev.size();
+            for (int i = 0; i < n; i++)
+            {
+                Panel panel = prev.get(i);
+                if (widget(panel.id) != null)
+                {
+                    if (visible != null) visible.add(panel);
+                }
+                else if (visible == null)
+                {
+                    visible = new ArrayList<>(n - 1);
+                    for (int j = 0; j < i; j++) visible.add(prev.get(j));
+                }
+            }
+            if (visible != null) displayed = visible;
+        }
         Resize current = gesture;
         if (current != null && widget(current.panel.id) == null) current.end();
     }
@@ -97,29 +116,117 @@ public final class MobileInventoryOverlay extends Overlay
         validateVisibility();
         if (!client.isGpu() || !client.isResized()) return null;
         BufferProvider buffer = client.getBufferProvider();
+        if (buffer == null) return null;
         int w = buffer.getWidth(), h = buffer.getHeight();
-        int[] scales = {config.inventoryScale(), config.chatScale(), config.minimapScale(), config.staticTabsScale(), config.movableTabsScale()};
+        scales[0] = config.inventoryScale();
+        scales[1] = config.chatScale();
+        scales[2] = config.minimapScale();
+        scales[3] = config.staticTabsScale();
+        scales[4] = config.movableTabsScale();
         Resize current = gesture;
         if (current != null) scales[current.panel.id] = current.percent;
-        List<Panel> panels = new ArrayList<>();
+
+        List<Panel> prev = displayed;
+        int matchIdx = 0;
+        boolean matches = true;
+        List<Panel> panels = null;
         for (int id = 0; id < IDS.length; id++)
         {
             Widget widget = widget(id);
             if (widget == null) continue;
             Rectangle bounds = widget.getBounds();
-            if (bounds.width <= 0 || bounds.height <= 0 || !new Rectangle(0, 0, w, h).contains(bounds)) continue;
+            if (bounds == null || bounds.width <= 0 || bounds.height <= 0
+                || bounds.x < 0 || bounds.y < 0
+                || bounds.x + bounds.width > w || bounds.y + bounds.height > h)
+            {
+                continue;
+            }
+            if (matches)
+            {
+                if (matchIdx < prev.size())
+                {
+                    Panel p = prev.get(matchIdx);
+                    if (p.id == id && p.percent == scales[id] && p.owner == this
+                        && p.geometry.width == w && p.geometry.height == h
+                        && p.geometry.source.equals(bounds))
+                    {
+                        matchIdx++;
+                        continue;
+                    }
+                }
+                matches = false;
+                panels = new ArrayList<>(IDS.length);
+                for (int j = 0; j < matchIdx; j++) panels.add(prev.get(j));
+            }
             panels.add(new Panel(id, scales[id], new InventoryScaleGeometry(bounds, scales[id], w, h), this, id));
         }
-        // Capture every piece before clearing any source, including detached tab rows.
-        for (Panel panel : panels)
+        if (matches)
         {
+            if (matchIdx == prev.size())
+            {
+                panels = prev;
+            }
+            else
+            {
+                panels = new ArrayList<>(matchIdx);
+                for (int j = 0; j < matchIdx; j++) panels.add(prev.get(j));
+            }
+        }
+        if (panels != prev) displayed = panels;
+
+        int panelCount = panels.size();
+        boolean anyScaled = false;
+        for (int i = 0; i < panelCount; i++)
+        {
+            if (!panels.get(i).geometry.isIdentity())
+            {
+                anyScaled = true;
+                break;
+            }
+        }
+        if (!anyScaled) return null;
+
+        // Only panels that are scaled, or whose unscaled source lies underneath an earlier
+        // scaled panel's destination, need pixel capture + repaint.
+        for (int i = 0; i < panelCount; i++)
+        {
+            InventoryScaleGeometry gi = panels.get(i).geometry;
+            boolean need = !gi.isIdentity();
+            if (!need)
+            {
+                for (int j = 0; j < i; j++)
+                {
+                    if (active[j] && gi.source.intersects(panels.get(j).geometry.destination))
+                    {
+                        need = true;
+                        break;
+                    }
+                }
+            }
+            active[i] = need;
+        }
+        int[] pixels = buffer.getPixels();
+        // Capture every active piece before clearing any source, including detached tab rows.
+        for (int i = 0; i < panelCount; i++)
+        {
+            if (!active[i]) continue;
+            Panel panel = panels.get(i);
             int count = panel.geometry.source.width * panel.geometry.source.height;
             if (scratch[panel.bufferIndex].length < count) scratch[panel.bufferIndex] = new int[count];
-            panel.geometry.capture(buffer.getPixels(), scratch[panel.bufferIndex]);
+            panel.geometry.capture(pixels, scratch[panel.bufferIndex]);
         }
-        for (Panel panel : panels) panel.geometry.clearSource(buffer.getPixels());
-        for (Panel panel : panels) panel.geometry.paint(buffer.getPixels(), scratch[panel.bufferIndex]);
-        displayed = panels;
+        for (int i = 0; i < panelCount; i++)
+        {
+            if (!active[i]) continue;
+            InventoryScaleGeometry gi = panels.get(i).geometry;
+            if (!gi.isIdentity()) gi.clearSource(pixels);
+        }
+        for (int i = 0; i < panelCount; i++)
+        {
+            if (!active[i]) continue;
+            Panel panel = panels.get(i);
+            panel.geometry.paint(pixels, scratch[panel.bufferIndex]);
+        }
         return null;
     }
     private Widget widget(int id)

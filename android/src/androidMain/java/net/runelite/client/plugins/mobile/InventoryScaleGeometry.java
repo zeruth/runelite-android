@@ -18,6 +18,7 @@ public final class InventoryScaleGeometry
 		destination = new Rectangle(Math.max(0, Math.min(width - w, bounds.x + bounds.width - w)),
 			Math.max(0, Math.min(height - h, bounds.y + bounds.height - h)), w, h);
 	}
+	public boolean isIdentity() { return source.equals(destination); }
 	public int sourceX(int x) { return source.x + (x - destination.x) * source.width / destination.width; }
 	public int sourceY(int y) { return source.y + (y - destination.y) * source.height / destination.height; }
 	public void composite(int[] pixels, int[] scratch)
@@ -39,7 +40,11 @@ public final class InventoryScaleGeometry
 	public void paint(int[] pixels, int[] scratch)
 	{
 		for (int y = destination.y; y < destination.y + destination.height; y++)
+		{
+			int dstRow = y * width;
+			int srcRow = (sourceY(y) - source.y) * source.width;
 			for (int x = destination.x; x < destination.x + destination.width; x++)
-				pixels[y * width + x] = scratch[(sourceY(y) - source.y) * source.width + sourceX(x) - source.x];
+				pixels[dstRow + x] = scratch[srcRow + sourceX(x) - source.x];
+		}
 	}
 }
