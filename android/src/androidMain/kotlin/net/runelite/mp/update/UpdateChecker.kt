@@ -34,6 +34,7 @@ internal object UpdateChecker
         "JayBuckley7" to "Jay",
         "JayBuckleyUpdox" to "Jay", // Jay's alt account
         "torkkotravis-creator" to "Torkko",
+        "JaredEzz" to "Boomball_01",
     )
 
     /** Used until the first successful fetch (eg. first launch offline). */
