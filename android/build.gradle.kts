@@ -72,7 +72,7 @@ configurations.configureEach {
 // runelite-client from repo.runelite.net and desugars + dexes it on the device.
 val versionMajor = 1
 val versionMinor = 0
-val versionPatch = 66
+val versionPatch = 67
 val releaseTag = "$versionMajor.$versionMinor.${versionPatch}_${project.version}"
 val releaseVersionCode = (versionMajor * 1_000_000) + (versionMinor * 1_000) + versionPatch
 
