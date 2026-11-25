@@ -230,11 +230,8 @@ class RuneLiteLauncher(private val context: android.content.Context? = null) {
         }
     }
 
-    // The injected RS client reads JX_ACCESS_TOKEN / JX_REFRESH_TOKEN / JX_SESSION_ID /
-    // JX_CHARACTER_ID / JX_DISPLAY_NAME from System.getenv(). On desktop these are set
-    // by the Jagex launcher; on Android we ship them as an asset (credentials.properties,
-    // gitignored) and seed them into the process env via Os.setenv before the client class
-    // is loaded.
+    // The Android client transform redirects launcher credential reads to System.getProperty.
+    // Set those properties before loading the injected client.
     private fun seedLauncherCredentials() {
         val ctx = context ?: return
         // Order of preference: a Jagex account signed in on-device, then an imported

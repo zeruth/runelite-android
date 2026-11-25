@@ -33,7 +33,7 @@ internal class RewriteLauncherEnvTask {
     lateinit var inputJar: java.io.File
     lateinit var outputJar: java.io.File
 
-    /** Jar entry to patch. Every other entry is copied through unchanged. */
+    /** Jar entry containing the client's environment lookup helper. */
     lateinit var classEntry: String
 
     /** Launcher credential names whose lookups get redirected to System.getProperty. */
@@ -48,6 +48,7 @@ internal class RewriteLauncherEnvTask {
         val inFile = inputJar
         val outFile = outputJar
         val entryName = classEntry
+        val clientOwner = entryName.removeSuffix(".class")
         val keys = launcherKeys.toSet()
         outFile.parentFile.mkdirs()
 
@@ -63,9 +64,9 @@ internal class RewriteLauncherEnvTask {
                     if (entry.isDirectory) continue
                     val bytes = input.getInputStream(entry).use { it.readBytes() }
                     output.putNextEntry(JarEntry(entry.name))
-                    if (entry.name == entryName) {
-                        patched = true
-                        output.write(rewrite(bytes, keys, rewrittenKeys, touchedMethods))
+                    if (entry.name == entryName) patched = true
+                    if (entry.name.endsWith(".class")) {
+                        output.write(rewrite(bytes, clientOwner, keys, rewrittenKeys, touchedMethods))
                     } else {
                         output.write(bytes)
                     }
@@ -81,13 +82,13 @@ internal class RewriteLauncherEnvTask {
         require(patched) { "rewriteLauncherEnv: no '$entryName' entry in ${inFile.name}" }
         val missing = keys - rewrittenKeys
         require(missing.isEmpty()) {
-            "rewriteLauncherEnv: nothing rewritten for ${missing.sorted()} in $entryName. " +
+            "rewriteLauncherEnv: nothing rewritten for ${missing.sorted()}. " +
                 "The client's credential reads changed shape this revision — disassemble " +
                 "client.init and re-check the ldc + invokestatic pattern."
         }
         logger.lifecycle(
             "rewriteLauncherEnv: redirected launcher credential lookups to " +
-                "System.getProperty in $entryName — keys ${rewrittenKeys.toList()}, " +
+                "System.getProperty — keys ${rewrittenKeys.toList()}, " +
                 "methods ${touchedMethods.toList()}"
         )
     }
@@ -106,12 +107,14 @@ internal class RewriteLauncherEnvTask {
      */
     private fun rewrite(
         bytes: ByteArray,
+        clientOwner: String,
         keys: Set<String>,
         rewrittenKeys: MutableSet<String>,
         touchedMethods: MutableSet<String>,
     ): ByteArray {
         val cr = ClassReader(bytes)
         val cw = ClassWriter(cr, 0)
+        var changed = false
         cr.accept(object : ClassVisitor(Opcodes.ASM9, cw) {
             override fun visitMethod(
                 access: Int,
@@ -141,10 +144,11 @@ internal class RewriteLauncherEnvTask {
                         if (key != null &&
                             opcode == Opcodes.INVOKESTATIC &&
                             mDescriptor == GETTER_DESC &&
-                            owner != SYSTEM
+                            (owner == clientOwner || (owner == SYSTEM && mName == "getenv"))
                         ) {
+                            changed = true
                             rewrittenKeys.add(key)
-                            touchedMethods.add(name)
+                            touchedMethods.add("${cr.className}.$name")
                             super.visitMethodInsn(Opcodes.INVOKESTATIC, SYSTEM, "getProperty", GETTER_DESC, false)
                             return
                         }
@@ -228,7 +232,7 @@ internal class RewriteLauncherEnvTask {
                 }
             }
         }, 0)
-        return cw.toByteArray()
+        return if (changed) cw.toByteArray() else bytes
     }
 }
 

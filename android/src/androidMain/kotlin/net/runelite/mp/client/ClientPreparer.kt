@@ -54,7 +54,8 @@ internal object ClientPreparer
     /** Bump whenever a transform or the packaging changes, so cached clients are rebuilt. */
     // t3: JDK member retargets moved to the JdkRetargets table (net.runelite.mp.compat.jdk).
     // t4: FixLockVerificationTask releases held monitors before early returns (ART lock verification).
-    private const val TRANSFORM_VERSION = "t4-${RuntimeDexConfiguration.CACHE_VERSION}"
+    // t5: Redirect launcher credential reads in every class that calls the client helper.
+    private const val TRANSFORM_VERSION = "t5-${RuntimeDexConfiguration.CACHE_VERSION}"
     private const val REPO = "https://repo.runelite.net/net/runelite/injected-client"
 
     /** Prepares (or reuses) the client for [version] and makes it loadable. Blocking. */
