@@ -116,8 +116,9 @@ class RuneLiteLauncher(private val context: android.content.Context? = null) {
 
                 val cls = Class.forName("net.runelite.client.RuneLite")
                 val main = cls.getDeclaredMethod("main", Array<String>::class.java)
-                logLine("invoking ${cls.name}.main(${args.size} args)")
-                main.invoke(null, args)
+                val launchArgs = arrayOf("--disable-telemetry", *args)
+                logLine("invoking ${cls.name}.main(${launchArgs.size} args)")
+                main.invoke(null, launchArgs)
                 logLine("main returned cleanly")
 
                 val safeMode = args.contains("--safe-mode")

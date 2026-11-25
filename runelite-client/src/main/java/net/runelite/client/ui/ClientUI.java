@@ -749,8 +749,9 @@ public class ClientUI
 			{
 				JEditorPane ep = new JEditorPane("text/html",
 					"Your Java memory limit is " + maxMemory + "mb, which is lower than the recommended " + recommendedMemoryLimit + "mb.<br>" +
-						"This can cause instability, and it is recommended you remove or increase this limit.<br>" +
-						"Join <a href=\"" + RuneLiteProperties.getDiscordInvite() + "\">Discord</a> for assistance."
+						"This can cause instability, and it is recommended you remove or increase this limit." +
+						(RuneLiteProperties.isAndroid() ? "" :
+							"<br>Join <a href=\"" + RuneLiteProperties.getDiscordInvite() + "\">Discord</a> for assistance.")
 				);
 				ep.addHyperlinkListener(e ->
 				{

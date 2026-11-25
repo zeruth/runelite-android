@@ -186,8 +186,12 @@ public class FatalErrorDialog extends JDialog
 
 	public FatalErrorDialog addHelpButtons()
 	{
-		return addButton("Open logs folder", () -> LinkBrowser.open(RuneLite.LOGS_DIR.toString()))
-			.addButton("Get help on Discord", () -> LinkBrowser.browse(RuneLiteProperties.getDiscordInvite()))
+		addButton("Open logs folder", () -> LinkBrowser.open(RuneLite.LOGS_DIR.toString()));
+		if (RuneLiteProperties.isAndroid())
+		{
+			return this;
+		}
+		return addButton("Get help on Discord", () -> LinkBrowser.browse(RuneLiteProperties.getDiscordInvite()))
 			.addButton("Troubleshooting steps", () -> LinkBrowser.browse(RuneLiteProperties.getTroubleshootingLink()));
 	}
 
