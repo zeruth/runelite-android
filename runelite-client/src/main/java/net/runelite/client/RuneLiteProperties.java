@@ -80,6 +80,12 @@ public class RuneLiteProperties
 		return Boolean.parseBoolean(properties.getProperty(RUNELITE_DIRTY));
 	}
 
+	public static boolean isAndroid()
+	{
+		String vm = System.getProperty("java.vm.name", "");
+		return vm.contains("Dalvik") || vm.contains("Android");
+	}
+
 	public static String getDiscordInvite()
 	{
 		return properties.getProperty(DISCORD_INVITE);
